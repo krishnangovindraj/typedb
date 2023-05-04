@@ -20,6 +20,7 @@ package com.vaticle.typedb.core.reasoner.processor;
 
 import com.vaticle.typedb.common.collection.Pair;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
+import com.vaticle.typedb.core.common.perfcounter.PerfCounters;
 import com.vaticle.typedb.core.concurrent.actor.Actor;
 import com.vaticle.typedb.core.reasoner.common.ReasonerPerfCounters;
 import com.vaticle.typedb.core.reasoner.common.Tracer;
@@ -38,6 +39,10 @@ import javax.annotation.Nullable;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_OPERATION;
@@ -55,6 +60,7 @@ public abstract class AbstractProcessor<
     private final Map<Identifier, OutputPort<OUTPUT>> outputPorts;
     private final Map<Pair<Identifier, Identifier>, Runnable> pullRetries;
     private Stream<OUTPUT, OUTPUT> hubReactive;
+    private boolean terminated;
     private long reactiveCounter;
 
     protected AbstractProcessor(Driver<PROCESSOR> driver,
@@ -189,5 +195,4 @@ public abstract class AbstractProcessor<
             return perfCounters;
         }
     }
-
 }

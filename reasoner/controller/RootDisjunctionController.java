@@ -18,15 +18,16 @@
 
 package com.vaticle.typedb.core.reasoner.controller;
 
+import com.vaticle.typedb.core.common.perfcounter.PerfCounters;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.logic.resolvable.ResolvableDisjunction;
 import com.vaticle.typedb.core.reasoner.ReasonerConsumer;
+import com.vaticle.typedb.core.reasoner.planner.ReadablePlan;
 import com.vaticle.typedb.core.reasoner.processor.reactive.Reactive;
 import com.vaticle.typedb.core.reasoner.processor.reactive.Reactive.Stream;
 import com.vaticle.typedb.core.reasoner.processor.reactive.RootSink;
 import com.vaticle.typedb.core.traversal.common.Modifiers;
 
-import java.util.HashSet;
 import java.util.function.Supplier;
 
 public class RootDisjunctionController
@@ -48,7 +49,9 @@ public class RootDisjunctionController
 
     @Override
     public void initialise() {
-        disjunction.conjunctions().forEach(conjunction -> planner().plan(conjunction, new HashSet<>()));
+        planner().planRoot(disjunction);
+        System.out.println("\n---Dumping plans---\n" + ReadablePlan.prettyString(planner().summarisePlans()));
+        processorContext().perfCounters().startPrinting();
         setUpUpstreamControllers();
         getOrCreateProcessor(new ConceptMap());
     }

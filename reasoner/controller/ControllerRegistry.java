@@ -41,6 +41,7 @@ import com.vaticle.typedb.core.reasoner.answer.Explanation;
 import com.vaticle.typedb.core.reasoner.common.ReasonerPerfCounters;
 import com.vaticle.typedb.core.reasoner.common.Tracer;
 import com.vaticle.typedb.core.reasoner.planner.ReasonerPlanner;
+import com.vaticle.typedb.core.reasoner.processor.AbstractProcessor;
 import com.vaticle.typedb.core.reasoner.processor.reactive.Monitor;
 import com.vaticle.typedb.core.traversal.TraversalEngine;
 import com.vaticle.typedb.core.traversal.common.Identifier.Variable;
@@ -125,6 +126,10 @@ public class ControllerRegistry {
         }
     }
 
+    public ReasonerPlanner planner() {
+        return controllerContext.planner();
+    }
+
     public ReasonerPerfCounters perfCounters() {
         return controllerContext.processor().perfCounters();
     }
@@ -139,6 +144,7 @@ public class ControllerRegistry {
         Driver<C> controller = Actor.driver(actorFn, controllerContext.executorService());
         controllers.add(controller);
         controller.execute(c -> c.initialise());
+        controllerContext.processor().perfCounters().startPrinting();
     }
 
     private <C extends AbstractController<?, ?, ?, ?, ?, C>> Driver<C> createController(Function<Driver<C>, C> actorFn) {
@@ -280,6 +286,7 @@ public class ControllerRegistry {
     }
 
     public void close() {
+        perfCounters().stopPrinting();
         controllerContext.tracer().ifPresent(Tracer::finishTrace);
         controllerContext.processor().perfCounters().logCounters();
     }

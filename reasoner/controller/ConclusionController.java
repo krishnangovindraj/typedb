@@ -97,6 +97,7 @@ public abstract class ConclusionController<
         @Override
         protected Processor.Match createProcessorFromDriver(Driver<Processor.Match> processorDriver,
                                                             ConceptMap bounds) {
+            System.out.println("Create conclusionProcessor for rule: " + conclusion.rule().getLabel() + "; Conclusion: " + conclusion.pattern() + "; bounds: " + bounds);
             return new Processor.Match(
                     processorDriver, driver(), processorContext(), conclusion.rule(), bounds,
                     registry().conceptManager(),

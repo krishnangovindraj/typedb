@@ -22,6 +22,11 @@ import com.vaticle.typedb.core.common.perfcounter.PerfCounters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+
 public class ReasonerPerfCounters extends PerfCounters {
 
     private static final Logger LOG = LoggerFactory.getLogger(ReasonerPerfCounters.class);
@@ -36,12 +41,28 @@ public class ReasonerPerfCounters extends PerfCounters {
     public final PerfCounters.Counter conjunctionProcessors;
     public final PerfCounters.Counter compoundStreams;
 
+    private ScheduledFuture<?> printingTask;
+    private ScheduledExecutorService printingTaskService;
     public ReasonerPerfCounters(boolean enabled) {
         super(enabled);
         timePlanning = register(PLANNING_TIME_NS);
         materialisations = register(MATERIALISATIONS);
         conjunctionProcessors = register(CONJUNCTION_PROCESSORS);
         compoundStreams = register(COMPOUND_STREAMS);
+    }
+
+    public synchronized void startPrinting() {
+        if (printingTask == null) {
+            printingTaskService = Executors.newScheduledThreadPool(1);
+            printingTask = printingTaskService.scheduleAtFixedRate(this::logCounters, 5, 5, TimeUnit.SECONDS);
+        }
+    }
+
+    public synchronized void stopPrinting() {
+        if (printingTask != null) {
+            printingTask.cancel(false);
+            printingTaskService.shutdown();
+        }
     }
 
     public void logCounters() {
