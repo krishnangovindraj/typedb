@@ -12,12 +12,14 @@ import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNI
 public class DataSource {
 
     private final int seed;
-    private final int nVertices;
-    private final int nEdges;
+    final int nVertices;
+    final int nEdges;
+    final int nQueries;
 
-    DataSource(int nVertices, int nEdges, int seed) {
+    DataSource(int nVertices, int nEdges, int nQueries, int seed) {
         this.nVertices = nVertices;
         this.nEdges = nEdges;
+        this.nQueries = nQueries;
         this.seed = seed;
     }
 
@@ -27,6 +29,10 @@ public class DataSource {
 
     FunctionalIterator<Pair<Long, Long>> edges() {
         return new EdgeGenerator();
+    }
+
+    public FunctionalIterator<Long> queries() {
+        return new QueryGenerator();
     }
 
     private class VertexGenerator extends AbstractFunctionalIterator<Long> {
@@ -82,6 +88,33 @@ public class DataSource {
             } while (second == first);
             nGenerated++;
             return new Pair<>(first, second);
+        }
+    }
+
+    private class QueryGenerator extends AbstractFunctionalIterator<Long> {
+
+        private int nGenerated;
+        private final Random random;
+
+        private QueryGenerator() {
+            this.nGenerated = 0;
+            this.random = new Random(seed);
+        }
+
+        @Override
+        public void recycle() {
+            throw TypeDBException.of(UNIMPLEMENTED);
+        }
+
+        @Override
+        public boolean hasNext() {
+            return nGenerated < nQueries;
+        }
+
+        @Override
+        public Long next() {
+            nGenerated++;
+            return Long.valueOf(random.nextInt(nVertices));
         }
     }
 

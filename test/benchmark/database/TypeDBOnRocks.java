@@ -19,6 +19,7 @@
 package com.vaticle.typedb.core.benchmark.database;
 
 import com.vaticle.typedb.core.TypeDB;
+import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.common.parameters.Arguments;
 import com.vaticle.typedb.core.common.parameters.Options;
@@ -30,6 +31,7 @@ import com.vaticle.typeql.lang.TypeQL;
 import java.nio.file.Path;
 
 import static com.vaticle.typedb.core.common.collection.Bytes.MB;
+import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
 
 public class TypeDBOnRocks implements DatabaseBenchmark.TestSubject {
 
@@ -69,14 +71,28 @@ public class TypeDBOnRocks implements DatabaseBenchmark.TestSubject {
 
 
     @Override
-    public void openTransaction() {
+    public void openWriteTransaction() {
+        if (activeTransaction != null) throw TypeDBException.of(ILLEGAL_STATE);
         activeTransaction = activeSession.transaction(Arguments.Transaction.Type.WRITE);
         vertexType = activeTransaction.concepts().getAttributeType("vertex").asLong();
     }
 
     @Override
-    public void commit() {
+    public void commitWrites() {
         activeTransaction.commit();
+        activeTransaction = null;
+    }
+
+    @Override
+    public void openReadTransaction() {
+        if (activeTransaction != null) throw TypeDBException.of(ILLEGAL_STATE);
+        activeTransaction = activeSession.transaction(Arguments.Transaction.Type.READ);
+        vertexType = activeTransaction.concepts().getAttributeType("vertex").asLong();
+    }
+
+    @Override
+    public void closeRead() {
+        activeTransaction.close();
         activeTransaction = null;
     }
 

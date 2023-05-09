@@ -40,5 +40,8 @@ host_compatible_java_test(
         "@vaticle_typedb_common//:common",
         "@vaticle_typeql//java:typeql-lang",
         "@vaticle_typeql//java/query",
+
+        # External Maven dependencies
+        "@maven//:org_slf4j_slf4j_api",
     ],
 )
