@@ -42,5 +42,7 @@ artifacts = [
     "org.rocksdb:rocksdbjni",
     "org.rocksdb:rocksdbjni-dev-mac",
     "org.slf4j:slf4j-api",
-    "org.zeroturnaround:zt-exec"
+    "org.zeroturnaround:zt-exec",
+
+    "io.github.speedb-io:speedbjni"
 ]

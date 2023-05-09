@@ -19,7 +19,7 @@ load("@vaticle_dependencies//tool/checkstyle:rules.bzl", "checkstyle_test")
 load("@vaticle_dependencies//builder/java:rules.bzl", "host_compatible_java_test")
 
 host_compatible_java_test(
-    name = "database-benchmark",
+    name = "database-benchmark-rocksdb",
     size = "large",
     test_class = "com.vaticle.typedb.core.benchmark.database.Runner",
     srcs = [
@@ -31,6 +31,34 @@ host_compatible_java_test(
     native_libraries_deps = [
         "//:typedb",
         "//database:database",
+        "//concept:concept",
+        "//common:common",
+        "//concurrent:concurrent",
+    ],
+    deps = [
+        # External dependencies from Vaticle
+        "@vaticle_typedb_common//:common",
+        "@vaticle_typeql//java:typeql-lang",
+        "@vaticle_typeql//java/query",
+
+        # External Maven dependencies
+        "@maven//:org_slf4j_slf4j_api",
+    ],
+)
+
+host_compatible_java_test(
+    name = "database-benchmark-speedb",
+    size = "large",
+    test_class = "com.vaticle.typedb.core.benchmark.database.Runner",
+    srcs = [
+        "DatabaseBenchmark.java",
+        "DataSource.java",
+        "Runner.java",
+        "TypeDBOnRocks.java"
+    ],
+    native_libraries_deps = [
+        "//:typedb",
+        "//database:database-speedb",
         "//concept:concept",
         "//common:common",
         "//concurrent:concurrent",

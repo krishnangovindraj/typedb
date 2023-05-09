@@ -70,6 +70,51 @@ native_java_libraries(
     visibility = [ "//visibility:public" ]
 )
 
+native_java_libraries(
+    name = "database-speedb",
+    srcs = glob(["*.java"]),
+    native_libraries_deps = [
+        # Internal dependencies
+        "//:typedb",
+        "//common:common",
+        "//concept:concept",
+        "//concurrent:concurrent",
+        "//graph:graph",
+        "//encoding:encoding",
+        "//logic:logic",
+        "//query:query",
+        "//reasoner:reasoner",
+        "//traversal:traversal",
+    ],
+    deps = [
+        # External dependencies from Vaticle
+        "@vaticle_typedb_common//:common",
+        "@vaticle_typeql//java:typeql-lang",
+
+        # External dependencies from Maven
+        "@maven//:com_google_code_findbugs_jsr305",
+        "@maven//:org_slf4j_slf4j_api"
+    ],
+    mac_deps = [
+        "@maven//:com_google_ortools_ortools_darwin",
+        "@maven//:com_google_ortools_ortools_darwin_java",
+        "@maven//:io_github_speedb_io_speedbjni_2_4_1",
+    ],
+    linux_deps = [
+        "@maven//:com_google_ortools_ortools_linux_x86_64",
+        "@maven//:com_google_ortools_ortools_linux_x86_64_java",
+        "@maven//:io_github_speedb_io_speedbjni_2_4_1",
+    ],
+    windows_deps = [
+        "@maven//:com_google_ortools_ortools_win32_x86_64",
+        "@maven//:com_google_ortools_ortools_win32_x86_64_java",
+        "@maven//:io_github_speedb_io_speedbjni_2_4_1",
+    ],
+    tags = ["maven_coordinates=com.vaticle.typedb:typedb-core-database:{pom_version}"],
+    visibility = [ "//visibility:public" ]
+)
+
+
 checkstyle_test(
     name = "checkstyle",
     include = glob(["*"]),
