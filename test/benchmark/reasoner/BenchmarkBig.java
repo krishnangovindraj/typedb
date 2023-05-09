@@ -81,7 +81,7 @@ public class BenchmarkBig {
     final private Random rand = new Random();
 
     private void loadSchema(String fileName, TypeDB.Session session) {
-        String filePath = "test/benchmark/resources/" + fileName;
+        String filePath = "test/benchmark/reasoner/resources/" + fileName;
         try (TypeDB.Transaction tx = session.transaction(Arguments.Transaction.Type.WRITE)) {
             tx.query().define(Util.parseTQL(filePath).asDefine());
             tx.commit();

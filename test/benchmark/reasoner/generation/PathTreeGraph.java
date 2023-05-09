@@ -24,20 +24,29 @@ import com.vaticle.typedb.core.common.parameters.Label;
 import com.vaticle.typedb.core.concept.thing.Relation;
 import com.vaticle.typedb.core.concept.thing.Thing;
 import com.vaticle.typedb.core.concept.type.RelationType;
+import com.vaticle.typedb.core.concept.type.RoleType;
 import com.vaticle.typedb.core.reasoner.benchmark.Util;
 
+/**
+ * Defines a Graph based on test 6.10 from Cao p. 82.
+ */
 @SuppressWarnings("CheckReturnValue")
-public class DiagonalGraph {
-
+public class PathTreeGraph {
     private final TypeDB.DatabaseManager databaseManager;
     private final String databaseName;
 
-    private static final String schemaFile = "test/benchmark/resources/diagonalTest.tql";
-    private static final Label key = Label.of("name");
+    private final static String schemaPath = "test/benchmark/reasoner/resources/";
+    private final String schemaFile;
+    private final static Label key = Label.of("index");
 
-    public DiagonalGraph(TypeDB.DatabaseManager databaseManager, String dbName) {
+    public PathTreeGraph(TypeDB.DatabaseManager databaseManager, String dbName, String schemaFile) {
         this.databaseManager = databaseManager;
         this.databaseName = dbName;
+        this.schemaFile = schemaPath + schemaFile;
+    }
+
+    public PathTreeGraph(TypeDB.DatabaseManager databaseManager, String dbName) {
+        this(databaseManager, dbName, "pathTest.tql");
     }
 
     public final void load(int n, int m) {
@@ -56,37 +65,39 @@ public class DiagonalGraph {
         }
     }
 
-    protected void buildExtensionalDB(int n, int m, TypeDB.Transaction tx) {
+    protected void buildExtensionalDB(int n, int children, TypeDB.Transaction tx) {
+        buildTree("from", "to", n, children, tx);
+    }
 
-        Label entityType = Label.of("entity1");
-        RelationType horizontal = tx.concepts().getRelationType("horizontal");
-        RelationType vertical = tx.concepts().getRelationType("vertical");
-        Thing[][] instanceIds = new Thing[n][m];
-        long inserts = 0;
-        for (int i = 0; i < n; i++) {
-            for (int j = 0; j < m; j++) {
-                instanceIds[i][j] = Util.createEntityWithKey(tx, entityType, key, "a" + i + "," + j);
-                inserts++;
-                if (inserts % 100 == 0) System.out.println("inst inserts: " + inserts);
-            }
-        }
+    void buildTree(String fromRoleValue, String toRoleValue, int n, int children, TypeDB.Transaction tx) {
+        Label vertex = Label.of("vertex");
+        Label startVertex = Label.of("start-vertex");
 
-        for (int i = 0; i < n; i++) {
-            for (int j = 0; j < m; j++) {
-                if (i < n - 1) {
-                    Relation v = vertical.create();
-                    v.addPlayer(vertical.getRelates("from"), instanceIds[i][j]);
-                    v.addPlayer(vertical.getRelates("to"), instanceIds[i + 1][j]);
-                    inserts++;
+        RelationType arc = tx.concepts().getRelationType("arc");
+        RoleType fromRole = arc.getRelates(fromRoleValue);
+        RoleType toRole = arc.getRelates(toRoleValue);
+
+        Thing a0 = Util.createEntityWithKey(tx, startVertex, key, "a0,0");
+
+        int outputThreshold = 500;
+        Thing[] prevLevel = new Thing[]{a0};
+        Thing[] nextLevel;
+        for (int i = 1; i <= n; i++) {
+            nextLevel = new Thing[prevLevel.length * children];
+            for (int j = 0; j < prevLevel.length; j++) {
+                for (int c = 0; c < children; c++) {
+                    int childIdx = (j * children + c);
+                    nextLevel[childIdx] = Util.createEntityWithKey(tx, vertex, key, "a" + i + "," + childIdx);
+                    Relation link = arc.create();
+                    link.addPlayer(fromRole, prevLevel[j]);
+                    link.addPlayer(toRole, nextLevel[childIdx]);
                 }
-                if (j < m - 1) {
-                    Relation h = horizontal.create();
-                    h.addPlayer(horizontal.getRelates("from"), instanceIds[i][j]);
-                    h.addPlayer(horizontal.getRelates("to"), instanceIds[i][j + 1]);
-                    inserts++;
+
+                if (j != 0 && j % outputThreshold == 0) {
+                    System.out.println(j + " entities out of " + (prevLevel.length * children) + " inserted");
                 }
-                if (inserts % 100 == 0) System.out.println("rel inserts: " + inserts);
             }
+            prevLevel = nextLevel;
         }
     }
 }

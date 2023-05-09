@@ -33,7 +33,7 @@ public class TransitivityChainGraph {
     private final TypeDB.DatabaseManager databaseManager;
     private final String databaseName;
 
-    private final static String schemaFile = "test/benchmark/resources/quadraticTransitivity.tql";
+    private final static String schemaFile = "test/benchmark/reasoner/resources/quadraticTransitivity.tql";
     private final static Label key = Label.of("index");
 
     public TransitivityChainGraph(TypeDB.DatabaseManager databaseManager, String dbName) {

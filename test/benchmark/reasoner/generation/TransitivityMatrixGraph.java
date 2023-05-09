@@ -27,26 +27,19 @@ import com.vaticle.typedb.core.concept.type.RelationType;
 import com.vaticle.typedb.core.concept.type.RoleType;
 import com.vaticle.typedb.core.reasoner.benchmark.Util;
 
-/**
- * Defines a Graph based on test 6.10 from Cao p. 82.
- */
 @SuppressWarnings("CheckReturnValue")
-public class PathTreeGraph {
+public abstract class TransitivityMatrixGraph {
+
     private final TypeDB.DatabaseManager databaseManager;
     private final String databaseName;
-
-    private final static String schemaPath = "test/benchmark/resources/";
     private final String schemaFile;
+
     private final static Label key = Label.of("index");
 
-    public PathTreeGraph(TypeDB.DatabaseManager databaseManager, String dbName, String schemaFile) {
+    public TransitivityMatrixGraph(String schemaFile, TypeDB.DatabaseManager databaseManager, String dbName) {
         this.databaseManager = databaseManager;
         this.databaseName = dbName;
-        this.schemaFile = schemaPath + schemaFile;
-    }
-
-    public PathTreeGraph(TypeDB.DatabaseManager databaseManager, String dbName) {
-        this(databaseManager, dbName, "pathTest.tql");
+        this.schemaFile = schemaFile;
     }
 
     public final void load(int n, int m) {
@@ -65,39 +58,54 @@ public class PathTreeGraph {
         }
     }
 
-    protected void buildExtensionalDB(int n, int children, TypeDB.Transaction tx) {
-        buildTree("from", "to", n, children, tx);
-    }
+    protected void buildExtensionalDB(int n, int m, TypeDB.Transaction tx) {
 
-    void buildTree(String fromRoleValue, String toRoleValue, int n, int children, TypeDB.Transaction tx) {
-        Label vertex = Label.of("vertex");
-        Label startVertex = Label.of("start-vertex");
+        Label aEntity = Label.of("a-entity");
+        RelationType Q = tx.concepts().getRelationType("Q");
+        RoleType Qfrom = Q.getRelates("from");
+        RoleType Qto = Q.getRelates("to");
 
-        RelationType arc = tx.concepts().getRelationType("arc");
-        RoleType fromRole = arc.getRelates(fromRoleValue);
-        RoleType toRole = arc.getRelates(toRoleValue);
-
-        Thing a0 = Util.createEntityWithKey(tx, startVertex, key, "a0,0");
-
-        int outputThreshold = 500;
-        Thing[] prevLevel = new Thing[]{a0};
-        Thing[] nextLevel;
+        Thing[][] aInstancesIds = new Thing[n + 1][m + 1];
+        Thing aInst = Util.createEntityWithKey(tx, Label.of("entity2"), key, "a");
         for (int i = 1; i <= n; i++) {
-            nextLevel = new Thing[prevLevel.length * children];
-            for (int j = 0; j < prevLevel.length; j++) {
-                for (int c = 0; c < children; c++) {
-                    int childIdx = (j * children + c);
-                    nextLevel[childIdx] = Util.createEntityWithKey(tx, vertex, key, "a" + i + "," + childIdx);
-                    Relation link = arc.create();
-                    link.addPlayer(fromRole, prevLevel[j]);
-                    link.addPlayer(toRole, nextLevel[childIdx]);
-                }
+            for (int j = 1; j <= m; j++) {
+                aInstancesIds[i][j] = Util.createEntityWithKey(tx, aEntity, key, "a" + i + "," + j);
+            }
+        }
 
-                if (j != 0 && j % outputThreshold == 0) {
-                    System.out.println(j + " entities out of " + (prevLevel.length * children) + " inserted");
+        Relation rel = Q.create();
+        rel.addPlayer(Qfrom, aInst);
+        rel.addPlayer(Qto, aInstancesIds[1][1]);
+
+        for (int i = 1; i <= n; i++) {
+            for (int j = 1; j <= m; j++) {
+                if (i < n) {
+                    Relation q = Q.create();
+                    q.addPlayer(Qfrom, aInstancesIds[i][j]);
+                    q.addPlayer(Qto, aInstancesIds[i][j]);
+                }
+                if (j < m) {
+                    Relation q = Q.create();
+                    q.addPlayer(Qfrom, aInstancesIds[i][j]);
+                    q.addPlayer(Qto, aInstancesIds[i][j + 1]);
                 }
             }
-            prevLevel = nextLevel;
+        }
+    }
+
+    public static class Linear extends TransitivityMatrixGraph {
+        private static final String schemaFile = "test/benchmark/reasoner/resources/linearTransitivity.tql";
+
+        public Linear(TypeDB.DatabaseManager dbm, String dbName) {
+            super(schemaFile, dbm, dbName);
+        }
+    }
+
+    public static class Quadratic extends TransitivityMatrixGraph {
+        private static final String schemaFile = "test/benchmark/reasoner/resources/linearTransitivity.tql";
+
+        public Quadratic(TypeDB.DatabaseManager dbm, String dbName) {
+            super(schemaFile, dbm, dbName);
         }
     }
 }
