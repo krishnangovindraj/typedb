@@ -18,6 +18,13 @@
 
 package com.vaticle.typedb.core.benchmark.database;
 
+import com.vaticle.typedb.core.common.iterator.Iterators;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+
 public class Runner {
 
     private static final int SEED = 12345;
@@ -53,12 +60,56 @@ public class Runner {
     }
 
     public void run() {
+        List<DatabaseBenchmark.Summary> results = new ArrayList<>();
         for (int i = 0; i < STEPS; i++) {
-            new DatabaseBenchmark(nVertices, nVertices * avgDegree, nQueries, SEED,
-            vertexBatchSize, edgeBatchSize, queryBatchSize,
-            new TypeDBOnRocks()).run();
+            DatabaseBenchmark benchmark = new DatabaseBenchmark(nVertices, nVertices * avgDegree, nQueries, SEED,
+                    vertexBatchSize, edgeBatchSize, queryBatchSize,
+                    new TypeDBOnRocks());
+            results.add(benchmark.run());
             step();
         }
+        System.out.println(summariesToCSV(results));
+    }
+
+
+    private static String summariesToCSV(List<DatabaseBenchmark.Summary> summaries) {
+        StringBuilder sb = new StringBuilder();
+        sb
+                .append("nVertices,").append("nEdges,").append("nQueries,")
+                .append("vertexBatch,").append("edgeBatch,").append("queryBatch,")
+                .append("vertexTime90p,").append("edgeTime90p,").append("queryTime90p,")
+                .append("vertexTimesAll").append("edgeTimesAll").append("queryTimesAll")
+        .append("\n");
+
+        for (DatabaseBenchmark.Summary summary : summaries) {
+            sb
+                    .append(summary.benchmark.dataSource.nVertices).append(",")
+                    .append(summary.benchmark.dataSource.nEdges).append(",")
+                    .append(summary.benchmark.dataSource.nQueries).append(",")
+
+                    .append(summary.benchmark.vertexBatchSize).append(",")
+                    .append(summary.benchmark.edgeBatchSize).append(",")
+                    .append(summary.benchmark.queryBatchSize).append(",")
+
+                    .append(percentile(summary.vertexMicros, 90)).append(",")
+                    .append(percentile(summary.edgeMicros, 90)).append(",")
+                    .append(percentile(summary.queryMicros, 90)).append(",")
+
+                    .append(String.join(" ", concatArray(summary.vertexMicros))).append(",")
+                    .append(String.join(" ", concatArray(summary.edgeMicros))).append(",")
+                    .append(String.join(" ", concatArray(summary.queryMicros)))
+                    .append("\n");
+        }
+        return sb.toString();
+    }
+
+    private static List<String> concatArray(long[] arr) {
+        return Arrays.stream(arr).mapToObj(String::valueOf).collect(Collectors.toList());
+    }
+
+    private static long percentile(long[] arr, int p) {
+        int nextIndex = ((p == 100) ? (arr.length-1) :  (arr.length * p)/100);
+        return arr[nextIndex];
     }
 
     public static void main(String[] args) {

@@ -36,11 +36,11 @@ public class DatabaseBenchmark {
     private static final Logger LOG = LoggerFactory.getLogger(DatabaseBenchmark.class);
     private static final Path dataDir = Paths.get(System.getProperty("user.dir")).resolve("database-benchmark");
 
-    private final DataSource dataSource;
-    private final int vertexBatchSize;
-    private final int edgeBatchSize;
-    private final int queryBatchSize;
-    private final TestSubject subject;
+    final DataSource dataSource;
+    final int vertexBatchSize;
+    final int edgeBatchSize;
+    final int queryBatchSize;
+    final TestSubject subject;
 
     public DatabaseBenchmark(int nVertices, int nEdges, int nQueries, int seed,
                              int vertexBatchSize, int edgeBatchSize, int queryBatchSize,
@@ -156,7 +156,7 @@ public class DatabaseBenchmark {
         LOG.debug(String.format("Batch timings (micros)\n* Vertex: %s\n* Edge: %s\n* Queries: %s",
                 Arrays.toString(verticesMicros), Arrays.toString(edgesMicros), Arrays.toString(queriesMicros)));
 
-        return new Summary(verticesMicros, edgesMicros, queriesMicros);
+        return new Summary(this, verticesMicros, edgesMicros, queriesMicros);
     }
 
     public interface TestSubject {
@@ -180,13 +180,15 @@ public class DatabaseBenchmark {
         void closeRead();
     }
 
-    public class Summary {
+    public static class Summary {
 
-        private final long[] vertexMicros;
-        private final long[] edgeMicros;
-        private final long[] queryMicros;
+        final DatabaseBenchmark benchmark;
+        final long[] vertexMicros;
+        final long[] edgeMicros;
+        final long[] queryMicros;
 
-        private Summary(long[] vertexMicros, long[] edgeMicros, long[] queryMicros) {
+        private Summary(DatabaseBenchmark benchmark, long[] vertexMicros, long[] edgeMicros, long[] queryMicros) {
+            this.benchmark = benchmark;
             this.vertexMicros = vertexMicros;
             this.edgeMicros = edgeMicros;
             this.queryMicros = queryMicros;
