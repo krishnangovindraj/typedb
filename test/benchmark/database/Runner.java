@@ -26,12 +26,12 @@ import java.util.stream.Collectors;
 public class Runner {
 
     private static final int SEED = 12345;
-    private static final int STEPS = 1;
+    private static final int STEPS = 5;
 
     // Initial values
-    private static final int INIT_VERTEX = 100000;
+    private static final int INIT_VERTEX = 20000;
     private static final int INIT_AVGDEGREE = 10;
-    private static final int INIT_QUERY = 100000;
+    private static final int INIT_QUERY = 20000;
 
     private static final int INIT_VERTEXBATCH = 10000;
     private static final int INIT_EDGEBATCH = 10000;
@@ -75,6 +75,7 @@ public class Runner {
                 .append("nVertices,").append("nEdges,").append("nQueries,")
                 .append("vertexBatch,").append("edgeBatch,").append("queryBatch,")
                 .append("vertexBatchTimeMean,").append("edgeBatchTimeMean,").append("queryBatchTimeMean,")
+                .append("vertexBatchTime10p,").append("edgeBatchTime10p,").append("queryBatchTime10p,")
                 .append("vertexBatchTime90p,").append("edgeBatchTime90p,").append("queryBatchTime90p,")
                 .append("vertexBatchTimesAll,").append("edgeBatchTimesAll,").append("queryBatchTimesAll")
         .append("\n");
@@ -92,6 +93,10 @@ public class Runner {
                     .append(mean(summary.vertexMicros)).append(",")
                     .append(mean(summary.edgeMicros)).append(",")
                     .append(mean(summary.queryMicros)).append(",")
+
+                    .append(percentile(summary.vertexMicros, 10)).append(",")
+                    .append(percentile(summary.edgeMicros, 10)).append(",")
+                    .append(percentile(summary.queryMicros, 10)).append(",")
 
                     .append(percentile(summary.vertexMicros, 90)).append(",")
                     .append(percentile(summary.edgeMicros, 90)).append(",")
