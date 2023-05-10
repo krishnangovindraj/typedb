@@ -29,13 +29,13 @@ public class Runner {
     private static final int STEPS = 1;
 
     // Initial values
-    private static final int INIT_VERTEX = 5000;
+    private static final int INIT_VERTEX = 100000;
     private static final int INIT_AVGDEGREE = 10;
-    private static final int INIT_QUERY = 10000;
+    private static final int INIT_QUERY = 100000;
 
-    private static final int INIT_VERTEXBATCH = 5000;
-    private static final int INIT_EDGEBATCH = 5000;
-    private static final int INIT_QUERYBATCH = 1000;
+    private static final int INIT_VERTEXBATCH = 10000;
+    private static final int INIT_EDGEBATCH = 10000;
+    private static final int INIT_QUERYBATCH = 10000;
 
     private int nVertices;
     private int avgDegree;
@@ -115,7 +115,7 @@ public class Runner {
 
     private static long percentile(long[] arr, int p) {
         int nextIndex = ((p == 100) ? (arr.length-1) :  (arr.length * p)/100);
-        return arr[nextIndex];
+        return Arrays.stream(arr).sorted().toArray()[nextIndex];
     }
 
     public static void main(String[] args) {
