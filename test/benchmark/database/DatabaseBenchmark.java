@@ -33,8 +33,8 @@ import java.util.Arrays;
 import java.util.Comparator;
 
 public class DatabaseBenchmark {
-    private static final Logger LOG = LoggerFactory.getLogger(DatabaseBenchmark.class);
-    private static final Path dataDir = Paths.get(System.getProperty("user.dir")).resolve("database-benchmark");
+    static final Logger LOG = LoggerFactory.getLogger(DatabaseBenchmark.class);
+    static final Path dataDir = Paths.get(System.getProperty("user.dir")).resolve("database-benchmark");
 
     final DataSource dataSource;
     final int vertexBatchSize;
@@ -143,7 +143,7 @@ public class DatabaseBenchmark {
     public Summary run() {
         this.setup();
         LOG.debug("Setting up...");
-        subject.setup(dataDir, subject.getClass().getSimpleName());
+        subject.setup(subject.getClass().getSimpleName());
         LOG.debug("insertVertices...");
         long[] verticesMicros = insertVertices();
         LOG.debug("insertEdges...");
@@ -161,7 +161,7 @@ public class DatabaseBenchmark {
 
     public interface TestSubject {
 
-        void setup(Path dataDir, String database);
+        void setup(String database);
 
         void tearDown();
 

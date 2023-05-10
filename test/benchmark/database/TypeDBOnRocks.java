@@ -28,25 +28,24 @@ import com.vaticle.typedb.core.concept.type.AttributeType;
 import com.vaticle.typedb.core.database.CoreDatabaseManager;
 import com.vaticle.typeql.lang.TypeQL;
 
-import java.nio.file.Path;
-
-import static com.vaticle.typedb.core.common.collection.Bytes.MB;
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
 
 public class TypeDBOnRocks implements DatabaseBenchmark.TestSubject {
 
+    private CoreDatabaseManager databaseMgr;
+
     private TypeDB.Session activeSession;
     private TypeDB.Transaction activeTransaction;
-
-    private CoreDatabaseManager databaseMgr;
     private AttributeType.Long vertexType;
+    private final Options.Database databaseOptions;
+
+    public TypeDBOnRocks(Options.Database databaseOptions) {
+        this.databaseOptions = databaseOptions;
+    }
 
     @Override
-    public void setup(Path dataDir, String database) {
-        Options.Database options = new Options.Database().dataDir(dataDir)
-                .storageDataCacheSize(MB).storageIndexCacheSize(MB);
-
-        databaseMgr = CoreDatabaseManager.open(options);
+    public void setup(String database) {
+        databaseMgr = CoreDatabaseManager.open(databaseOptions);
         databaseMgr.create(database);
 
         try (TypeDB.Session schemaSession = databaseMgr.session(database, Arguments.Session.Type.SCHEMA)) {

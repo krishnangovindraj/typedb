@@ -18,10 +18,14 @@
 
 package com.vaticle.typedb.core.benchmark.database;
 
+import com.vaticle.typedb.core.common.parameters.Options;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
+
+import static com.vaticle.typedb.core.common.collection.Bytes.MB;
 
 public class Runner {
 
@@ -31,11 +35,11 @@ public class Runner {
     // Initial values
     private static final int INIT_VERTEX = 20000;
     private static final int INIT_AVGDEGREE = 10;
-    private static final int INIT_QUERY = 20000;
+    private static final int INIT_QUERY = 10000;
 
     private static final int INIT_VERTEXBATCH = 10000;
     private static final int INIT_EDGEBATCH = 10000;
-    private static final int INIT_QUERYBATCH = 10000;
+    private static final int INIT_QUERYBATCH = 1000;
 
     private int nVertices;
     private int avgDegree;
@@ -55,6 +59,7 @@ public class Runner {
 
     private void step() {
         // Update STEPS and perform any updates here
+        nVertices *= 2;
     }
 
     public void run() {
@@ -62,11 +67,17 @@ public class Runner {
         for (int i = 0; i < STEPS; i++) {
             DatabaseBenchmark benchmark = new DatabaseBenchmark(nVertices, nVertices * avgDegree, nQueries, SEED,
                     vertexBatchSize, edgeBatchSize, queryBatchSize,
-                    new TypeDBOnRocks());
+                    new TypeDBOnRocks(getOptions()));
             results.add(benchmark.run());
             step();
         }
         System.out.println(summariesToCSV(results));
+    }
+
+    private static Options.Database getOptions() {
+        return new Options.Database().dataDir(DatabaseBenchmark.dataDir)
+                .storageDataCacheSize(500 * MB )
+                .storageIndexCacheSize(500 * MB);
     }
 
     private static String summariesToCSV(List<DatabaseBenchmark.Summary> summaries) {
