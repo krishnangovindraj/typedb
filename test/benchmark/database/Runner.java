@@ -18,8 +18,6 @@
 
 package com.vaticle.typedb.core.benchmark.database;
 
-import com.vaticle.typedb.core.common.iterator.Iterators;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -31,8 +29,8 @@ public class Runner {
     private static final int STEPS = 1;
 
     // Initial values
-    private static final int INIT_VERTEX = 10000;
-    private static final int INIT_AVGDEGREE = 5;
+    private static final int INIT_VERTEX = 5000;
+    private static final int INIT_AVGDEGREE = 10;
     private static final int INIT_QUERY = 10000;
 
     private static final int INIT_VERTEXBATCH = 5000;
@@ -71,12 +69,12 @@ public class Runner {
         System.out.println(summariesToCSV(results));
     }
 
-
     private static String summariesToCSV(List<DatabaseBenchmark.Summary> summaries) {
         StringBuilder sb = new StringBuilder();
         sb
                 .append("nVertices,").append("nEdges,").append("nQueries,")
                 .append("vertexBatch,").append("edgeBatch,").append("queryBatch,")
+                .append("vertexTimeMean,").append("edgeTimeMean,").append("queryTimeMean,")
                 .append("vertexTime90p,").append("edgeTime90p,").append("queryTime90p,")
                 .append("vertexTimesAll").append("edgeTimesAll").append("queryTimesAll")
         .append("\n");
@@ -90,6 +88,10 @@ public class Runner {
                     .append(summary.benchmark.vertexBatchSize).append(",")
                     .append(summary.benchmark.edgeBatchSize).append(",")
                     .append(summary.benchmark.queryBatchSize).append(",")
+
+                    .append(mean(summary.vertexMicros)).append(",")
+                    .append(mean(summary.edgeMicros)).append(",")
+                    .append(mean(summary.queryMicros)).append(",")
 
                     .append(percentile(summary.vertexMicros, 90)).append(",")
                     .append(percentile(summary.edgeMicros, 90)).append(",")
@@ -105,6 +107,10 @@ public class Runner {
 
     private static List<String> concatArray(long[] arr) {
         return Arrays.stream(arr).mapToObj(String::valueOf).collect(Collectors.toList());
+    }
+
+    private static double mean(long[] arr) {
+        return ((double)Arrays.stream(arr).reduce(0, Long::sum)) / arr.length;
     }
 
     private static long percentile(long[] arr, int p) {
