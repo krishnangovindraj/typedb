@@ -76,7 +76,7 @@ public class Runner {
                 .append("vertexBatch,").append("edgeBatch,").append("queryBatch,")
                 .append("vertexTimeMean,").append("edgeTimeMean,").append("queryTimeMean,")
                 .append("vertexTime90p,").append("edgeTime90p,").append("queryTime90p,")
-                .append("vertexTimesAll").append("edgeTimesAll").append("queryTimesAll")
+                .append("vertexTimesAll,").append("edgeTimesAll,").append("queryTimesAll")
         .append("\n");
 
         for (DatabaseBenchmark.Summary summary : summaries) {
