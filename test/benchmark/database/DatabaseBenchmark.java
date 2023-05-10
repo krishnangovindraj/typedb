@@ -45,6 +45,8 @@ public class DatabaseBenchmark {
     public DatabaseBenchmark(int nVertices, int nEdges, int nQueries, int seed,
                              int vertexBatchSize, int edgeBatchSize, int queryBatchSize,
                              DatabaseBenchmark.TestSubject subject) {
+        assert nVertices > 0 && nEdges > 0 && nQueries > 0;
+        assert vertexBatchSize > 0 && edgeBatchSize > 0 && queryBatchSize > 0;
         this.dataSource = new DataSource(nVertices, nEdges, nQueries, seed);
         this.vertexBatchSize = vertexBatchSize;
         this.edgeBatchSize = edgeBatchSize;
@@ -53,9 +55,12 @@ public class DatabaseBenchmark {
     }
 
     public long[] insertVertices() {
+        int nBatches =  dataSource.nVertices/vertexBatchSize;
+        if (dataSource.nVertices % vertexBatchSize > 0) nBatches += 1;
+        long[] times = new long[nBatches];
+
         FunctionalIterator<Long> vertices = dataSource.vertices();
         int batch = 0;
-        long[] times = new long[dataSource.nVertices/vertexBatchSize];
         long start = System.nanoTime();
         while (vertices.hasNext()) {
             subject.openWriteTransaction();
@@ -73,9 +78,12 @@ public class DatabaseBenchmark {
 
 
     public long[] insertEdges() {
+        int nBatches =  dataSource.nEdges/edgeBatchSize;
+        if (dataSource.nEdges % edgeBatchSize > 0) nBatches += 1;
+        long[] times = new long[nBatches];
+
         FunctionalIterator<Pair<Long, Long>> edges = dataSource.edges();
         int batch = 0;
-        long[] times = new long[dataSource.nEdges/edgeBatchSize];
         long start = System.nanoTime();
         while (edges.hasNext()) {
             subject.openWriteTransaction();
@@ -93,9 +101,12 @@ public class DatabaseBenchmark {
     }
 
     public long[] runQueries() {
+        int nBatches =  dataSource.nQueries/queryBatchSize;
+        if (dataSource.nQueries % queryBatchSize > 0) nBatches += 1;
+        long[] times = new long[nBatches];
+
         FunctionalIterator<Long> queries = dataSource.queries();
         int batch = 0;
-        long[] times = new long[dataSource.nQueries/queryBatchSize];
         long start = System.nanoTime();
         while (queries.hasNext()) {
             subject.openReadTransaction();
@@ -129,20 +140,23 @@ public class DatabaseBenchmark {
         }
     }
 
-    public void run() {
+    public Summary run() {
         this.setup();
-        LOG.info("Setting up...");
+        LOG.debug("Setting up...");
         subject.setup(dataDir, subject.getClass().getSimpleName());
-        LOG.info("insertVertices...");
+        LOG.debug("insertVertices...");
         long[] verticesMicros = insertVertices();
-        LOG.info("insertEdges...");
+        LOG.debug("insertEdges...");
         long[] edgesMicros = insertEdges();
-        LOG.info("runQueries...");
+        LOG.debug("runQueries...");
         long[] queriesMicros = runQueries();
-        LOG.info("Done!");
-        System.out.println();
-        System.out.println(String.format("Batch timings (micros)\n* Vertex: %s\n* Edge: %s\n* Queries: %s",
+        LOG.debug("Done!");
+        subject.tearDown();
+
+        LOG.debug(String.format("Batch timings (micros)\n* Vertex: %s\n* Edge: %s\n* Queries: %s",
                 Arrays.toString(verticesMicros), Arrays.toString(edgesMicros), Arrays.toString(queriesMicros)));
+
+        return new Summary(verticesMicros, edgesMicros, queriesMicros);
     }
 
     public interface TestSubject {
@@ -164,5 +178,18 @@ public class DatabaseBenchmark {
         void openReadTransaction();
 
         void closeRead();
+    }
+
+    public class Summary {
+
+        private final long[] vertexMicros;
+        private final long[] edgeMicros;
+        private final long[] queryMicros;
+
+        private Summary(long[] vertexMicros, long[] edgeMicros, long[] queryMicros) {
+            this.vertexMicros = vertexMicros;
+            this.edgeMicros = edgeMicros;
+            this.queryMicros = queryMicros;
+        }
     }
 }

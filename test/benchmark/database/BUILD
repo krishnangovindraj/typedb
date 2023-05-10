@@ -16,12 +16,10 @@
 #
 
 load("@vaticle_dependencies//tool/checkstyle:rules.bzl", "checkstyle_test")
-load("@vaticle_dependencies//builder/java:rules.bzl", "host_compatible_java_test")
+load("@vaticle_dependencies//builder/java:rules.bzl", "native_java_libraries")
 
-host_compatible_java_test(
-    name = "database-benchmark-rocksdb",
-    size = "large",
-    test_class = "com.vaticle.typedb.core.benchmark.database.Runner",
+native_java_libraries(
+    name = "database-benchmark-rocksdb-lib",
     srcs = [
         "DatabaseBenchmark.java",
         "DataSource.java",
@@ -46,10 +44,8 @@ host_compatible_java_test(
     ],
 )
 
-host_compatible_java_test(
-    name = "database-benchmark-speedb",
-    size = "large",
-    test_class = "com.vaticle.typedb.core.benchmark.database.Runner",
+native_java_libraries(
+    name = "database-benchmark-speedb-lib",
     srcs = [
         "DatabaseBenchmark.java",
         "DataSource.java",
@@ -72,4 +68,40 @@ host_compatible_java_test(
         # External Maven dependencies
         "@maven//:org_slf4j_slf4j_api",
     ],
+)
+
+java_binary(
+    name = "benchmark-rocksdb-mac",
+    main_class = "com.vaticle.typedb.core.benchmark.database.Runner",
+    runtime_deps = ["database-benchmark-rocksdb-lib-mac"]
+)
+
+java_binary(
+    name = "benchmark-rocksdb-linux",
+    main_class = "com.vaticle.typedb.core.benchmark.database.Runner",
+    runtime_deps = ["database-benchmark-rocksdb-lib-linux"]
+)
+
+java_binary(
+    name = "benchmark-rocksdb-windows",
+    main_class = "com.vaticle.typedb.core.benchmark.database.Runner",
+    runtime_deps = ["database-benchmark-rocksdb-lib-windows"]
+)
+
+java_binary(
+    name = "benchmark-speedb-mac",
+    main_class = "com.vaticle.typedb.core.benchmark.database.Runner",
+    runtime_deps = ["database-benchmark-speedb-lib-mac"]
+)
+
+java_binary(
+    name = "benchmark-speedb-linux",
+    main_class = "com.vaticle.typedb.core.benchmark.database.Runner",
+    runtime_deps = ["database-benchmark-speedb-lib-linux"]
+)
+
+java_binary(
+    name = "benchmark-speedb-windows",
+    main_class = "com.vaticle.typedb.core.benchmark.database.Runner",
+    runtime_deps = ["database-benchmark-speedb-lib-windows"]
 )

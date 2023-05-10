@@ -18,26 +18,50 @@
 
 package com.vaticle.typedb.core.benchmark.database;
 
-import org.junit.Test;
-
 public class Runner {
 
-    private static final int NVERTEX = 50000;
-    private static final int NEDGE = 250000;
-    private static final int NQUERY = 10000;
     private static final int SEED = 12345;
-    private static final int VERTEXBATCH = 5000;
-    private static final int EDGEBATCH = 5000;
-    private static final int QUERYBATCH = 1000;
+    private static final int STEPS = 1;
 
-    @Test
-    public void testTypeDBOnRocks() {
-        new DatabaseBenchmark(NVERTEX, NEDGE, NQUERY, SEED,
-                VERTEXBATCH, EDGEBATCH, QUERYBATCH,
-                new TypeDBOnRocks()).run();
+    // Initial values
+    private static final int INIT_VERTEX = 10000;
+    private static final int INIT_AVGDEGREE = 5;
+    private static final int INIT_QUERY = 10000;
+
+    private static final int INIT_VERTEXBATCH = 5000;
+    private static final int INIT_EDGEBATCH = 5000;
+    private static final int INIT_QUERYBATCH = 1000;
+
+    private int nVertices;
+    private int avgDegree;
+    private int nQueries;
+    private int vertexBatchSize;
+    private int edgeBatchSize;
+    private int queryBatchSize;
+
+    public Runner() {
+        this.nVertices = INIT_VERTEX;
+        this.avgDegree = INIT_AVGDEGREE;
+        this.nQueries = INIT_QUERY;
+        this.vertexBatchSize = INIT_VERTEXBATCH;
+        this.edgeBatchSize = INIT_EDGEBATCH;
+        this.queryBatchSize = INIT_QUERYBATCH;
+    }
+
+    private void step() {
+        // Update STEPS and perform any updates here
+    }
+
+    public void run() {
+        for (int i = 0; i < STEPS; i++) {
+            new DatabaseBenchmark(nVertices, nVertices * avgDegree, nQueries, SEED,
+            vertexBatchSize, edgeBatchSize, queryBatchSize,
+            new TypeDBOnRocks()).run();
+            step();
+        }
     }
 
     public static void main(String[] args) {
-        new Runner().testTypeDBOnRocks();
+        new Runner().run();
     }
 }

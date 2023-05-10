@@ -65,8 +65,11 @@ public class TypeDBOnRocks implements DatabaseBenchmark.TestSubject {
 
     @Override
     public void tearDown() {
-        activeTransaction.close();
-        activeSession.close();
+        if (activeTransaction != null) activeTransaction.close();
+        activeTransaction = null;
+        if (activeSession != null) activeSession.close();
+        activeSession = null;
+        databaseMgr.close();
     }
 
 
@@ -92,7 +95,7 @@ public class TypeDBOnRocks implements DatabaseBenchmark.TestSubject {
 
     @Override
     public void closeRead() {
-        activeTransaction.close();
+        if (activeTransaction != null) activeTransaction.close();
         activeTransaction = null;
     }
 
