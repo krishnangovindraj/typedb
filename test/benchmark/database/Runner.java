@@ -74,9 +74,9 @@ public class Runner {
         sb
                 .append("nVertices,").append("nEdges,").append("nQueries,")
                 .append("vertexBatch,").append("edgeBatch,").append("queryBatch,")
-                .append("vertexTimeMean,").append("edgeTimeMean,").append("queryTimeMean,")
-                .append("vertexTime90p,").append("edgeTime90p,").append("queryTime90p,")
-                .append("vertexTimesAll,").append("edgeTimesAll,").append("queryTimesAll")
+                .append("vertexBatchTimeMean,").append("edgeBatchTimeMean,").append("queryBatchTimeMean,")
+                .append("vertexBatchTime90p,").append("edgeBatchTime90p,").append("queryBatchTime90p,")
+                .append("vertexBatchTimesAll,").append("edgeBatchTimesAll,").append("queryBatchTimesAll")
         .append("\n");
 
         for (DatabaseBenchmark.Summary summary : summaries) {
