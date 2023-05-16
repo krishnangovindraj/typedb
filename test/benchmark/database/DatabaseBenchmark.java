@@ -29,99 +29,34 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.function.Consumer;
+
+import static com.vaticle.typedb.core.common.iterator.Iterators.iterate;
 
 public class DatabaseBenchmark {
     static final Logger LOG = LoggerFactory.getLogger(DatabaseBenchmark.class);
     static final Path dataDir = Paths.get(System.getProperty("user.dir")).resolve("database-benchmark");
 
     final DataSource dataSource;
-    final int vertexBatchSize;
-    final int edgeBatchSize;
-    final int queryBatchSize;
     final TestSubject subject;
+    private final ExecutorService executorService;
 
     public DatabaseBenchmark(int nVertices, int nEdges, int nQueries, int seed,
                              int vertexBatchSize, int edgeBatchSize, int queryBatchSize,
-                             DatabaseBenchmark.TestSubject subject) {
+                             int parallelisation, TestSubject subject) {
         assert nVertices > 0 && nEdges > 0 && nQueries > 0;
         assert vertexBatchSize > 0 && edgeBatchSize > 0 && queryBatchSize > 0;
-        this.dataSource = new DataSource(nVertices, nEdges, nQueries, seed);
-        this.vertexBatchSize = vertexBatchSize;
-        this.edgeBatchSize = edgeBatchSize;
-        this.queryBatchSize = queryBatchSize;
+        this.dataSource = new DataSource(nVertices, nEdges, nQueries, vertexBatchSize, edgeBatchSize, queryBatchSize, seed);
         this.subject = subject;
+        this.executorService = Executors.newFixedThreadPool(parallelisation);
     }
-
-    public long[] insertVertices() {
-        int nBatches =  dataSource.nVertices/vertexBatchSize;
-        if (dataSource.nVertices % vertexBatchSize > 0) nBatches += 1;
-        long[] times = new long[nBatches];
-
-        FunctionalIterator<Long> vertices = dataSource.vertices();
-        int batch = 0;
-        long start = System.nanoTime();
-        while (vertices.hasNext()) {
-            subject.openWriteTransaction();
-            for (int i = 0; i < vertexBatchSize && vertices.hasNext(); i++) {
-                subject.insertVertex(vertices.next());
-            }
-            subject.commitWrites();
-            long lap = System.nanoTime();
-            times[batch++] = (lap - start) / 1000;
-            start = lap;
-        }
-
-        return times;
-    }
-
-
-    public long[] insertEdges() {
-        int nBatches =  dataSource.nEdges/edgeBatchSize;
-        if (dataSource.nEdges % edgeBatchSize > 0) nBatches += 1;
-        long[] times = new long[nBatches];
-
-        FunctionalIterator<Pair<Long, Long>> edges = dataSource.edges();
-        int batch = 0;
-        long start = System.nanoTime();
-        while (edges.hasNext()) {
-            subject.openWriteTransaction();
-            for (int i = 0; i < edgeBatchSize && edges.hasNext(); i++) {
-                Pair<Long, Long> edge = edges.next();
-                subject.insertEdge(edge.first(), edge.second());
-            }
-            subject.commitWrites();
-            long lap = System.nanoTime();
-            times[batch++] = (lap - start) / 1000;
-            start = lap;
-        }
-
-        return times;
-    }
-
-    public long[] runQueries() {
-        int nBatches =  dataSource.nQueries/queryBatchSize;
-        if (dataSource.nQueries % queryBatchSize > 0) nBatches += 1;
-        long[] times = new long[nBatches];
-
-        FunctionalIterator<Long> queries = dataSource.queries();
-        int batch = 0;
-        long start = System.nanoTime();
-        while (queries.hasNext()) {
-            subject.openReadTransaction();
-            for (int i=0; i< queryBatchSize && queries.hasNext(); i++) {
-                subject.queryEdges(queries.next()).toList();
-            }
-            subject.closeRead();
-            long lap = System.nanoTime();
-            times[batch++] = (lap - start) / 1000;
-            start = lap;
-        }
-
-        return times;
-    }
-
 
     private void setup() {
         try {
@@ -144,54 +79,132 @@ public class DatabaseBenchmark {
         this.setup();
         LOG.debug("Setting up...");
         subject.setup(subject.getClass().getSimpleName());
+
         LOG.debug("insertVertices...");
-        long[] verticesMicros = insertVertices();
+        long vertexStart = System.nanoTime();
+        List<Long> vertexBatchTimes = insertVertices();
+        long vertexTotalTime = (System.nanoTime() - vertexStart)/1000;
+
         LOG.debug("insertEdges...");
-        long[] edgesMicros = insertEdges();
+        long edgeStart = System.nanoTime();
+        List<Long> edgeBatchTimes = insertEdges();
+        long edgeTotalTime = (System.nanoTime() - edgeStart)/1000;
+
         LOG.debug("runQueries...");
-        long[] queriesMicros = runQueries();
+        long queryStart = System.nanoTime();
+        List<Long> queryBatchTimes = runQueries();
+        long queryTotalTime = (System.nanoTime() - queryStart)/1000;
+
         LOG.debug("Done!");
         subject.tearDown();
 
-        LOG.debug(String.format("Batch timings (micros)\n* Vertex: %s\n* Edge: %s\n* Queries: %s",
-                Arrays.toString(verticesMicros), Arrays.toString(edgesMicros), Arrays.toString(queriesMicros)));
+        LOG.debug(String.format("Total/Batch timings (micros)\n* Vertex: %s %s\n* Edge: %s %s\n* Queries: %s %s",
+                vertexTotalTime, vertexBatchTimes.toString(),
+                edgeTotalTime, edgeBatchTimes.toString(),
+                queryTotalTime, queryBatchTimes.toString()));
 
-        return new Summary(this, verticesMicros, edgesMicros, queriesMicros);
+        return new Summary(this, vertexTotalTime, edgeTotalTime, queryTotalTime, vertexBatchTimes, edgeBatchTimes, queryBatchTimes);
     }
 
-    public interface TestSubject {
+    public List<Long> insertVertices() {
+        return processBatches(dataSource.vertexBatches(), this::processVertexBatch);
+    }
+
+    public List<Long> insertEdges() {
+        return processBatches(dataSource.edgeBatches(), this::processEdgeBatch);
+    }
+
+    public List<Long> runQueries() {
+        return processBatches(dataSource.queryBatches(), this::processQueryBatch);
+    }
+
+    private void processVertexBatch(FunctionalIterator<Long> batch) {
+        try (TestSubject.Transaction tx = subject.writeTransaction()) {
+            batch.forEachRemaining(vertex -> subject.insertVertex(tx, vertex));
+            tx.commit();
+        } catch (Exception e) {
+            throw TypeDBException.of(e);
+        }
+    }
+
+    private void processEdgeBatch(FunctionalIterator<Pair<Long,Long>> batch) {
+        try (TestSubject.Transaction tx = subject.writeTransaction()) {
+            batch.forEachRemaining(edge -> subject.insertEdge(tx, edge.first(), edge.second()));
+            tx.commit();
+        } catch (Exception e) {
+            throw TypeDBException.of(e);
+        }
+    }
+
+    private void processQueryBatch(FunctionalIterator<Long> batch) {
+        try (TestSubject.Transaction tx = subject.writeTransaction()) {
+            batch.forEachRemaining(vertex -> subject.queryEdges(tx, vertex).count());
+        } catch (Exception e) {
+            throw TypeDBException.of(e);
+        }
+    }
+
+    public <T> List<Long> processBatches(List<DataSource.BatchGenerator<T>> batches, Consumer<FunctionalIterator<T>> batchProcessor) {
+        List<Future<Long>> timeFutures = new ArrayList<>();
+        batches.forEach(batch -> {
+            timeFutures.add(executorService.submit(() -> {
+                long start = System.nanoTime();
+                batchProcessor.accept(batch.generate());
+                return (System.nanoTime() - start)/1000;
+            }));
+        });
+
+        return iterate(timeFutures).map(future -> {
+            try {
+                return future.get();
+            } catch (InterruptedException|ExecutionException e) {
+                throw TypeDBException.of(e);
+            }
+        }).toList();
+    }
+
+    public interface TestSubject<TRANSACTION extends TestSubject.Transaction> {
 
         void setup(String database);
 
         void tearDown();
 
-        void openWriteTransaction();
+        TRANSACTION writeTransaction();
 
-        void commitWrites();
+        TRANSACTION readTransaction();
 
-        void insertVertex(long id);
+        void insertVertex(TRANSACTION tx, long id);
 
-        void insertEdge(long from, long to);
 
-        FunctionalIterator<Long> queryEdges(long from);
+        void insertEdge(TRANSACTION tx, long from, long to);
 
-        void openReadTransaction();
+        FunctionalIterator<Long> queryEdges(TRANSACTION tx, long from);
 
-        void closeRead();
+        interface Transaction extends AutoCloseable {
+            void commit();
+        }
     }
 
     public static class Summary {
 
         final DatabaseBenchmark benchmark;
-        final long[] vertexMicros;
-        final long[] edgeMicros;
-        final long[] queryMicros;
+        final long vertexTotalTime;
+        final long edgeTotalTime;
+        final long queryTotalTime;
+        final List<Long> vertexBatchTimes;
+        final List<Long> edgeBatchTimes;
+        final List<Long> queryBatchTimes;
 
-        private Summary(DatabaseBenchmark benchmark, long[] vertexMicros, long[] edgeMicros, long[] queryMicros) {
+        private Summary(DatabaseBenchmark benchmark,
+                        long vertexTotalTime, long edgeTotalTime, long queryTotalTime,
+                        List<Long> vertexBatchTimes, List<Long> edgeBatchTimes, List<Long> queryBatchTimes) {
             this.benchmark = benchmark;
-            this.vertexMicros = vertexMicros;
-            this.edgeMicros = edgeMicros;
-            this.queryMicros = queryMicros;
+            this.vertexTotalTime = vertexTotalTime;
+            this.edgeTotalTime = edgeTotalTime;
+            this.queryTotalTime = queryTotalTime;
+            this.vertexBatchTimes = vertexBatchTimes;
+            this.edgeBatchTimes = edgeBatchTimes;
+            this.queryBatchTimes = queryBatchTimes;
         }
     }
 }

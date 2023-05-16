@@ -19,13 +19,13 @@
 package com.vaticle.typedb.core.benchmark.database;
 
 import com.vaticle.typedb.core.common.parameters.Options;
+import com.vaticle.typedb.core.common.parameters.Order;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import static com.vaticle.typedb.core.common.collection.Bytes.MB;
+import static com.vaticle.typedb.core.common.iterator.Iterators.iterate;
 
 public class Runner {
 
@@ -33,13 +33,14 @@ public class Runner {
     private static final int STEPS = 5;
 
     // Initial values
-    private static final int INIT_VERTEX = 100000;
-    private static final int INIT_AVGDEGREE = 100;
-    private static final int INIT_QUERY = 100000;
+    private static final int INIT_VERTEX = 10000;
+    private static final int INIT_AVGDEGREE = 10;
+    private static final int INIT_QUERY = 10000;
 
     private static final int INIT_VERTEXBATCH = 10000;
     private static final int INIT_EDGEBATCH = 10000;
     private static final int INIT_QUERYBATCH = 10000;
+    private static final int PARALLELISATION = 8;
 
     private int nVertices;
     private int avgDegree;
@@ -66,7 +67,7 @@ public class Runner {
         for (int i = 0; i < STEPS; i++) {
             DatabaseBenchmark benchmark = new DatabaseBenchmark(nVertices, nVertices * avgDegree, nQueries, SEED,
                     vertexBatchSize, edgeBatchSize, queryBatchSize,
-                    new TypeDBOnRocks(getOptions()));
+                    PARALLELISATION, new TypeDBOnRocks(getOptions()));
             results.add(benchmark.run());
             step();
         }
@@ -84,6 +85,7 @@ public class Runner {
         sb
                 .append("nVertices,").append("nEdges,").append("nQueries,")
                 .append("vertexBatch,").append("edgeBatch,").append("queryBatch,")
+                .append("vertexTotalTime,").append("edgeTotalTime,").append("queryTotalTime,")
                 .append("vertexBatchTimeMean,").append("edgeBatchTimeMean,").append("queryBatchTimeMean,")
                 .append("vertexBatchTime10p,").append("edgeBatchTime10p,").append("queryBatchTime10p,")
                 .append("vertexBatchTime90p,").append("edgeBatchTime90p,").append("queryBatchTime90p,")
@@ -96,41 +98,45 @@ public class Runner {
                     .append(summary.benchmark.dataSource.nEdges).append(",")
                     .append(summary.benchmark.dataSource.nQueries).append(",")
 
-                    .append(summary.benchmark.vertexBatchSize).append(",")
-                    .append(summary.benchmark.edgeBatchSize).append(",")
-                    .append(summary.benchmark.queryBatchSize).append(",")
+                    .append(summary.benchmark.dataSource.vertexBatchSize).append(",")
+                    .append(summary.benchmark.dataSource.edgeBatchSize).append(",")
+                    .append(summary.benchmark.dataSource.queryBatchSize).append(",")
 
-                    .append(mean(summary.vertexMicros)).append(",")
-                    .append(mean(summary.edgeMicros)).append(",")
-                    .append(mean(summary.queryMicros)).append(",")
+                    .append(summary.vertexTotalTime).append(",")
+                    .append(summary.edgeTotalTime).append(",")
+                    .append(summary.queryTotalTime).append(",")
 
-                    .append(percentile(summary.vertexMicros, 10)).append(",")
-                    .append(percentile(summary.edgeMicros, 10)).append(",")
-                    .append(percentile(summary.queryMicros, 10)).append(",")
+                    .append(mean(summary.vertexBatchTimes)).append(",")
+                    .append(mean(summary.edgeBatchTimes)).append(",")
+                    .append(mean(summary.queryBatchTimes)).append(",")
 
-                    .append(percentile(summary.vertexMicros, 90)).append(",")
-                    .append(percentile(summary.edgeMicros, 90)).append(",")
-                    .append(percentile(summary.queryMicros, 90)).append(",")
+                    .append(percentile(summary.vertexBatchTimes, 10)).append(",")
+                    .append(percentile(summary.edgeBatchTimes, 10)).append(",")
+                    .append(percentile(summary.queryBatchTimes, 10)).append(",")
 
-                    .append(String.join(" ", concatArray(summary.vertexMicros))).append(",")
-                    .append(String.join(" ", concatArray(summary.edgeMicros))).append(",")
-                    .append(String.join(" ", concatArray(summary.queryMicros)))
+                    .append(percentile(summary.vertexBatchTimes, 90)).append(",")
+                    .append(percentile(summary.edgeBatchTimes, 90)).append(",")
+                    .append(percentile(summary.queryBatchTimes, 90)).append(",")
+
+                    .append(concatList(summary.vertexBatchTimes)).append(",")
+                    .append(concatList(summary.edgeBatchTimes)).append(",")
+                    .append(concatList(summary.queryBatchTimes))
                     .append("\n");
         }
         return sb.toString();
     }
 
-    private static List<String> concatArray(long[] arr) {
-        return Arrays.stream(arr).mapToObj(String::valueOf).collect(Collectors.toList());
+    private static String concatList(List<Long> arr) {
+        return String.join(" ", iterate(arr).map(l -> l.toString()).toList());
     }
 
-    private static double mean(long[] arr) {
-        return ((double)Arrays.stream(arr).reduce(0, Long::sum)) / arr.length;
+    private static double mean(List<Long> values) {
+        return iterate(values).reduce(0.0, Double::sum) / values.size();
     }
 
-    private static long percentile(long[] arr, int p) {
-        int nextIndex = ((p == 100) ? (arr.length-1) :  (arr.length * p)/100);
-        return Arrays.stream(arr).sorted().toArray()[nextIndex];
+    private static long percentile(List<Long> values, int p) {
+        int nextIndex = ((p == 100) ? (values.size()-1) :  (values.size() * p)/100);
+        return iterate(values).mapSorted(x -> x, Order.Asc.ASC).toList().get(nextIndex);
     }
 
     public static void main(String[] args) {

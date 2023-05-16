@@ -30,13 +30,11 @@ import com.vaticle.typeql.lang.TypeQL;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
 
-public class TypeDBOnRocks implements DatabaseBenchmark.TestSubject {
+public class TypeDBOnRocks implements DatabaseBenchmark.TestSubject<TypeDBOnRocks.Transaction> {
 
     private CoreDatabaseManager databaseMgr;
 
     private TypeDB.Session activeSession;
-    private TypeDB.Transaction activeTransaction;
-    private AttributeType.Long vertexType;
     private final Options.Database databaseOptions;
 
     public TypeDBOnRocks(Options.Database databaseOptions) {
@@ -59,57 +57,61 @@ public class TypeDBOnRocks implements DatabaseBenchmark.TestSubject {
         }
 
         activeSession = databaseMgr.session(database, Arguments.Session.Type.DATA);
-        activeTransaction = null;
     }
 
     @Override
     public void tearDown() {
-        if (activeTransaction != null) activeTransaction.close();
-        activeTransaction = null;
         if (activeSession != null) activeSession.close();
         activeSession = null;
         databaseMgr.close();
     }
 
-
     @Override
-    public void openWriteTransaction() {
-        if (activeTransaction != null) throw TypeDBException.of(ILLEGAL_STATE);
-        activeTransaction = activeSession.transaction(Arguments.Transaction.Type.WRITE);
-        vertexType = activeTransaction.concepts().getAttributeType("vertex").asLong();
+    public Transaction writeTransaction() {
+        return new Transaction(Arguments.Transaction.Type.WRITE);
     }
 
     @Override
-    public void commitWrites() {
-        activeTransaction.commit();
-        activeTransaction = null;
+    public Transaction readTransaction() {
+        return new Transaction(Arguments.Transaction.Type.READ);
     }
 
     @Override
-    public void openReadTransaction() {
-        if (activeTransaction != null) throw TypeDBException.of(ILLEGAL_STATE);
-        activeTransaction = activeSession.transaction(Arguments.Transaction.Type.READ);
-        vertexType = activeTransaction.concepts().getAttributeType("vertex").asLong();
+    public void insertVertex(Transaction tx, long id) {
+        tx.vertexType.put(id);
     }
 
     @Override
-    public void closeRead() {
-        if (activeTransaction != null) activeTransaction.close();
-        activeTransaction = null;
+    public void insertEdge(Transaction tx, long from, long to) {
+        tx.vertexType.get(from).setHas(tx.vertexType.get(to));
     }
 
     @Override
-    public void insertVertex(long id) {
-        vertexType.put(id);
+    public FunctionalIterator<Long> queryEdges(Transaction tx, long from) {
+        return tx.vertexType.get(from).getHas(tx.vertexType).map(Attribute.Long::getValue);
     }
 
-    @Override
-    public void insertEdge(long from, long to) {
-        vertexType.get(from).setHas(vertexType.get(to));
-    }
+    public class Transaction implements DatabaseBenchmark.TestSubject.Transaction {
+        private final TypeDB.Transaction tx;
 
-    @Override
-    public FunctionalIterator<Long> queryEdges(long from) {
-        return vertexType.get(from).getHas(vertexType).map(Attribute.Long::getValue);
+        private AttributeType.Long vertexType;
+
+        Transaction(Arguments.Transaction.Type type) {
+            tx = activeSession.transaction(type);
+            vertexType = tx.concepts().getAttributeType("vertex").asLong();
+        }
+
+        @Override
+        public void commit() {
+            tx.commit();
+            tx.close();
+            vertexType = null;
+        }
+
+        @Override
+        public void close() throws Exception {
+            if (tx.isOpen()) tx.close();
+            vertexType = null;
+        }
     }
 }

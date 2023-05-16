@@ -19,8 +19,6 @@
 package com.vaticle.typedb.core.benchmark.database;
 
 import com.vaticle.typedb.common.collection.Pair;
-import com.vaticle.typedb.core.common.exception.TypeDBException;
-import com.vaticle.typedb.core.common.iterator.AbstractFunctionalIterator;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.common.iterator.Iterators;
 
@@ -28,121 +26,105 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
+import java.util.function.Function;
 
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
+import static com.vaticle.typedb.core.common.iterator.Iterators.iterate;
 
 public class DataSource {
-
-    private final int seed;
     final int nVertices;
     final int nEdges;
     final int nQueries;
 
-    DataSource(int nVertices, int nEdges, int nQueries, int seed) {
+    final int vertexBatchSize;
+    final int edgeBatchSize;
+    final int queryBatchSize;
+    private final Random metaRandom;
+
+    DataSource(int nVertices, int nEdges, int nQueries, int vertexBatchSize, int edgeBatchSize, int queryBatchSize, int seed) {
         this.nVertices = nVertices;
         this.nEdges = nEdges;
         this.nQueries = nQueries;
-        this.seed = seed;
+        this.vertexBatchSize = vertexBatchSize;
+        this.edgeBatchSize = edgeBatchSize;
+        this.queryBatchSize = queryBatchSize;
+        this.metaRandom = new Random(seed);
     }
 
-    FunctionalIterator<Long> vertices() {
-        List<Long> shuffled = new ArrayList<>();
-        for (int i = 0; i < nVertices; i++) {
-            shuffled.add(Long.valueOf(i));
-        }
-        Collections.shuffle(shuffled);
-        return Iterators.iterate(shuffled);
+    public List<BatchGenerator<Long>> vertexBatches() {
+        return batchGenerator(nVertices, vertexBatchSize, this::createVertexBatch);
     }
 
-    FunctionalIterator<Pair<Long, Long>> edges() {
-        return new EdgeGenerator();
+    public List<BatchGenerator<Pair<Long,Long>>> edgeBatches() {
+        return batchGenerator(nEdges, edgeBatchSize, this::createEdgeBatch);
     }
 
-    public FunctionalIterator<Long> queries() {
-        return new QueryGenerator();
+
+    public List<BatchGenerator<Long>> queryBatches() {
+        return batchGenerator(nQueries, queryBatchSize, this::createQueryBatch);
     }
 
-    private class VertexGenerator extends AbstractFunctionalIterator<Long> {
 
-        private long nextId;
-
-        public VertexGenerator() {
-            nextId = 0;
+    private FunctionalIterator<Long> createVertexBatch(BatchGenerator<Long> batchGenerator) {
+        ArrayList<Long> vertices = new ArrayList<>(batchGenerator.batchSize);
+        Random random = new Random(batchGenerator.seed);
+        for (int i = 0; i < batchGenerator.batchSize; i++) {
+            vertices.add((long) i * batchGenerator.nBatches + batchGenerator.batchIdx);
         }
-
-        @Override
-        public void recycle() {
-            throw TypeDBException.of(UNIMPLEMENTED);
-        }
-
-        @Override
-        public boolean hasNext() {
-            return nextId < nVertices;
-        }
-
-        @Override
-        public Long next() {
-            return nextId++;
-        }
+        Collections.shuffle(vertices, random);
+        return iterate(vertices);
     }
 
-    private class EdgeGenerator extends AbstractFunctionalIterator<Pair<Long, Long>> {
-
-        private int nGenerated;
-        private final Random random;
-
-        private EdgeGenerator() {
-            this.nGenerated = 0;
-            this.random = new Random(seed);
-        }
-
-        @Override
-        public void recycle() {
-            throw TypeDBException.of(UNIMPLEMENTED);
-        }
-
-        @Override
-        public boolean hasNext() {
-            return nGenerated < nEdges;
-        }
-
-        @Override
-        public Pair<Long, Long> next() {
-            long first = random.nextInt(nVertices);
-            long second;
-            do {
-                second = random.nextInt(nVertices);
-            } while (second == first);
-            nGenerated++;
-            return new Pair<>(first, second);
-        }
+    private FunctionalIterator<Pair<Long, Long>> createEdgeBatch(BatchGenerator<Pair<Long,Long>> batchGenerator) {
+        Random random = new Random(batchGenerator.seed);
+        return repeat(batchGenerator.batchSize)
+                .map(i -> new Pair<>(nextLong(random, nVertices), nextLong(random, nVertices)));
     }
 
-    private class QueryGenerator extends AbstractFunctionalIterator<Long> {
-
-        private int nGenerated;
-        private final Random random;
-
-        private QueryGenerator() {
-            this.nGenerated = 0;
-            this.random = new Random(seed);
-        }
-
-        @Override
-        public void recycle() {
-            throw TypeDBException.of(UNIMPLEMENTED);
-        }
-
-        @Override
-        public boolean hasNext() {
-            return nGenerated < nQueries;
-        }
-
-        @Override
-        public Long next() {
-            nGenerated++;
-            return Long.valueOf(random.nextInt(nVertices));
-        }
+    private FunctionalIterator<Long> createQueryBatch(BatchGenerator<Long> batchGenerator) {
+        Random random = new Random(batchGenerator.seed);
+        return repeat(batchGenerator.batchSize).map(i -> nextLong(random, nVertices));
     }
 
+
+    private static long nextLong(Random random, int bound) {
+        return random.nextInt(bound); // TODO
+    }
+
+    private static FunctionalIterator<Integer> repeat(int n) {
+        final Integer N = n;
+        return Iterators.loop(n, i -> i > 0, i -> i - 1).map(i -> N-i);
+    }
+
+    private <T> List<BatchGenerator<T>> batchGenerator(int total, int batchSize, Function<BatchGenerator<T>, FunctionalIterator<T>> generator) {
+        int nBatches = total / batchSize + ((total % batchSize == 0) ? 0 : 1);
+        List<BatchGenerator<T>> batches = new ArrayList<>(nBatches);
+        int idx = 0;
+        int remaining = total;
+        while (remaining > 0) {
+            int nextBatchSize = Math.min(remaining, batchSize);
+            remaining -= nextBatchSize;
+            batches.add(new BatchGenerator<>(idx++, nBatches, nextBatchSize, metaRandom.nextInt(), generator));
+        }
+        return batches;
+    }
+
+    public static class BatchGenerator<T> {
+        private final int batchIdx;
+        private final int nBatches;
+        private final int batchSize;
+        private final int seed;
+        private final Function<BatchGenerator<T>, FunctionalIterator<T>> generator;
+
+        BatchGenerator(int batchIdx, int nBatches, int batchSize, int seed, Function<BatchGenerator<T>, FunctionalIterator<T>> generator) {
+            this.batchIdx = batchIdx;
+            this.nBatches = nBatches;
+            this.batchSize = batchSize;
+            this.seed = seed;
+            this.generator = generator;
+        }
+
+        public FunctionalIterator<T> generate() {
+            return generator.apply(this);
+        }
+    }
 }
