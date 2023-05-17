@@ -98,10 +98,8 @@ public class DatabaseBenchmark {
         LOG.debug("Done!");
         subject.tearDown();
 
-        LOG.debug(String.format("Total/Batch timings (micros)\n* Vertex: %s %s\n* Edge: %s %s\n* Queries: %s %s",
-                vertexTotalTime, vertexBatchTimes.toString(),
-                edgeTotalTime, edgeBatchTimes.toString(),
-                queryTotalTime, queryBatchTimes.toString()));
+        LOG.debug(String.format("Total timings (micros);\tVertex: %s;\tEdge: %s;\tQueries: %s",
+                vertexTotalTime,edgeTotalTime, queryTotalTime));
 
         return new Summary(this, vertexTotalTime, edgeTotalTime, queryTotalTime, vertexBatchTimes, edgeBatchTimes, queryBatchTimes);
     }

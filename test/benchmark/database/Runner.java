@@ -33,9 +33,9 @@ public class Runner {
     private static final int STEPS = 5;
 
     // Initial values
-    private static final int INIT_VERTEX = 10000;
+    private static final int INIT_VERTEX = 100000;
     private static final int INIT_AVGDEGREE = 10;
-    private static final int INIT_QUERY = 10000;
+    private static final int INIT_QUERY = 100000;
 
     private static final int INIT_VERTEXBATCH = 10000;
     private static final int INIT_EDGEBATCH = 10000;
@@ -88,8 +88,8 @@ public class Runner {
                 .append("vertexTotalTime,").append("edgeTotalTime,").append("queryTotalTime,")
                 .append("vertexBatchTimeMean,").append("edgeBatchTimeMean,").append("queryBatchTimeMean,")
                 .append("vertexBatchTime10p,").append("edgeBatchTime10p,").append("queryBatchTime10p,")
+                .append("vertexBatchTime50p,").append("edgeBatchTime50p,").append("queryBatchTime50p,")
                 .append("vertexBatchTime90p,").append("edgeBatchTime90p,").append("queryBatchTime90p,")
-                .append("vertexBatchTimesAll,").append("edgeBatchTimesAll,").append("queryBatchTimesAll")
         .append("\n");
 
         for (DatabaseBenchmark.Summary summary : summaries) {
@@ -114,13 +114,13 @@ public class Runner {
                     .append(percentile(summary.edgeBatchTimes, 10)).append(",")
                     .append(percentile(summary.queryBatchTimes, 10)).append(",")
 
+                    .append(percentile(summary.vertexBatchTimes, 50)).append(",")
+                    .append(percentile(summary.edgeBatchTimes, 50)).append(",")
+                    .append(percentile(summary.queryBatchTimes, 50)).append(",")
+
                     .append(percentile(summary.vertexBatchTimes, 90)).append(",")
                     .append(percentile(summary.edgeBatchTimes, 90)).append(",")
                     .append(percentile(summary.queryBatchTimes, 90)).append(",")
-
-                    .append(concatList(summary.vertexBatchTimes)).append(",")
-                    .append(concatList(summary.edgeBatchTimes)).append(",")
-                    .append(concatList(summary.queryBatchTimes))
                     .append("\n");
         }
         return sb.toString();
