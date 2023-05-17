@@ -134,9 +134,12 @@ public class Runner {
         return iterate(values).reduce(0.0, Double::sum) / values.size();
     }
 
+
     private static long percentile(List<Long> values, int p) {
         int nextIndex = ((p == 100) ? (values.size()-1) :  (values.size() * p)/100);
-        return iterate(values).mapSorted(x -> x, Order.Asc.ASC).toList().get(nextIndex);
+        List<Long> sorted = new ArrayList<>(values);
+        sorted.sort(Long::compare);
+        return sorted.get(nextIndex);
     }
 
     public static void main(String[] args) {
