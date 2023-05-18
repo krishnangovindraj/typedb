@@ -47,6 +47,7 @@ public class DatabaseBenchmark {
     final DataSource dataSource;
     final TestSubject subject;
     private final ExecutorService executorService;
+    public int parallelisation;
 
     public DatabaseBenchmark(int nVertices, int nEdges, int nQueries, int seed,
                              int vertexBatchSize, int edgeBatchSize, int queryBatchSize,
@@ -55,6 +56,7 @@ public class DatabaseBenchmark {
         assert vertexBatchSize > 0 && edgeBatchSize > 0 && queryBatchSize > 0;
         this.dataSource = new DataSource(nVertices, nEdges, nQueries, vertexBatchSize, edgeBatchSize, queryBatchSize, seed);
         this.subject = subject;
+        this.parallelisation = parallelisation;
         this.executorService = Executors.newFixedThreadPool(parallelisation);
     }
 

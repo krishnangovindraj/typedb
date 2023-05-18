@@ -19,7 +19,6 @@
 package com.vaticle.typedb.core.benchmark.database;
 
 import com.vaticle.typedb.core.common.parameters.Options;
-import com.vaticle.typedb.core.common.parameters.Order;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,18 +29,19 @@ import static com.vaticle.typedb.core.common.iterator.Iterators.iterate;
 public class Runner {
 
     private static final int SEED = 12345;
-    private static final int STEPS = 5;
+    private static final int STEPS = 1;
 
     // Initial values
-    private static final int INIT_VERTEX = 100000;
-    private static final int INIT_AVGDEGREE = 10;
-    private static final int INIT_QUERY = 100000;
+    private static final int INIT_VERTEX = 10000;
+    private static final int INIT_AVGDEGREE = 100;
+    private static final int INIT_QUERY = 1000;
 
-    private static final int INIT_VERTEXBATCH = 10000;
-    private static final int INIT_EDGEBATCH = 10000;
-    private static final int INIT_QUERYBATCH = 10000;
-    private static final int PARALLELISATION = 8;
+    private static final int INIT_VERTEXBATCH = 1000;
+    private static final int INIT_EDGEBATCH = 1000;
+    private static final int INIT_QUERYBATCH = 100;
+    private static final int INIT_PARALLELISATION = 8;
 
+    private int parallelisation;
     private int nVertices;
     private int avgDegree;
     private int nQueries;
@@ -50,6 +50,7 @@ public class Runner {
     private int queryBatchSize;
 
     public Runner() {
+        this.parallelisation = INIT_PARALLELISATION;
         this.nVertices = INIT_VERTEX;
         this.avgDegree = INIT_AVGDEGREE;
         this.nQueries = INIT_QUERY;
@@ -67,7 +68,7 @@ public class Runner {
         for (int i = 0; i < STEPS; i++) {
             DatabaseBenchmark benchmark = new DatabaseBenchmark(nVertices, nVertices * avgDegree, nQueries, SEED,
                     vertexBatchSize, edgeBatchSize, queryBatchSize,
-                    PARALLELISATION, new TypeDBOnRocks(getOptions()));
+                    parallelisation, new TypeDBOnRocks(getOptions()));
             results.add(benchmark.run());
             step();
         }
@@ -83,6 +84,7 @@ public class Runner {
     private static String summariesToCSV(List<DatabaseBenchmark.Summary> summaries) {
         StringBuilder sb = new StringBuilder();
         sb
+                .append("parallelisation,")
                 .append("nVertices,").append("nEdges,").append("nQueries,")
                 .append("vertexBatch,").append("edgeBatch,").append("queryBatch,")
                 .append("vertexTotalTime,").append("edgeTotalTime,").append("queryTotalTime,")
@@ -94,6 +96,7 @@ public class Runner {
 
         for (DatabaseBenchmark.Summary summary : summaries) {
             sb
+                    .append(summary.benchmark.parallelisation).append(",")
                     .append(summary.benchmark.dataSource.nVertices).append(",")
                     .append(summary.benchmark.dataSource.nEdges).append(",")
                     .append(summary.benchmark.dataSource.nQueries).append(",")
