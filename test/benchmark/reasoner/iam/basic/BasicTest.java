@@ -31,7 +31,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 public class BasicTest {
-    static final Path RESOURCE_DIRECTORY =  Paths.get("test", "benchmark", "reasoner", "iam", "basic");
+    static final Path RESOURCE_DIRECTORY = Paths.get("test", "benchmark", "reasoner", "iam", "basic");
     private static final Path COMMON_RESOURCE_DIR = Paths.get("test", "benchmark", "reasoner", "iam", "resources");
 
     private static final int NOBJECTS = 52;
@@ -161,6 +161,24 @@ public class BasicTest {
     }
 
     @Test
+    public void testTripleJoinWithProjection() {
+        String query = String.format(
+                "match\n" +
+                        "$a isa object, has id \"%s\";\n" +
+                        "(start: $a, end: $b) isa object-pair;\n" +
+                        "(start: $b, end: $c) isa object-pair;\n" +
+                        "(start: $c, end: $d) isa object-pair;\n" +
+                        "get $a, $d;\n",
+                queryParams.basicTestObject);
+        Benchmark benchmark = new Benchmark("double-join", query, NOBJECTS);
+        benchmarker.runBenchmark(benchmark);
+
+        benchmark.assertAnswerCountCorrect();
+        benchmark.assertRunningTime(1500);
+        benchmark.assertCounters(25, NOBJECTS * NOBJECTS, NOBJECTS, NOBJECTS + NOBJECTS + 3);
+    }
+
+    @Test
     public void testSymmetricDoubleJoin() {
         String query = String.format(
                 "match\n" +
@@ -225,13 +243,13 @@ public class BasicTest {
     @Test
     public void testQueryTwice() {
         String query = "match\n" +
-                        "(start: $a, end: $b) isa object-pair;\n" +
-                        "(start: $a, end: $b) isa object-pair;\n";
+                "(start: $a, end: $b) isa object-pair;\n" +
+                "(start: $a, end: $b) isa object-pair;\n";
         Benchmark benchmark = new Benchmark("double-join-self", query, NOBJECTS * NOBJECTS);
         benchmarker.runBenchmark(benchmark);
 
         benchmark.assertAnswerCountCorrect();
         benchmark.assertRunningTime(3500);
-        benchmark.assertCounters(25, NOBJECTS * NOBJECTS, NOBJECTS * NOBJECTS + 2,  NOBJECTS * NOBJECTS + 2);
+        benchmark.assertCounters(25, NOBJECTS * NOBJECTS, NOBJECTS * NOBJECTS + 2, NOBJECTS * NOBJECTS + 2);
     }
 }
