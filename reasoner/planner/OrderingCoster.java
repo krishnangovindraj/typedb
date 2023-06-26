@@ -69,6 +69,9 @@ public class OrderingCoster {
 
         Map<Concludable, Double> cylicScalingFactors = new HashMap<>();
         AnswerCountEstimator.IncrementalEstimator estimator = answerCountEstimator.createIncrementalEstimator(conjunctionNode.conjunction());
+
+        Set<Variable> locallyCarriedBounds = new HashSet<>();
+        Map<Resolvable<?>, Set<Variable>> lastOccurence = computeLastOccurenceOfVariables(ordering);
         for (Resolvable<?> resolvable : ordering) {
             Set<Variable> resolvableVars = estimateableVariables(resolvable.variables());
             Set<Variable> resolvableMode = Collections.intersection(resolvableVars, boundVars);
@@ -101,13 +104,15 @@ public class OrderingCoster {
                 disconnectedCost += resolvableCost;
             }
             // Traversal cost - DFS style permutative work
-            acyclicCost += estimator.answerSetSize() * RELATIVE_COST_ANSWER_COMBINATION;
+            acyclicCost += estimator.answerEstimate(locallyCarriedBounds) * RELATIVE_COST_ANSWER_COMBINATION;
 
             if (!resolvable.isNegated()) {
                 boundVars.addAll(resolvableVars);
                 restrictedVars.addAll(resolvableVars);
                 if (isConnectedToInput) inputConnectedVars.addAll(resolvableVars);
+                locallyCarriedBounds.addAll(resolvableVars);
             }
+            locallyCarriedBounds.removeAll(lastOccurence.get(resolvable));
         }
 
         double answersToMode = answerCountEstimator.estimateAnswers(callMode.conjunction, callMode.mode);
@@ -199,6 +204,8 @@ public class OrderingCoster {
         private final List<Resolvable<?>> ordering;
         private final Set<Variable> boundVars;
         private final Set<Pair<Concludable, Set<Variable>>> cyclicConcludableModes;
+        private final Set<Variable> locallyCarriedBounds;
+        private final Set<Resolvable<?>> remainingResolvables;
         private double singlyBoundCost;
 
         private boolean finalised;
@@ -223,6 +230,8 @@ public class OrderingCoster {
             this.cyclicConcludableModes = cyclicConcludableModes;
             this.singlyBoundCost = singlyBoundCost;
             this.finalised = false;
+            this.remainingResolvables = new HashSet<>(conjunctionNode.resolvables());
+            this.locallyCarriedBounds = new HashSet<>();
         }
 
         public List<Resolvable<?>> currentOrdering() {
@@ -244,6 +253,7 @@ public class OrderingCoster {
         public void extend(Resolvable<?> resolvable) {
             assert !finalised;
             ordering.add(resolvable);
+            remainingResolvables.remove(resolvable);
             Set<Variable> resolvableVars = estimateableVariables(resolvable.variables());
             Set<Variable> resolvableMode = Collections.intersection(resolvableVars, boundVars);
             double resolvableCost = scaledAcyclicCost(conjunctionNode, estimator, resolvable, resolvableMode, resolvableMode);
@@ -256,11 +266,13 @@ public class OrderingCoster {
             singlyBoundCost += resolvableCost; // Reasoning cost - recursive work
 
             // Traversal cost - DFS style permutative work
-            singlyBoundCost += estimator.answerSetSize() * RELATIVE_COST_ANSWER_COMBINATION;
+            singlyBoundCost += estimator.answerEstimate(locallyCarriedBounds) * RELATIVE_COST_ANSWER_COMBINATION;
 
             if (!resolvable.isNegated()) {
                 boundVars.addAll(resolvable.variables()); // We need non-estimateable variables too.
+                locallyCarriedBounds.addAll(resolvableVars);
             }
+            locallyCarriedBounds.retainAll(iterate(remainingResolvables).flatMap(r -> iterate(r.variables())).toSet());
         }
 
         LocalSingleCallCosting build() {
@@ -274,6 +286,19 @@ public class OrderingCoster {
                     conjunctionNode, estimator.clone(),
                     new ArrayList<>(ordering), new HashSet<>(boundVars), new HashSet<>(cyclicConcludableModes), singlyBoundCost);
         }
+    }
+
+    private static Map<Resolvable<?>, Set<Variable>> computeLastOccurenceOfVariables(List<Resolvable<?>> resolvables) {
+        Map<Variable, Resolvable<?>> lastOccurenceAt = new HashMap<>();
+        Map<Resolvable<?>, Set<Variable>> lastOccurence = new HashMap<>();
+        for (Resolvable<?> resolvable: resolvables) {
+            for (Variable variable: resolvable.variables()) {
+                lastOccurenceAt.put(variable, resolvable);
+            }
+            lastOccurence.put(resolvable, new HashSet<>());
+        }
+        lastOccurenceAt.forEach((variable, resolvable) -> lastOccurence.get(resolvable).add(variable));
+        return lastOccurence;
     }
 
     static class LocalSingleCallCosting {

@@ -228,11 +228,6 @@ public class AnswerCountEstimator {
             return Math.round(Math.ceil(answerEstimateFromCover(variables, cover)));
         }
 
-        public double answerSetSize() {
-            // TODO: ignore the anonymous variables iff/when ConjunctionController can ignore them when branching CompoundStreams
-            return answerEstimate(minVariableEstimate.keySet());
-        }
-
         private static double scaledEstimate(LocalModel model, Pair<Double, Optional<Variable>> scale, Set<Variable> estimateVariables) {
             assert scale.second().isPresent() || scale.first() == 1.0;
             Set<Variable> variables = new HashSet<>();
