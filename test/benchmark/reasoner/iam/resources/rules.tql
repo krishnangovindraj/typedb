@@ -85,7 +85,7 @@ when {
     {(collection: $granting-object, member: $object) isa collection-membership;} or { $granting-object is $object; };
 
     $granting-access (object: $granting-object, action: $granting-action) isa access;
-    (subject: $granting-subject, access: $granting-access) isa direct-permission;
+    (subject: $granting-subject, access: $granting-access) isa! permission;
 } then {
     (subject: $subject, access: $access) isa inherited-permission;
 };
@@ -104,7 +104,7 @@ rule segregation-violation-detection:
 
 rule permission-maximisation-violation-detection:
     when {
-        $p-d(subject: $s, access: $ac) isa direct-permission;
+        $p-d(subject: $s, access: $ac) isa! permission;
         $p-i(subject: $s, access: $ac) isa inherited-permission;
     } then {
         (permission: $p-d, permission: $p-i) isa permission-maximisation-violation;

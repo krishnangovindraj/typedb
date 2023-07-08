@@ -126,7 +126,7 @@ permission sub relation,
     owns validity,
     plays permission-maximisation-violation:permission;
 
-direct-permission sub permission;
+#direct-permission sub permission;
 inherited-permission sub permission;
 
 change-request sub relation,

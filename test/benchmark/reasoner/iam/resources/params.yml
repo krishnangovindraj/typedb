@@ -15,14 +15,14 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 
-permission_email: douglas.schmidt@vaticle.com
-permission_object: root/engineering/typedb-studio/src/README.md
-permission_action: edit file
+permission_email: bree.borenstein@vaticle.com
+permission_object: root/specialist/bluefin/basket/scaffold/nasty_season.midi
+permission_action: view file
 
-segregation_email: genevieve.gallegos@vaticle.com
-segregation_object: root/engineering
-segregation_action1: submit pull request
-segregation_action2: approve pull request
+segregation_email: bree.borenstein@vaticle.com
+segregation_object: root/specialist/bluefin/basket/scaffold/nasty_season.midi
+segregation_action1: view file
+segregation_action2: grant ownership
 
-largeNegation_email: genevieve.gallegos@vaticle.com
+largeNegation_email: dorla.cruthers@vaticle.com
 basicTest_object: root
