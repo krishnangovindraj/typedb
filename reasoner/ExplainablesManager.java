@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import static com.vaticle.typedb.core.common.iterator.Iterators.iterate;
 import static com.vaticle.typedb.core.concept.answer.ConceptMap.Explainable.NOT_IDENTIFIED;
 
-class ExplainablesManager {
+public class ExplainablesManager {
 
     private final AtomicLong nextId;
     private final ConcurrentMap<Long, Concludable> concludables;
