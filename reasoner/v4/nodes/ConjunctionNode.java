@@ -3,6 +3,7 @@ package com.vaticle.typedb.core.reasoner.v4.nodes;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.logic.resolvable.ResolvableConjunction;
+import com.vaticle.typedb.core.logic.resolvable.Retrievable;
 import com.vaticle.typedb.core.reasoner.v4.ActorNode;
 import com.vaticle.typedb.core.reasoner.v4.Message;
 import com.vaticle.typedb.core.reasoner.v4.NodeRegistry;
@@ -29,7 +30,7 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
     }
 
     @Override
-    public void readAnswerAt(ActorNode<?> sender, int index) {
+    public void readAnswerAt(ActorNode<?> reader, int index) {
         assert index <= answers.size();
         /// TODO
         throw TypeDBException.of(UNIMPLEMENTED);
@@ -39,4 +40,17 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
     public void receive(ActorNode<?> sender, Message message) {
         throw TypeDBException.of(UNIMPLEMENTED);
     }
+
+//    // Test retrievable
+//    private ActorNode<?> subscriber;
+//    @Override
+//    public void readAnswerAt(ActorNode<?> reader, int index) {
+//        subscriber = reader;
+//        Retrievable retrievable = nodeRegistry.logicManager().compile(conjunction).stream().findFirst().get().asRetrievable();
+//        nodeRegistry.retrievableSubRegistry(retrievable).getNode(new ConceptMap()).driver().execute(actor -> actor.readAnswerAt(this, index));
+//    }
+//    @Override
+//    public void receive(ActorNode<?> sender, Message message) {
+//        send(subscriber, message);
+//    }
 }

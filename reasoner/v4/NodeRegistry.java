@@ -6,13 +6,16 @@ import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.concurrent.actor.Actor;
 import com.vaticle.typedb.core.concurrent.actor.ActorExecutorGroup;
 import com.vaticle.typedb.core.logic.LogicManager;
+import com.vaticle.typedb.core.logic.Rule;
 import com.vaticle.typedb.core.logic.resolvable.Concludable;
 import com.vaticle.typedb.core.logic.resolvable.ResolvableConjunction;
 import com.vaticle.typedb.core.logic.resolvable.Retrievable;
+import com.vaticle.typedb.core.logic.resolvable.Unifier;
 import com.vaticle.typedb.core.reasoner.v4.nodes.ConjunctionNode;
 import com.vaticle.typedb.core.reasoner.v4.nodes.ResolvableNode;
 import com.vaticle.typedb.core.traversal.TraversalEngine;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -119,14 +122,16 @@ public class NodeRegistry {
 
     public class ConcludableSubRegistry extends SubRegistry<Concludable, ResolvableNode.ConcludableNode> {
 
+
         private ConcludableSubRegistry(Concludable concludable) {
             super(concludable);
         }
 
         @Override
         protected Actor.Driver<ResolvableNode.ConcludableNode> createNode(ConceptMap bounds) {
-            return createDriver(driver -> new ResolvableNode.ConcludableNode(key, bounds, NodeRegistry.this, driver));
+            return createDriver(driver -> new ResolvableNode.ConcludableNode(key, bounds,NodeRegistry.this, driver));
         }
+
     }
 
     public class ConjunctionSubRegistry extends SubRegistry<ResolvableConjunction, ConjunctionNode> {

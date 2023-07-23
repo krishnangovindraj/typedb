@@ -17,7 +17,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>>  extends Actor<NOD
         this.nodeRegistry = nodeRegistry;
     }
 
-    public abstract void readAnswerAt(ActorNode<?> sender, int index);
+    public abstract void readAnswerAt(ActorNode<?> reader, int index);
 
     public abstract void receive(ActorNode<?> sender, Message message);
 
