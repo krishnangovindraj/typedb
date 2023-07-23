@@ -36,19 +36,19 @@ java_test(
     ],
     runtime_deps = [
         "//test/behaviour/config:parameters",
-        "//test/behaviour/concept/thing/entity:steps",
-        "//test/behaviour/concept/thing/attribute:steps",
-        "//test/behaviour/concept/thing/relation:steps",
-        "//test/behaviour/concept/type/attributetype:steps",
-        "//test/behaviour/concept/type/relationtype:steps",
-        "//test/behaviour/concept/type/thingtype:steps",
-        "//test/behaviour/connection/database:steps",
-        "//test/behaviour/connection/session:steps",
-        "//test/behaviour/connection/transaction:steps",
-        "//test/behaviour/typeql:steps",
+#        "//test/behaviour/concept/thing/entity:steps",
+#        "//test/behaviour/concept/thing/attribute:steps",
+#        "//test/behaviour/concept/thing/relation:steps",
+#        "//test/behaviour/concept/type/attributetype:steps",
+#        "//test/behaviour/concept/type/relationtype:steps",
+#        "//test/behaviour/concept/type/thingtype:steps",
+#        "//test/behaviour/connection/database:steps",
+#        "//test/behaviour/connection/session:steps",
+#        "//test/behaviour/connection/transaction:steps",
+#        "//test/behaviour/typeql:steps",
 
         # --- If testing Reasoner BDD, enable these steps and disable the Connection steps above ---
-#        "//test/behaviour/reasoner:steps"
+        "//test/behaviour/reasoner:steps"
     ],
     data = [
         ":debug.feature",

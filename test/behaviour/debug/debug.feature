@@ -18,9 +18,33 @@
 Feature: Debugging Space
 
   Background:
-    Given connection has been opened
-    Given connection delete all databases
-    Given connection does not have any database
 
+    Given typedb starts
+    Given connection opens with default authentication
   # Paste any scenarios below for debugging.
   # Do not commit any changes to this file.
+
+
+  Scenario:
+
+    Given reasoning schema
+    """
+    define
+    name sub attribute, value string;
+    person sub entity, owns name;
+
+    """
+   Given reasoning data
+    """
+    insert
+    $p1 isa person, has name "Alice";
+    $p2 isa person, has name "Bob";
+    """
+
+    Given reasoning query
+    """
+    match
+    $p isa person, has name $n;
+    """
+
+    Then verify answer size is: 2
