@@ -24,14 +24,12 @@ import com.vaticle.typedb.core.concurrent.actor.Actor;
 import com.vaticle.typedb.core.concurrent.producer.Producer;
 import com.vaticle.typedb.core.logic.resolvable.ResolvableConjunction;
 import com.vaticle.typedb.core.reasoner.ExplainablesManager;
-import com.vaticle.typedb.core.reasoner.controller.ControllerRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Supplier;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
@@ -44,7 +42,7 @@ import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducerV4.State.READY
 
 
 @ThreadSafe
-public abstract class ReasonerProducerV4<ANSWER> implements Producer<ANSWER>, ReasonerConsumerV4 {
+public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, ANSWER> implements Producer<ANSWER>, ReasonerConsumerV4 {
 
     private static final Logger LOG = LoggerFactory.getLogger(ReasonerProducerV4.class);
 
@@ -96,16 +94,20 @@ public abstract class ReasonerProducerV4<ANSWER> implements Producer<ANSWER>, Re
     private void initialise() {
         assert state == INIT;
         state = INITIALISING;
-        initialiseRoot();
+        createRootNode();
+        state = READY;
+        pull();
     }
 
-    abstract void initialiseRoot();
+    abstract ROOTNODE createRootNode();
 
     synchronized void pull() {
         assert state == READY;
         state = PULLING;
-        rootSubgoal.execute(actor -> actor.rootPull());
+        readNextAnswer();
     }
+
+    abstract void readNextAnswer();
 
     @Override
     public synchronized void finish() {
@@ -150,19 +152,22 @@ public abstract class ReasonerProducerV4<ANSWER> implements Producer<ANSWER>, Re
 
     }
 
-    public static class Basic extends ReasonerProducerV4<ConceptMap> {
+    public static class Basic extends ReasonerProducerV4<Basic.RootNode, ConceptMap> {
 
         private final ResolvableConjunction conjunction;
-        private Actor.Driver<RootNode> rootNode; // TODO: Make final, init in constructor, change return type of initialiseRoot
+        private RootNode rootNode; // TODO: Make final, init in constructor, change return type of initialiseRoot
+        private AtomicInteger answersReceived;
 
-        Basic(ResolvableConjunction conjunction, Options.Query options, NodeRegistry nodeRegistry, ExplainablesManager explainablesManager) {
+        public Basic(ResolvableConjunction conjunction, Options.Query options, NodeRegistry nodeRegistry, ExplainablesManager explainablesManager) {
             super(options, nodeRegistry, explainablesManager);
             this.conjunction = conjunction;
+            this.rootNode = createRootNode();
+            this.answersReceived = new AtomicInteger(0);
         }
 
         @Override
-        void initialiseRoot() {
-            rootNode = nodeRegistry.createDriver(nodeDriver -> new RootNode(nodeRegistry, nodeDriver));
+        RootNode createRootNode() {
+            return nodeRegistry.createRoot(nodeDriver -> new RootNode(nodeRegistry, nodeDriver));
         }
 
         @Override
@@ -170,7 +175,12 @@ public abstract class ReasonerProducerV4<ANSWER> implements Producer<ANSWER>, Re
             return answer;
         }
 
-        private class RootNode extends ActorNode<RootNode> {
+        void readNextAnswer() {
+            int nextAnswerIndex = answersReceived.getAndIncrement();
+            rootNode.driver().execute(rootNode -> rootNode.readAnswerAt(null, nextAnswerIndex));
+        }
+
+        class RootNode extends ActorNode<RootNode> {
 
             private final NodeRegistry.ConjunctionSubRegistry subRegistry;
 
@@ -180,13 +190,14 @@ public abstract class ReasonerProducerV4<ANSWER> implements Producer<ANSWER>, Re
             }
 
             @Override
-            protected void exception(Throwable e) {
-                throw TypeDBException.of(UNIMPLEMENTED);
+            public void terminate(Throwable e) {
+                super.terminate(e);
+                Basic.this.exception(e);
             }
 
             @Override
             public void readAnswerAt(ActorNode<?> sender, int index) {
-                subRegistry.getNode(new ConceptMap()).readAnswerAt(this, index);
+                subRegistry.getNode(new ConceptMap()).driver().execute(actor -> actor.readAnswerAt(this, index));
             }
 
             @Override

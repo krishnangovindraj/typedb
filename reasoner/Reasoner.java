@@ -23,6 +23,7 @@ import com.vaticle.typedb.core.concurrent.producer.Producer;
 import com.vaticle.typedb.core.concurrent.producer.Producers;
 import com.vaticle.typedb.core.logic.LogicManager;
 import com.vaticle.typedb.core.logic.resolvable.Concludable;
+import com.vaticle.typedb.core.logic.resolvable.ResolvableConjunction;
 import com.vaticle.typedb.core.pattern.Conjunction;
 import com.vaticle.typedb.core.pattern.Disjunction;
 import com.vaticle.typedb.core.pattern.Negation;
@@ -31,6 +32,8 @@ import com.vaticle.typedb.core.reasoner.answer.Explanation;
 import com.vaticle.typedb.core.reasoner.common.ReasonerPerfCounters;
 import com.vaticle.typedb.core.reasoner.controller.ControllerRegistry;
 import com.vaticle.typedb.core.reasoner.planner.ReasonerPlanner;
+import com.vaticle.typedb.core.reasoner.v4.NodeRegistry;
+import com.vaticle.typedb.core.reasoner.v4.ReasonerProducerV4;
 import com.vaticle.typedb.core.traversal.TraversalEngine;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 import com.vaticle.typedb.core.traversal.common.Modifiers.Filter;
@@ -50,6 +53,7 @@ import static com.vaticle.typedb.common.collection.Collections.set;
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Pattern.INFERENCE_INCOHERENT_MATCH_PATTERN;
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Pattern.INFERENCE_INCOHERENT_MATCH_SUB_PATTERN;
+import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.ThingRead.SORT_ATTRIBUTE_NOT_COMPARABLE;
 import static com.vaticle.typedb.core.common.iterator.Iterators.cartesian;
 import static com.vaticle.typedb.core.common.iterator.Iterators.empty;
@@ -71,6 +75,7 @@ public class Reasoner {
     private final ExplainablesManager explainablesManager;
     private final ReasonerPlanner planner;
     private final ReasonerPerfCounters perfCounters;
+    private final NodeRegistry nodeRegistry;
 
     public Reasoner(ConceptManager conceptMgr, LogicManager logicMgr,
                     TraversalEngine traversalEng, Context.Transaction context) {
@@ -81,6 +86,8 @@ public class Reasoner {
         this.planner = ReasonerPlanner.create(traversalEng, conceptMgr, logicMgr, perfCounters, context.options().explain());
         this.controllerRegistry = new ControllerRegistry(actor(), traversalEng, conceptMgr, logicMgr, planner, perfCounters, context);
         this.explainablesManager = new ExplainablesManager();
+
+        this.nodeRegistry = new NodeRegistry(actor());
     }
 
     public ControllerRegistry controllerRegistry() {
@@ -173,10 +180,11 @@ public class Reasoner {
     }
 
     private boolean mayReason(Disjunction disjunction, Context.Query context) {
-        if (!context.options().infer() || context.transactionType().isWrite() || !logicMgr.rules().hasNext()) {
-            return false;
-        }
-        return mayReason(disjunction);
+        return true; // TODO: Fix this
+//        if (!context.options().infer() || context.transactionType().isWrite() || !logicMgr.rules().hasNext()) {
+//            return false;
+//        }
+//        return mayReason(disjunction);
     }
 
     private boolean mayReason(Disjunction disjunction) {
@@ -215,9 +223,13 @@ public class Reasoner {
     }
 
     public FunctionalIterator<ConceptMap> executeReasoner(Disjunction disjunction, Filter filter, Context.Query context) {
-        ReasonerProducer.Match producer = disjunction.conjunctions().size() == 1
-                ? new ReasonerProducer.Match.Conjunction(disjunction.conjunctions().get(0), filter, context.options(), controllerRegistry, explainablesManager)
-                : new ReasonerProducer.Match.Disjunction(disjunction, filter, context.options(), controllerRegistry, explainablesManager);
+        ReasonerProducerV4.Basic producer;
+        if (disjunction.conjunctions().size() == 1) {
+            producer = new ReasonerProducerV4.Basic(ResolvableConjunction.of(disjunction.conjunctions().get(0)), context.options(), nodeRegistry, explainablesManager);
+        } else throw TypeDBException.of(UNIMPLEMENTED);
+//        ReasonerProducer.Match producer = disjunction.conjunctions().size() == 1
+//                ? new ReasonerProducer.Match.Conjunction(disjunction.conjunctions().get(0), filter, context.options(), controllerRegistry, explainablesManager)
+//                : new ReasonerProducer.Match.Disjunction(disjunction, filter, context.options(), controllerRegistry, explainablesManager);
         return produce(producer, context.producer(), async1());
     }
 
