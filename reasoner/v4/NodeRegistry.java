@@ -1,13 +1,17 @@
 package com.vaticle.typedb.core.reasoner.v4;
 
 import com.vaticle.typedb.common.collection.ConcurrentSet;
+import com.vaticle.typedb.core.concept.ConceptManager;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.concurrent.actor.Actor;
 import com.vaticle.typedb.core.concurrent.actor.ActorExecutorGroup;
-import com.vaticle.typedb.core.logic.resolvable.Resolvable;
+import com.vaticle.typedb.core.logic.LogicManager;
+import com.vaticle.typedb.core.logic.resolvable.Concludable;
 import com.vaticle.typedb.core.logic.resolvable.ResolvableConjunction;
+import com.vaticle.typedb.core.logic.resolvable.Retrievable;
 import com.vaticle.typedb.core.reasoner.v4.nodes.ConjunctionNode;
 import com.vaticle.typedb.core.reasoner.v4.nodes.ResolvableNode;
+import com.vaticle.typedb.core.traversal.TraversalEngine;
 
 import java.util.Map;
 import java.util.Set;
@@ -18,14 +22,22 @@ import java.util.function.Function;
 public class NodeRegistry {
     private final ActorExecutorGroup executorService;
     private final Map<ResolvableConjunction, ConjunctionSubRegistry> conjunctionSubRegistries;
-    private final Map<Resolvable<?>, ResolvableSubRegistry> resolvableSubRegistries;
+    private final Map<Retrievable, RetrievableSubRegistry> retrievableSubRegistries;
+    private final Map<Concludable, ConcludableSubRegistry> concludableSubRegistries;
     private final Set<ActorNode<?>> roots;
+    private final LogicManager logicManager;
     private AtomicBoolean terminated;
+    private final TraversalEngine traversalEngine;
+    private final ConceptManager conceptManager;
 
-    public NodeRegistry(ActorExecutorGroup executorService) {
+    public NodeRegistry(ActorExecutorGroup executorService, ConceptManager conceptManager, LogicManager logicManager, TraversalEngine traversalEngine) {
         this.executorService = executorService;
+        this.traversalEngine = traversalEngine;
+        this.conceptManager = conceptManager;
+        this.logicManager = logicManager;
         this.conjunctionSubRegistries = new ConcurrentHashMap<>();
-        this.resolvableSubRegistries = new ConcurrentHashMap<>();
+        this.retrievableSubRegistries = new ConcurrentHashMap<>();
+        this.concludableSubRegistries = new ConcurrentHashMap<>();
         this.roots = new ConcurrentSet<>();
         this.terminated = new AtomicBoolean(false);
     }
@@ -34,8 +46,12 @@ public class NodeRegistry {
         return conjunctionSubRegistries.computeIfAbsent(conjunction, conj -> new ConjunctionSubRegistry(conj));
     }
 
-    public ResolvableSubRegistry resolvableSubRegistry(Resolvable<?> resolvable) {
-        return resolvableSubRegistries.computeIfAbsent(resolvable, res -> new ResolvableSubRegistry(res));
+    public RetrievableSubRegistry retrievableSubRegistry(Retrievable retrievable) {
+        return retrievableSubRegistries.computeIfAbsent(retrievable, res -> new RetrievableSubRegistry(res));
+    }
+
+    public ConcludableSubRegistry concludableSubRegistry(Concludable concludable) {
+        return concludableSubRegistries.computeIfAbsent(concludable, con -> new ConcludableSubRegistry(con));
     }
 
     public <NODE extends ActorNode<NODE>> NODE createRoot(Function<Actor.Driver<NODE>, NODE> actorFn) {
@@ -52,8 +68,20 @@ public class NodeRegistry {
         if (terminated.compareAndSet(false, true)) {
             roots.forEach(root -> root.terminate(e));
             conjunctionSubRegistries.values().forEach(subReg -> subReg.terminateAll(e));
-            resolvableSubRegistries.values().forEach(subReg -> subReg.terminateAll(e));
+            retrievableSubRegistries.values().forEach(subReg -> subReg.terminateAll(e));
         }
+    }
+
+    public ConceptManager conceptManager() {
+        return conceptManager;
+    }
+
+    public LogicManager logicManager() {
+        return logicManager;
+    }
+
+    public TraversalEngine traversalEngine() {
+        return traversalEngine;
     }
 
     public abstract class SubRegistry<KEY, NODE extends ActorNode<NODE>> {
@@ -76,15 +104,28 @@ public class NodeRegistry {
         }
     }
 
-    public class ResolvableSubRegistry extends SubRegistry<Resolvable<?>, ResolvableNode> {
+    public class RetrievableSubRegistry extends SubRegistry<Retrievable, ResolvableNode.RetrievableNode> {
 
-        private ResolvableSubRegistry(Resolvable<?> resolvable) {
-            super(resolvable);
+        private RetrievableSubRegistry(Retrievable retrievable) {
+            super(retrievable);
         }
 
         @Override
-        protected Actor.Driver<ResolvableNode> createNode(ConceptMap bounds) {
-            return createDriver(driver -> new ResolvableNode(key, bounds, NodeRegistry.this, driver));
+        protected Actor.Driver<ResolvableNode.RetrievableNode> createNode(ConceptMap bounds) {
+            return createDriver(driver -> new ResolvableNode.RetrievableNode(key, bounds, NodeRegistry.this, driver));
+        }
+    }
+
+
+    public class ConcludableSubRegistry extends SubRegistry<Concludable, ResolvableNode.ConcludableNode> {
+
+        private ConcludableSubRegistry(Concludable concludable) {
+            super(concludable);
+        }
+
+        @Override
+        protected Actor.Driver<ResolvableNode.ConcludableNode> createNode(ConceptMap bounds) {
+            return createDriver(driver -> new ResolvableNode.ConcludableNode(key, bounds, NodeRegistry.this, driver));
         }
     }
 

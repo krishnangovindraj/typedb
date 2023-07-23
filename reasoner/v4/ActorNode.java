@@ -21,6 +21,10 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>>  extends Actor<NOD
 
     public abstract void receive(ActorNode<?> sender, Message message);
 
+    public void send(ActorNode<?> recipient, Message message) {
+        recipient.driver().execute(node -> node.receive(this, message));
+    }
+
     @Override
     protected void exception(Throwable e) {
         nodeRegistry.terminate(e);
