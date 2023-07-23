@@ -1,5 +1,6 @@
 package com.vaticle.typedb.core.reasoner.v4;
 
+import com.vaticle.typedb.common.collection.ConcurrentSet;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.concurrent.actor.Actor;
 import com.vaticle.typedb.core.concurrent.actor.ActorExecutorGroup;
@@ -9,18 +10,24 @@ import com.vaticle.typedb.core.reasoner.v4.nodes.ConjunctionNode;
 import com.vaticle.typedb.core.reasoner.v4.nodes.ResolvableNode;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 public class NodeRegistry {
     private final ActorExecutorGroup executorService;
     private final Map<ResolvableConjunction, ConjunctionSubRegistry> conjunctionSubRegistries;
     private final Map<Resolvable<?>, ResolvableSubRegistry> resolvableSubRegistries;
+    private final Set<ActorNode<?>> roots;
+    private AtomicBoolean terminated;
 
-    NodeRegistry(ActorExecutorGroup executorService) {
+    public NodeRegistry(ActorExecutorGroup executorService) {
         this.executorService = executorService;
         this.conjunctionSubRegistries = new ConcurrentHashMap<>();
         this.resolvableSubRegistries = new ConcurrentHashMap<>();
+        this.roots = new ConcurrentSet<>();
+        this.terminated = new AtomicBoolean(false);
     }
 
     public ConjunctionSubRegistry conjunctionSubRegistry(ResolvableConjunction conjunction) {
@@ -31,8 +38,22 @@ public class NodeRegistry {
         return resolvableSubRegistries.computeIfAbsent(resolvable, res -> new ResolvableSubRegistry(res));
     }
 
-    public <NODE extends ActorNode<NODE>> Actor.Driver<NODE> createDriver(Function<Actor.Driver<NODE>, NODE> actorFn) {
+    public <NODE extends ActorNode<NODE>> NODE createRoot(Function<Actor.Driver<NODE>, NODE> actorFn) {
+        Actor.Driver<NODE> driver = createDriver(actorFn);
+        this.roots.add(driver.actor());
+        return driver.actor();
+    }
+
+    private <NODE extends ActorNode<NODE>> Actor.Driver<NODE> createDriver(Function<Actor.Driver<NODE>, NODE> actorFn) {
         return Actor.driver(actorFn, executorService);
+    }
+
+    public void terminate(Throwable e) {
+        if (terminated.compareAndSet(false, true)) {
+            roots.forEach(root -> root.terminate(e));
+            conjunctionSubRegistries.values().forEach(subReg -> subReg.terminateAll(e));
+            resolvableSubRegistries.values().forEach(subReg -> subReg.terminateAll(e));
+        }
     }
 
     public abstract class SubRegistry<KEY, NODE extends ActorNode<NODE>> {
@@ -49,6 +70,10 @@ public class NodeRegistry {
         }
 
         protected abstract Actor.Driver<NODE> createNode(ConceptMap bounds);
+
+        public void terminateAll(Throwable e) {
+            subRegistry.values().forEach(node -> node.terminate(e));
+        }
     }
 
     public class ResolvableSubRegistry extends SubRegistry<Resolvable<?>, ResolvableNode> {
