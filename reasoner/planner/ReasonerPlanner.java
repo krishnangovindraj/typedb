@@ -7,6 +7,7 @@
 package com.vaticle.typedb.core.reasoner.planner;
 
 import com.vaticle.typedb.core.common.cache.CommonCache;
+import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.concept.ConceptManager;
 import com.vaticle.typedb.core.logic.LogicManager;
 import com.vaticle.typedb.core.logic.Rule;
@@ -33,6 +34,7 @@ import java.util.Set;
 
 import static com.vaticle.typedb.common.collection.Collections.intersection;
 import static com.vaticle.typedb.common.collection.Collections.set;
+import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_CAST;
 import static com.vaticle.typedb.core.common.iterator.Iterators.iterate;
 import static com.vaticle.typedb.core.common.iterator.Iterators.link;
 
@@ -54,6 +56,10 @@ public abstract class ReasonerPlanner {
         this.perfCounters = perfCounters;
         this.explain = explain;
         this.planCache = new CommonCache<>();
+    }
+
+    public RecursivePlanner asRecursivePlanner() {
+        throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), ReasonerPlanner.class);
     }
 
     public static ReasonerPlanner create(TraversalEngine traversalEng, ConceptManager conceptMgr, LogicManager logicMgr, ReasonerPerfCounters perfCounters, boolean explain) {

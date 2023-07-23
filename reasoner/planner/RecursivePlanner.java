@@ -7,6 +7,7 @@
 package com.vaticle.typedb.core.reasoner.planner;
 
 import com.vaticle.typedb.common.collection.Collections;
+import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.concept.ConceptManager;
 import com.vaticle.typedb.core.logic.LogicManager;
 import com.vaticle.typedb.core.logic.resolvable.Resolvable;
@@ -41,6 +42,13 @@ public class RecursivePlanner extends ReasonerPlanner {
 
     public static RecursivePlanner create(TraversalEngine traversalEng, ConceptManager conceptMgr, LogicManager logicMgr, ReasonerPerfCounters perfCounters, boolean explain) {
         return new RecursivePlanner(traversalEng, conceptMgr, logicMgr, perfCounters, explain);
+    }
+
+    public RecursivePlanner asRecursivePlanner() {
+        return this;
+    }
+    public ConjunctionGraph conjunctionGraph() {
+        return conjunctionGraph;
     }
 
     @Override
