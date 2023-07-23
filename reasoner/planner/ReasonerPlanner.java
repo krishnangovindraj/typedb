@@ -183,12 +183,12 @@ public abstract class ReasonerPlanner {
         return calls;
     }
 
-    static class CallMode {
-        final ResolvableConjunction conjunction;
-        final Set<Variable> mode;
+    public static class CallMode {
+        public final ResolvableConjunction conjunction;
+        public final Set<Variable> mode;
         private final int hash;
 
-        CallMode(ResolvableConjunction conjunction, Set<Variable> mode) {
+        public CallMode(ResolvableConjunction conjunction, Set<Variable> mode) {
             this.conjunction = conjunction;
             this.mode = mode;
             this.hash = Objects.hash(conjunction, mode);
