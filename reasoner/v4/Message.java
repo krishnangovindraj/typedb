@@ -7,6 +7,7 @@ import java.util.Optional;
 
 public class Message {
     private final MessageType msgType;
+    private final int index;
     private final ConceptMap answer;
 
     public enum MessageType {
@@ -16,22 +17,26 @@ public class Message {
     }
 
 
-    private Message(MessageType msgType, @Nullable ConceptMap answer) {
+    private Message(MessageType msgType, int index, @Nullable ConceptMap answer) {
         assert msgType != MessageType.ANSWER || answer != null;
         this.msgType = msgType;
         this.answer = answer;
+        this.index = index;
     }
 
-    public static Message answer(ConceptMap conceptMap) {
-        return new Message(MessageType.ANSWER, conceptMap);
+    public static Message answer(int index, ConceptMap conceptMap) {
+        return new Message(MessageType.ANSWER, index, conceptMap);
     }
 
-    public static Message done() {
-        return new Message(MessageType.DONE, null);
+    public static Message done(int index) {
+        return new Message(MessageType.DONE, index, null);
     }
 
     public MessageType type() {
         return msgType;
+    }
+    public int index() {
+        return index;
     }
 
     public Optional<ConceptMap> answer() {

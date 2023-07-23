@@ -21,6 +21,7 @@ import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.parameters.Options;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.concurrent.producer.Producer;
+import com.vaticle.typedb.core.logic.resolvable.Concludable;
 import com.vaticle.typedb.core.logic.resolvable.ResolvableConjunction;
 import com.vaticle.typedb.core.logic.resolvable.Retrievable;
 import com.vaticle.typedb.core.reasoner.ExplainablesManager;
@@ -126,6 +127,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
 
     @Override
     public synchronized void exception(Throwable e) {
+        LOG.error("ReasonerProducer exception called with exception: ", e);
         if (state != FINISHED && state != EXCEPTION) {
             exception = e;
             if (queue == null) {
@@ -196,8 +198,19 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
             }
 
             @Override
-            public void readAnswerAt(ActorNode<?> sender, int index) {
+            public void readAnswerAt(ActorNode<?> reader, int index) {
                 subRegistry.getNode(new ConceptMap()).driver().execute(actor -> actor.readAnswerAt(this, index));
+//                // Test retrievable
+//                {
+//                    Retrievable retrievable = nodeRegistry.logicManager().compile(conjunction).stream().findFirst().get().asRetrievable();
+//                    nodeRegistry.retrievableSubRegistry(retrievable).getNode(new ConceptMap()).driver().execute(actor -> actor.readAnswerAt(this, index));
+//                }
+
+//                // Test concludable
+//                {
+//                    Concludable concludable = nodeRegistry.logicManager().compile(conjunction).stream().findFirst().get().asConcludable();
+//                    nodeRegistry.concludableSubRegistry(concludable).getNode(new ConceptMap()).driver().execute(actor -> actor.readAnswerAt(this, index));
+//                }
             }
 
             @Override

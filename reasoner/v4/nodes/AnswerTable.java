@@ -1,8 +1,10 @@
-package com.vaticle.typedb.core.reasoner.v4;
+package com.vaticle.typedb.core.reasoner.v4.nodes;
 
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.common.iterator.Iterators;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
+import com.vaticle.typedb.core.reasoner.v4.ActorNode;
+import com.vaticle.typedb.core.reasoner.v4.Message;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -12,13 +14,18 @@ import java.util.Set;
 
 public class AnswerTable {
 
-    private List<Message> answers;
-    private boolean complete;
+    private final List<Message> answers;
     private Set<ActorNode<?>> subscribers;
+    private boolean complete;
 
     public AnswerTable() {
         this.answers = new ArrayList<>();
+        this.subscribers = new HashSet<>();
         this.complete = false;
+    }
+
+    public int size() {
+        return answers.size();
     }
 
     public Optional<Message> answerAt(int index) {
@@ -40,14 +47,14 @@ public class AnswerTable {
 
     public Message recordAnswer(ConceptMap answer) {
         assert !complete;
-        Message msg = Message.answer(answer);
+        Message msg = Message.answer(answers.size(), answer);
         answers.add(msg);
         return msg;
     }
 
     public Message recordDone() {
         assert !complete;
-        Message msg = Message.done();
+        Message msg = Message.done(answers.size());
         answers.add(msg);
         this.complete = true;
         return msg;
