@@ -8,9 +8,11 @@ import com.vaticle.typedb.core.reasoner.v4.Message;
 import com.vaticle.typedb.core.reasoner.v4.NodeRegistry;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.function.Supplier;
 
+import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 
 public class ConjunctionNode extends ActorNode<ConjunctionNode> {
@@ -28,6 +30,7 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
 
     @Override
     public void readAnswerAt(ActorNode<?> sender, int index) {
+        assert index <= answers.size();
         throw TypeDBException.of(UNIMPLEMENTED);
     }
 

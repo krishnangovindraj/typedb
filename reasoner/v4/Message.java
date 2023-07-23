@@ -5,23 +5,29 @@ import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import javax.annotation.Nullable;
 import java.util.Optional;
 
-public abstract class Message {
-    private final ConceptMap answer;
+public class Message {
     private final MessageType msgType;
+    private final ConceptMap answer;
 
     public enum MessageType {
         ANSWER,
         DONE,
 //        ACYCLIC_DONE ?
     }
-    private final ActorNode<?> sender;
 
 
-    public Message(ActorNode<?> sender, MessageType msgType, @Nullable ConceptMap answer) {
-        this.sender = sender;
+    private Message(MessageType msgType, @Nullable ConceptMap answer) {
         assert msgType != MessageType.ANSWER || answer != null;
         this.msgType = msgType;
         this.answer = answer;
+    }
+
+    public static Message answer(ConceptMap conceptMap) {
+        return new Message(MessageType.ANSWER, conceptMap);
+    }
+
+    public static Message done() {
+        return new Message(MessageType.DONE, null);
     }
 
     public MessageType type() {
