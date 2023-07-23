@@ -11,7 +11,7 @@ Feature: Debugging Space
   # Do not commit any changes to this file.
 
 
-  Scenario:
+  Scenario: test some stuff
 
     Given reasoning schema
     """

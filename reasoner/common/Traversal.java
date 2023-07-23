@@ -16,6 +16,7 @@ import com.vaticle.typedb.core.concurrent.producer.Producers;
 import com.vaticle.typedb.core.pattern.Conjunction;
 import com.vaticle.typedb.core.pattern.variable.Variable;
 import com.vaticle.typedb.core.reasoner.controller.ControllerRegistry;
+import com.vaticle.typedb.core.reasoner.v4.NodeRegistry;
 import com.vaticle.typedb.core.traversal.GraphTraversal;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 
@@ -28,6 +29,14 @@ import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILL
 public class Traversal {
 
     public static FunctionalIterator<ConceptMap> traversalIterator(ControllerRegistry registry,
+                                                                   Conjunction conjunction, ConceptMap bounds) {
+        return compatibleBounds(conjunction, bounds).map(c -> {
+            GraphTraversal.Thing traversal = boundTraversal(conjunction.traversal(), c);
+            return registry.traversalEngine().iterator(traversal).map(v -> registry.conceptManager().conceptMap(v));
+        }).orElse(Iterators.empty());
+    }
+
+    public static FunctionalIterator<ConceptMap> traversalIterator(NodeRegistry registry,
                                                                    Conjunction conjunction, ConceptMap bounds) {
         return compatibleBounds(conjunction, bounds).map(c -> {
             GraphTraversal.Thing traversal = boundTraversal(conjunction.traversal(), c);

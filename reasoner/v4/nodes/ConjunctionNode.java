@@ -31,6 +31,7 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
     @Override
     public void readAnswerAt(ActorNode<?> sender, int index) {
         assert index <= answers.size();
+        /// TODO
         throw TypeDBException.of(UNIMPLEMENTED);
     }
 
