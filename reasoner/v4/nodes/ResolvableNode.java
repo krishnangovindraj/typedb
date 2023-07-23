@@ -9,6 +9,7 @@ import com.vaticle.typedb.core.logic.resolvable.Resolvable;
 import com.vaticle.typedb.core.logic.resolvable.Retrievable;
 import com.vaticle.typedb.core.logic.resolvable.Unifier;
 import com.vaticle.typedb.core.reasoner.common.Traversal;
+import com.vaticle.typedb.core.reasoner.controller.ConjunctionController;
 import com.vaticle.typedb.core.reasoner.v4.ActorNode;
 import com.vaticle.typedb.core.reasoner.v4.Message;
 import com.vaticle.typedb.core.reasoner.v4.NodeRegistry;
@@ -71,7 +72,7 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
         private final AnswerTable answerTable;
         private final Set<ConceptMap> seenAnswers;
         private final NodeReader readingDelegate;
-        private Map<ConjunctionNode, Pair<ConceptMap, Unifier.Requirements.Instance>> conditionNodes; // TODO: Improve
+        private Map<ActorNode<?>, Pair<ConceptMap, Unifier.Requirements.Instance>> conditionNodes; // TODO: Improve
 
         public ConcludableNode(Concludable concludable, ConceptMap bounds,
                                NodeRegistry nodeRegistry, Driver<ConcludableNode> driver) {
@@ -88,9 +89,10 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
                 nodeRegistry.logicManager().applicableRules(resolvable).forEach((rule, unifiers) -> {
                     rule.condition().disjunction().conjunctions().forEach(conjunction -> {
                         unifiers.forEach(unifier -> unifier.unify(bounds).ifPresent(boundsAndRequirements -> {
-                            ConjunctionNode node = nodeRegistry.conjunctionSubRegistry(conjunction).getNode(boundsAndRequirements.first());
-                            conditionNodes.put(node, boundsAndRequirements);
-                            readingDelegate.addSource(node);
+                            ConjunctionController.ConjunctionStreamPlan csPlan = nodeRegistry.conjunctionStreamPlan(conjunction, boundsAndRequirements.first());
+                            ActorNode<?> conditionNode = nodeRegistry.getRegistry(csPlan).getNode(boundsAndRequirements.first());
+                            conditionNodes.put(conditionNode, boundsAndRequirements);
+                            readingDelegate.addSource(conditionNode);
                         }));
                     });
                 });

@@ -1,5 +1,6 @@
 package com.vaticle.typedb.core.reasoner.v4;
 
+import com.vaticle.typedb.common.collection.Collections;
 import com.vaticle.typedb.common.collection.ConcurrentSet;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.Iterators;
@@ -9,11 +10,13 @@ import com.vaticle.typedb.core.concurrent.actor.Actor;
 import com.vaticle.typedb.core.concurrent.actor.ActorExecutorGroup;
 import com.vaticle.typedb.core.logic.LogicManager;
 import com.vaticle.typedb.core.logic.resolvable.Concludable;
+import com.vaticle.typedb.core.logic.resolvable.Negated;
+import com.vaticle.typedb.core.logic.resolvable.Resolvable;
 import com.vaticle.typedb.core.logic.resolvable.ResolvableConjunction;
 import com.vaticle.typedb.core.logic.resolvable.Retrievable;
-import com.vaticle.typedb.core.pattern.Conjunction;
 import com.vaticle.typedb.core.pattern.variable.Variable;
 import com.vaticle.typedb.core.reasoner.controller.ConjunctionController;
+import com.vaticle.typedb.core.reasoner.controller.ConjunctionController.ConjunctionStreamPlan.CompoundStreamPlan;
 import com.vaticle.typedb.core.reasoner.planner.ReasonerPlanner;
 import com.vaticle.typedb.core.reasoner.planner.RecursivePlanner;
 import com.vaticle.typedb.core.reasoner.v4.nodes.ConjunctionNode;
@@ -21,11 +24,9 @@ import com.vaticle.typedb.core.reasoner.v4.nodes.ResolvableNode;
 import com.vaticle.typedb.core.traversal.TraversalEngine;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.Stack;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
@@ -36,9 +37,11 @@ import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNI
 // TODO: See if we can use ConjunctionStreamPlan as the only one key we need. The nodes can do safe-downcasting
 public class NodeRegistry {
     private final ActorExecutorGroup executorService;
-    private final Map<ResolvableConjunction, ConjunctionSubRegistry> conjunctionSubRegistries;
-    private final Map<Retrievable, RetrievableSubRegistry> retrievableSubRegistries;
-    private final Map<Concludable, ConcludableSubRegistry> concludableSubRegistries;
+    private final Map<CompoundStreamPlan, SubConjunctionRegistry> conjunctionSubRegistries;
+    private final Map<Retrievable, RetrievableRegistry> retrievableSubRegistries;
+    private final Map<Concludable, ConcludableRegistry> concludableSubRegistries;
+    private final Map<Concludable, ConcludableRegistry> negatedSubRegistries;
+    private final Map<ReasonerPlanner.CallMode, ConjunctionController.ConjunctionStreamPlan> csPlans;
     private final Set<ActorNode<?>> roots;
     private final LogicManager logicManager;
     private final RecursivePlanner planner;
@@ -54,47 +57,88 @@ public class NodeRegistry {
         this.conceptManager = conceptManager;
         this.logicManager = logicManager;
         this.planner = planner.asRecursivePlanner();
+        this.csPlans = new ConcurrentHashMap<>();
         this.conjunctionSubRegistries = new ConcurrentHashMap<>();
         this.retrievableSubRegistries = new ConcurrentHashMap<>();
         this.concludableSubRegistries = new ConcurrentHashMap<>();
+        this.negatedSubRegistries = new ConcurrentHashMap<>();
         this.roots = new ConcurrentSet<>();
         this.terminated = new AtomicBoolean(false);
     }
 
-    void prepare(ResolvableConjunction conjunction, ConceptMap bounds) {
-        Set<Variable> boundVars = Iterators.iterate(bounds.concepts().keySet()).map(id -> conjunction.pattern().variable(id)).toSet();
-        planner.plan(conjunction, boundVars);
-        populateRegistries(conjunction);
+    void prepare(ResolvableConjunction rootConjunction, ConceptMap bounds) {
+        Set<Variable> boundVars = Iterators.iterate(bounds.concepts().keySet()).map(id -> rootConjunction.pattern().variable(id)).toSet();
+        planner.plan(rootConjunction, boundVars);
+        cacheConjunctionStreamPlans(new ReasonerPlanner.CallMode(rootConjunction, boundVars));
+        csPlans.forEach((callMode, csPlan) -> {
+            if (csPlan.isCompoundStreamPlan()) {
+                populateConjunctionRegistries(callMode.conjunction, csPlan.asCompoundStreamPlan());
+            }
+        });
+        Iterators.iterate(csPlans.keySet()).map(callMode -> callMode.conjunction).distinct()
+                .forEachRemaining(this::populateResolvableRegistries);
     }
 
-    private void populateRegistries(ResolvableConjunction conjunction) {
-        if (!concludableSubRegistries.containsKey(conjunction)) {
-            conjunctionSubRegistries.put(conjunction, new ConjunctionSubRegistry(conjunction));
-            logicManager().compile(conjunction).forEach(resolvable -> {
+    private void cacheConjunctionStreamPlans(ReasonerPlanner.CallMode callMode) {
+        if (!csPlans.containsKey(callMode)) {
+            ReasonerPlanner.Plan plan = planner.getPlan(callMode.conjunction, callMode.mode);
+            Set<Identifier.Variable.Retrievable> modeIds = Iterators.iterate(callMode.mode).map(Variable::id)
+                    .filter(Identifier::isRetrievable).map(Identifier.Variable::asRetrievable).toSet();
+            ConjunctionController.ConjunctionStreamPlan csPlan = ConjunctionController.ConjunctionStreamPlan.create(
+                    plan.plan(), modeIds, callMode.conjunction.pattern().retrieves());
+            csPlans.put(callMode, csPlan);
+
+            Set<Variable> runningBounds = new HashSet<>(callMode.mode);
+            for (Resolvable<?> resolvable : plan.plan()) {
                 if (resolvable.isConcludable()) {
-                    concludableSubRegistries.computeIfAbsent(resolvable.asConcludable(), ConcludableSubRegistry::new);
-                    planner.conjunctionGraph().dependencies(resolvable.asConcludable()).forEach(dependencyConjunction -> {
-                        populateRegistries(dependencyConjunction);
-                    });
-                } else if (resolvable.isRetrievable()) {
-                    retrievableSubRegistries.computeIfAbsent(resolvable.asRetrievable(), RetrievableSubRegistry::new);
-                } else if (resolvable.isNegated()) {
-                    throw TypeDBException.of(UNIMPLEMENTED);
-                } else throw TypeDBException.of(ILLEGAL_STATE);
-            });
+                    Set<Variable> concludableBounds = Collections.intersection(runningBounds, resolvable.variables());
+                    planner.triggeredCalls(resolvable.asConcludable(), concludableBounds, null)
+                            .forEach(this::cacheConjunctionStreamPlans);
+                }
+                runningBounds.addAll(resolvable.variables());
+            }
         }
     }
 
-    public ConjunctionSubRegistry conjunctionSubRegistry(ResolvableConjunction conjunction) {
-        return conjunctionSubRegistries.computeIfAbsent(conjunction, conj -> new ConjunctionSubRegistry(conj));
+    private void populateConjunctionRegistries(ResolvableConjunction conjunction, CompoundStreamPlan compoundStreamPlan) {
+        conjunctionSubRegistries.put(compoundStreamPlan, new SubConjunctionRegistry(conjunction, compoundStreamPlan));
     }
 
-    public RetrievableSubRegistry retrievableSubRegistry(Retrievable retrievable) {
-        return retrievableSubRegistries.computeIfAbsent(retrievable, res -> new RetrievableSubRegistry(res));
+    private void populateResolvableRegistries(ResolvableConjunction conjunction) {
+        logicManager().compile(conjunction).forEach(resolvable -> {
+            if (resolvable.isConcludable()) {
+                concludableSubRegistries.computeIfAbsent(resolvable.asConcludable(), ConcludableRegistry::new);
+            } else if (resolvable.isRetrievable()) {
+                retrievableSubRegistries.computeIfAbsent(resolvable.asRetrievable(), RetrievableRegistry::new);
+            } else if (resolvable.isNegated()) {
+                throw TypeDBException.of(UNIMPLEMENTED);
+            } else throw TypeDBException.of(ILLEGAL_STATE);
+        });
     }
 
-    public ConcludableSubRegistry concludableSubRegistry(Concludable concludable) {
-        return concludableSubRegistries.computeIfAbsent(concludable, con -> new ConcludableSubRegistry(con));
+    public ConjunctionController.ConjunctionStreamPlan conjunctionStreamPlan(ResolvableConjunction conjunction, ConceptMap bounds) {
+        ReasonerPlanner.CallMode callMode = new ReasonerPlanner.CallMode(conjunction,
+                Iterators.iterate(bounds.concepts().keySet()).map(id -> conjunction.pattern().variable(id)).toSet());
+        return csPlans.get(callMode);
+    }
+
+    public SubConjunctionRegistry conjunctionSubRegistry(CompoundStreamPlan compoundStreamPlan) {
+        assert conjunctionSubRegistries.containsKey(compoundStreamPlan);
+        return conjunctionSubRegistries.get(compoundStreamPlan);
+    }
+
+    public RetrievableRegistry retrievableSubRegistry(Retrievable retrievable) {
+        assert retrievableSubRegistries.containsKey(retrievable);
+        return retrievableSubRegistries.get(retrievable);
+    }
+
+    public ConcludableRegistry concludableSubRegistry(Concludable concludable) {
+        assert concludableSubRegistries.containsKey(concludable);
+        return concludableSubRegistries.get(concludable);
+    }
+
+    public ConcludableRegistry negatedSubRegistry(Negated negated) {
+        throw TypeDBException.of(UNIMPLEMENTED);
     }
 
     public <NODE extends ActorNode<NODE>> NODE createRoot(Function<Actor.Driver<NODE>, NODE> actorFn) {
@@ -127,6 +171,19 @@ public class NodeRegistry {
         return traversalEngine;
     }
 
+    public SubRegistry<?, ?> resolvableSubRegistry(Resolvable<?> resolvable) {
+        if (resolvable.isConcludable()) return concludableSubRegistry(resolvable.asConcludable());
+        else if (resolvable.isRetrievable()) return retrievableSubRegistry(resolvable.asRetrievable());
+        else if (resolvable.isNegated()) return negatedSubRegistry(resolvable.asNegated());
+        else throw TypeDBException.of(ILLEGAL_STATE);
+    }
+
+    public SubRegistry<?, ?> getRegistry(ConjunctionController.ConjunctionStreamPlan csPlan) {
+        return csPlan.isCompoundStreamPlan() ?
+                conjunctionSubRegistry(csPlan.asCompoundStreamPlan()):
+                resolvableSubRegistry(csPlan.asResolvablePlan().resolvable());
+    }
+
     public abstract class SubRegistry<KEY, NODE extends ActorNode<NODE>> {
         protected final KEY key;
         private final Map<ConceptMap, NODE> subRegistry;
@@ -147,9 +204,9 @@ public class NodeRegistry {
         }
     }
 
-    public class RetrievableSubRegistry extends SubRegistry<Retrievable, ResolvableNode.RetrievableNode> {
+    public class RetrievableRegistry extends SubRegistry<Retrievable, ResolvableNode.RetrievableNode> {
 
-        private RetrievableSubRegistry(Retrievable retrievable) {
+        private RetrievableRegistry(Retrievable retrievable) {
             super(retrievable);
         }
 
@@ -160,10 +217,10 @@ public class NodeRegistry {
     }
 
 
-    public class ConcludableSubRegistry extends SubRegistry<Concludable, ResolvableNode.ConcludableNode> {
+    public class ConcludableRegistry extends SubRegistry<Concludable, ResolvableNode.ConcludableNode> {
 
 
-        private ConcludableSubRegistry(Concludable concludable) {
+        private ConcludableRegistry(Concludable concludable) {
             super(concludable);
         }
 
@@ -174,60 +231,18 @@ public class NodeRegistry {
 
     }
 
-    public class ConjunctionSubRegistry extends SubRegistry<ResolvableConjunction, ConjunctionNode> {
+    public class SubConjunctionRegistry extends SubRegistry<ConjunctionController.ConjunctionStreamPlan, ConjunctionNode> {
 
-        private final Map<Set<Identifier.Variable.Retrievable>, ConjunctionController.ConjunctionStreamPlan> conjunctionPlans;
-        private final Map<ConjunctionController.ConjunctionStreamPlan, SubConjunctionRegistry> registriesForSubConjunctions;
+        private final ResolvableConjunction conjunction;
 
-        private ConjunctionSubRegistry(ResolvableConjunction conjunction) {
-            super(conjunction);
-            this.conjunctionPlans = new ConcurrentHashMap<>();
-            this.registriesForSubConjunctions = new ConcurrentHashMap<>();
+        private SubConjunctionRegistry(ResolvableConjunction conjunction, ConjunctionController.ConjunctionStreamPlan conjunctionStreamPlan) {
+            super(conjunctionStreamPlan);
+            this.conjunction = conjunction;
         }
 
         @Override
         protected Actor.Driver<ConjunctionNode> createNode(ConceptMap bounds) {
-            // TODO: Move to pre-initialisation
-            ConjunctionController.ConjunctionStreamPlan conjunctionStreamPlan = conjunctionPlans.computeIfAbsent(bounds.concepts().keySet(), identifiers -> {
-                Set<Variable> boundVars = Iterators.iterate(identifiers).map(id -> key.pattern().variable(id)).toSet();
-                ReasonerPlanner.Plan plan = NodeRegistry.this.planner.getPlan(key, boundVars);
-                ConjunctionController.ConjunctionStreamPlan csPlan = ConjunctionController.ConjunctionStreamPlan.create(plan.plan(), identifiers, key.pattern().retrieves());
-                createSubregistries(csPlan);
-                return csPlan;
-            });
-            return registriesForSubConjunctions.get(conjunctionStreamPlan).createNode(bounds);
-        }
-
-        private void createSubregistries(ConjunctionController.ConjunctionStreamPlan rootPlan) {
-            Stack<ConjunctionController.ConjunctionStreamPlan> remainingPlans = new Stack<>();
-            rootPlan.pu
-            remainingPlans.add(rootPlan);
-            while (!remainingPlans.isEmpty()) {
-                ConjunctionController.ConjunctionStreamPlan nextPlan = remainingPlans.pop();
-                if (nextPlan.isCompoundStreamPlan()) {
-                    registriesForSubConjunctions.
-                    for (int i=0; i< nextPlan.asCompoundStreamPlan().size(); i++) {
-
-                    }
-                }
-            }
-        }
-
-
-
-        public class SubConjunctionRegistry extends SubRegistry<ConjunctionController.ConjunctionStreamPlan, ConjunctionNode> {
-
-            private final ResolvableConjunction conjunction;
-
-            private SubConjunctionRegistry(ResolvableConjunction conjunction, ConjunctionController.ConjunctionStreamPlan conjunctionStreamPlan) {
-                super(conjunctionStreamPlan);
-                this.conjunction = conjunction;
-            }
-
-            @Override
-            protected Actor.Driver<ConjunctionNode> createNode(ConceptMap bounds) {
-                return createDriver(driver -> new ConjunctionNode(conjunction, bounds, key, NodeRegistry.this, driver));
-            }
+            return createDriver(driver -> new ConjunctionNode(conjunction, bounds, key, NodeRegistry.this, driver));
         }
     }
 }

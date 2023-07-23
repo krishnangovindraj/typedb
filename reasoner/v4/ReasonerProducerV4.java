@@ -25,10 +25,12 @@ import com.vaticle.typedb.core.logic.resolvable.Concludable;
 import com.vaticle.typedb.core.logic.resolvable.ResolvableConjunction;
 import com.vaticle.typedb.core.logic.resolvable.Retrievable;
 import com.vaticle.typedb.core.reasoner.ExplainablesManager;
+import com.vaticle.typedb.core.reasoner.controller.ConjunctionController;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.Collections;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -54,6 +56,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
     private Throwable exception;
     Queue<ANSWER> queue;
     State state;
+    protected ROOTNODE rootNode; // TODO: Make final, init in constructor, change return type of initialiseRoot
 
     enum State {
         INIT,
@@ -95,10 +98,13 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
     private void initialise() {
         assert state == INIT;
         state = INITIALISING;
-        createRootNode();
+        prepare();
+        rootNode = createRootNode();
         state = READY;
         pull();
     }
+
+    protected abstract void prepare();
 
     abstract ROOTNODE createRootNode();
 
@@ -157,14 +163,17 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
     public static class Basic extends ReasonerProducerV4<Basic.RootNode, ConceptMap> {
 
         private final ResolvableConjunction conjunction;
-        private RootNode rootNode; // TODO: Make final, init in constructor, change return type of initialiseRoot
         private AtomicInteger answersReceived;
 
         public Basic(ResolvableConjunction conjunction, Options.Query options, NodeRegistry nodeRegistry, ExplainablesManager explainablesManager) {
             super(options, nodeRegistry, explainablesManager);
             this.conjunction = conjunction;
-            this.rootNode = createRootNode();
             this.answersReceived = new AtomicInteger(0);
+        }
+
+        @Override
+        protected void prepare() {
+            nodeRegistry.prepare(conjunction, new ConceptMap());
         }
 
         @Override
@@ -184,11 +193,12 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
 
         class RootNode extends ActorNode<RootNode> {
 
-            private final NodeRegistry.ConjunctionSubRegistry subRegistry;
+            private final NodeRegistry.SubRegistry<?,?> subRegistry;
 
             protected RootNode(NodeRegistry nodeRegistry, Driver<RootNode> driver) {
                 super(nodeRegistry, driver, () -> "RootNode: " + conjunction.pattern());
-                this.subRegistry = nodeRegistry.conjunctionSubRegistry(conjunction);
+                ConjunctionController.ConjunctionStreamPlan csPlan = nodeRegistry.conjunctionStreamPlan(conjunction, new ConceptMap());
+                subRegistry = nodeRegistry.getRegistry(csPlan);
             }
 
             @Override
