@@ -20,7 +20,6 @@ package com.vaticle.typedb.core.reasoner.v4;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.parameters.Options;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
-import com.vaticle.typedb.core.concurrent.actor.Actor;
 import com.vaticle.typedb.core.concurrent.producer.Producer;
 import com.vaticle.typedb.core.logic.resolvable.ResolvableConjunction;
 import com.vaticle.typedb.core.reasoner.ExplainablesManager;
@@ -205,8 +204,10 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
                 switch (message.type()) {
                     case ANSWER:
                         Basic.this.receiveAnswer(message.answer().get());
+                        break;
                     case DONE:
                         Basic.this.finish();
+                        break;
                     default:
                         throw TypeDBException.of(ILLEGAL_STATE);
                 }
