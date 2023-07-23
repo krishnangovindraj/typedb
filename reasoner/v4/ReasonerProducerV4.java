@@ -19,17 +19,9 @@ package com.vaticle.typedb.core.reasoner.v4;
 
 import com.vaticle.typedb.core.common.parameters.Options;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
-import com.vaticle.typedb.core.concurrent.actor.Actor;
 import com.vaticle.typedb.core.concurrent.producer.Producer;
-import com.vaticle.typedb.core.logic.resolvable.Concludable;
-import com.vaticle.typedb.core.logic.resolvable.ResolvableConjunction;
-import com.vaticle.typedb.core.logic.resolvable.ResolvableDisjunction;
 import com.vaticle.typedb.core.reasoner.ExplainablesManager;
-import com.vaticle.typedb.core.reasoner.ReasonerConsumer;
-import com.vaticle.typedb.core.reasoner.answer.Explanation;
 import com.vaticle.typedb.core.reasoner.controller.ControllerRegistry;
-import com.vaticle.typedb.core.reasoner.processor.AbstractProcessor;
-import com.vaticle.typedb.core.traversal.common.Modifiers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,7 +29,6 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
 import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducerV4.State.EXCEPTION;
 import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducerV4.State.FINISHED;
 import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducerV4.State.INIT;
@@ -51,7 +42,7 @@ public abstract class ReasonerProducerV4<ANSWER> implements Producer<ANSWER>, Re
 
     private static final Logger LOG = LoggerFactory.getLogger(ReasonerProducerV4.class);
 
-    private final ReasonerCoordinator reasonerCoordinator;
+    private final NodeRegistry nodeRegistry;
     private final ExplainablesManager explainablesManager;
     final AtomicInteger requiredAnswers;
     final Options.Query options;
@@ -69,9 +60,9 @@ public abstract class ReasonerProducerV4<ANSWER> implements Producer<ANSWER>, Re
     }
 
     // TODO: this class should not be a Producer, it implements a different async processing mechanism
-    private ReasonerProducerV4(Options.Query options, ReasonerCoordinator reasonerCoordinator, ExplainablesManager explainablesManager) {
+    private ReasonerProducerV4(Options.Query options, NodeRegistry nodeRegistry, ExplainablesManager explainablesManager) {
         this.options = options;
-        this.reasonerCoordinator = reasonerCoordinator;
+        this.nodeRegistry = nodeRegistry;
         this.explainablesManager = explainablesManager;
         this.queue = null;
         this.requiredAnswers = new AtomicInteger();
@@ -79,7 +70,7 @@ public abstract class ReasonerProducerV4<ANSWER> implements Producer<ANSWER>, Re
     }
 
     ControllerRegistry ReasonerCoordinator() {
-        return reasonerCoordinator;
+        return nodeRegistry;
     }
 
     @Override
@@ -153,16 +144,10 @@ public abstract class ReasonerProducerV4<ANSWER> implements Producer<ANSWER>, Re
 
     }
 
-
-    @Override
-    public void setRootProcessor(Actor.Driver<? extends AbstractProcessor<?, ConceptMap, ?, ?>> rootProcessor) {
-        throw new RuntimeException(ILLEGAL_STATE.message());
-    }
-
     public static class Basic extends ReasonerProducerV4<ConceptMap> {
 
-        Basic(Options.Query options, ReasonerCoordinator reasonerCoordinator, ExplainablesManager explainablesManager) {
-            super(options, reasonerCoordinator, explainablesManager);
+        Basic(Options.Query options, NodeRegistry nodeRegistry, ExplainablesManager explainablesManager) {
+            super(options, nodeRegistry, explainablesManager);
         }
 
         @Override
