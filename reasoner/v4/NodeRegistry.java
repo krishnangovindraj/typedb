@@ -84,7 +84,7 @@ public class NodeRegistry {
             ReasonerPlanner.Plan plan = planner.getPlan(callMode.conjunction, callMode.mode);
             Set<Identifier.Variable.Retrievable> modeIds = Iterators.iterate(callMode.mode).map(Variable::id)
                     .filter(Identifier::isRetrievable).map(Identifier.Variable::asRetrievable).toSet();
-            ConjunctionController.ConjunctionStreamPlan csPlan = ConjunctionController.ConjunctionStreamPlan.create(
+            ConjunctionController.ConjunctionStreamPlan csPlan = ConjunctionController.ConjunctionStreamPlan.createUnflattened(
                     plan.plan(), modeIds, callMode.conjunction.pattern().retrieves());
             csPlans.put(callMode, csPlan);
 
@@ -231,11 +231,11 @@ public class NodeRegistry {
 
     }
 
-    public class SubConjunctionRegistry extends SubRegistry<ConjunctionController.ConjunctionStreamPlan, ConjunctionNode> {
+    public class SubConjunctionRegistry extends SubRegistry<ConjunctionController.ConjunctionStreamPlan.CompoundStreamPlan, ConjunctionNode> {
 
         private final ResolvableConjunction conjunction;
 
-        private SubConjunctionRegistry(ResolvableConjunction conjunction, ConjunctionController.ConjunctionStreamPlan conjunctionStreamPlan) {
+        private SubConjunctionRegistry(ResolvableConjunction conjunction, ConjunctionController.ConjunctionStreamPlan.CompoundStreamPlan conjunctionStreamPlan) {
             super(conjunctionStreamPlan);
             this.conjunction = conjunction;
         }

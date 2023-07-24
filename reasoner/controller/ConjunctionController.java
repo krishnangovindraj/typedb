@@ -292,6 +292,7 @@ public abstract class ConjunctionController<
                 return extension.concepts().isEmpty() ? stream : stream.map(conceptMap -> merge(conceptMap, extension));
             }
 
+
             private ConceptMap filterWithExplainables(ConceptMap packet, Set<Variable.Retrievable> filter) {
                 return context().explainEnabled() ? packet : packet.filter(filter);
             }
@@ -368,6 +369,11 @@ public abstract class ConjunctionController<
             this.identifierVariables = identifierVariables;
             this.extensionVariables = extensionVariables;
             this.outputVariables = outputVariables;
+        }
+
+        public static ConjunctionStreamPlan createUnflattened(List<Resolvable<?>> resolvableOrder, Set<Variable.Retrievable> inputVariables, Set<Variable.Retrievable> outputVariables) {
+            Builder builder = new Builder(resolvableOrder, inputVariables, outputVariables);
+            return builder.build();
         }
 
         public static ConjunctionStreamPlan create(List<Resolvable<?>> resolvableOrder, Set<Variable.Retrievable> inputVariables, Set<Variable.Retrievable> outputVariables) {
