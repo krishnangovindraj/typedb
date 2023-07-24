@@ -20,7 +20,6 @@ import java.util.Map;
 import java.util.Set;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 
 public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE extends ResolvableNode<RESOLVABLE, NODE>>
         extends ActorNode<NODE> {
@@ -48,10 +47,10 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
         }
 
         @Override
-        public void readAnswerAt(ActorNode<?> reader, int index) {
+        public void readAnswerAt(ActorNode.Port reader, int index) {
             answerTable.answerAt(index).ifPresentOrElse(
-                    answer -> send(reader, answer),
-                    () -> send(reader, pullTraversalSynchronous())
+                    answer -> send(reader.owner(), reader, answer),
+                    () -> send(reader.owner(), reader, pullTraversalSynchronous())
             );
         }
 
@@ -62,7 +61,7 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
         }
 
         @Override
-        public void receive(ActorNode<?> sender, Message message) {
+        public void receive(ActorNode.Port onPort, Message message) {
             throw TypeDBException.of(ILLEGAL_STATE);
         }
     }
@@ -71,28 +70,25 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
         // TODO: See if I can get away without storing answers
         private final AnswerTable answerTable;
         private final Set<ConceptMap> seenAnswers;
-        private final NodeReader readingDelegate;
-        private Map<ActorNode<?>, Pair<ConceptMap, Unifier.Requirements.Instance>> conditionNodes; // TODO: Improve
+        private Map<Port, Pair<ConceptMap, Unifier.Requirements.Instance>> conditionNodePorts; // TODO: Improve
 
         public ConcludableNode(Concludable concludable, ConceptMap bounds,
                                NodeRegistry nodeRegistry, Driver<ConcludableNode> driver) {
             super(concludable, bounds, nodeRegistry, driver);
             this.answerTable = new AnswerTable();
             this.seenAnswers = new HashSet<>();
-            this.readingDelegate = new NodeReader(this);
-            this.conditionNodes = null;
+            this.conditionNodePorts = null;
         }
 
         private void ensureInitialised() {
-            if (conditionNodes == null) {
-                this.conditionNodes = new HashMap<>();
+            if (conditionNodePorts == null) {
+                this.conditionNodePorts = new HashMap<>();
                 nodeRegistry.logicManager().applicableRules(resolvable).forEach((rule, unifiers) -> {
                     rule.condition().disjunction().conjunctions().forEach(conjunction -> {
                         unifiers.forEach(unifier -> unifier.unify(bounds).ifPresent(boundsAndRequirements -> {
                             ConjunctionController.ConjunctionStreamPlan csPlan = nodeRegistry.conjunctionStreamPlan(conjunction, boundsAndRequirements.first());
                             ActorNode<?> conditionNode = nodeRegistry.getRegistry(csPlan).getNode(boundsAndRequirements.first());
-                            conditionNodes.put(conditionNode, boundsAndRequirements);
-                            readingDelegate.addSource(conditionNode);
+                            conditionNodePorts.put(createPort(conditionNode), boundsAndRequirements);
                         }));
                     });
                 });
@@ -100,43 +96,42 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
         }
 
         @Override
-        public void readAnswerAt(ActorNode<?> reader, int index) {
+        public void readAnswerAt(ActorNode.Port reader, int index) {
             ensureInitialised();
             // TODO: Here, we pull on everything, and we have no notion of cyclic termination
             answerTable.answerAt(index).ifPresentOrElse(
-                    answer -> send(reader, answer),
+                    answer -> send(reader.owner(), reader, answer),
                     () -> propagatePull(reader, index)
             );
         }
 
-        private void propagatePull(ActorNode<?> reader, int index) {
+        private void propagatePull(ActorNode.Port reader, int index) {
             answerTable.registerSubscriber(reader, index);
 
             // KGFLAG: Strategy
-            conditionNodes.keySet().forEach(source -> {
-                if (readingDelegate.status(source) == NodeReader.Status.READY) {
-                    readingDelegate.readNext(source);
+            conditionNodePorts.keySet().forEach(port -> {
+                if (port.state() == ActorNode.State.READY) {
+                    port.readNext();
                 }
             });
         }
 
         @Override
-        public void receive(ActorNode<?> sender, Message received) {
-            readingDelegate.recordReceive(sender, received);
+        public void receive(ActorNode.Port onPort, Message received) {
             switch (received.type()) {
                 case ANSWER: {
-                    FunctionalIterator<ActorNode<?>> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+                    FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
                     Message toSend = answerTable.recordAnswer(received.answer().get());
-                    subscribers.forEachRemaining(subscriber -> send(subscriber, toSend));
+                    subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
 
-                    readingDelegate.readNext(sender); // KGFLAG: Strategy
+                    onPort.readNext(); // KGFLAG: Strategy
                     break;
                 }
                 case DONE: {
-                    if (readingDelegate.allDone()) {
-                        FunctionalIterator<ActorNode<?>> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+                    if (allPortsDone()) {
+                        FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
                         Message toSend = answerTable.recordDone();
-                        subscribers.forEachRemaining(subscriber -> send(subscriber, toSend));
+                        subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
                     }
                     break;
                 }

@@ -16,13 +16,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 
 public class ConjunctionNode extends ActorNode<ConjunctionNode> {
 
@@ -31,9 +29,8 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
     private final ConceptMap bounds;
     private final CompoundStreamPlan compoundStreamPlan;
     private final AnswerTable answerTable;
-    private final NodeReader readingDelegate;
-    private ActorNode<?> leftChild;
-    private Map<ActorNode<?>, Set<ConceptMap>> rightChildExtensions;
+    private Port leftChildPort;
+    private Map<Port, ConceptMap> rightPortExtensions;
 
 
     public ConjunctionNode(ResolvableConjunction conjunction, ConceptMap bounds, CompoundStreamPlan compoundStreamPlan, NodeRegistry nodeRegistry, Driver<ConjunctionNode> driver) {
@@ -42,57 +39,49 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
         this.bounds = bounds;
         this.compoundStreamPlan = compoundStreamPlan;
         this.answerTable = new AnswerTable();
-        this.readingDelegate = new NodeReader(this);
     }
 
     private void ensureInitialised() {
-        if (this.leftChild == null) {
-            this.leftChild = nodeRegistry.getRegistry(leftPlan()).getNode(bounds);
-            readingDelegate.addSource(this.leftChild);
-            this.rightChildExtensions = new HashMap<>();
+        if (this.leftChildPort == null) {
+            this.leftChildPort = createPort(nodeRegistry.getRegistry(leftPlan()).getNode(bounds));
+            this.rightPortExtensions = new HashMap<>();
         }
     }
 
     @Override
-    public void readAnswerAt(ActorNode<?> reader, int index) {
+    public void readAnswerAt(ActorNode.Port reader, int index) {
         ensureInitialised();
         // TODO: Here, we pull on everything, and we have no notion of cyclic termination
         answerTable.answerAt(index).ifPresentOrElse(
-                answer -> send(reader, answer),
+                answer -> send(reader.owner(), reader, answer),
                 () -> propagatePull(reader, index)
         );
     }
 
-    private void propagatePull(ActorNode<?> reader, int index) {
+    private void propagatePull(ActorNode.Port reader, int index) {
         answerTable.registerSubscriber(reader, index);
-
-        // KGFLAG: Strategy
-        if (readingDelegate.status(leftChild) == NodeReader.Status.READY) {
-            readingDelegate.readNext(leftChild);
-        }
-        rightChildExtensions.keySet().forEach(source -> {
-            if (readingDelegate.status(source) == NodeReader.Status.READY) {
-                readingDelegate.readNext(source);
+        allPorts().forEachRemaining(port -> {
+            if (port.state() == ActorNode.State.READY) {
+                port.readNext();
             }
         });
     }
 
     @Override
-    public void receive(ActorNode<?> sender, Message received) {
+    public void receive(ActorNode.Port onPort, Message received) {
         LOG.info("Received {}@{} from {}",
                 received.answer().map(a -> a.toString()).orElse(received.type().toString()),
-                received.index(), sender.debugName().get() );
-        readingDelegate.recordReceive(sender, received);
+                received.index(), onPort.owner().debugName().get() );
         switch (received.type()) {
             case ANSWER: {
-                if (sender == leftChild) receiveLeft(sender, received.answer().get());
-                else receiveRight(sender, received.answer().get());
+                if (onPort == leftChildPort) receiveLeft(onPort, received.answer().get());
+                else receiveRight(onPort, received.answer().get());
             }
             case DONE: {
-                if (readingDelegate.allDone()) {
-                    FunctionalIterator<ActorNode<?>> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+                if (allPortsDone()) {
+                    FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
                     Message toSend = answerTable.recordDone();
-                    subscribers.forEachRemaining(subscriber -> send(subscriber, toSend));
+                    subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
                 }
                 break;
             }
@@ -101,33 +90,26 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
         }
     }
 
-    private void receiveLeft(ActorNode<?> sender, ConceptMap answer) {
-        assert sender == leftChild;
+    private void receiveLeft(ActorNode.Port onPort, ConceptMap answer) {
+        assert onPort == leftChildPort;
         Set<Identifier.Variable.Retrievable> extensionVars = Collections.intersection(answer.concepts().keySet(), compoundStreamPlan.outputs());
-        ActorNode<?> newRightChild = nodeRegistry.getRegistry(rightPlan()).getNode(answer.filter(rightPlan().identifiers()));
-        if (!rightChildExtensions.containsKey(newRightChild)) {
-            readingDelegate.addSource(newRightChild);
-            readingDelegate.readNext(sender); // KGFLAG: Strategy
-        } else {
-            FunctionalIterator<ActorNode<?>> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-            TODO: Figure out how to merge left answers with existing right answers
-                    Maybe create multiple readers for a child?
-        }
-        rightChildExtensions.get(newRightChild).add(answer.filter(extensionVars));
-        if (readingDelegate.status(newRightChild) != NodeReader.Status.PULLING) readingDelegate.readNext(newRightChild);
+        ActorNode<?> newRightChildNode = nodeRegistry.getRegistry(rightPlan()).getNode(answer.filter(rightPlan().identifiers()));
+        Port newRightChildPort = createPort(newRightChildNode);
+        newRightChildPort.readNext(); // KGFLAG: Strategy
+        rightPortExtensions.put(newRightChildPort, answer.filter(extensionVars));
+
+        onPort.readNext(); // readL
     }
 
-    public void receiveRight(ActorNode<?> sender, ConceptMap answer) {
-        FunctionalIterator<ActorNode<?>> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+    public void receiveRight(ActorNode.Port onPort, ConceptMap answer) {
+        FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
 
         int firstAnswerIndex = answerTable.size();
-        rightChildExtensions.get(sender).forEach(extension -> {
-            ConceptMap extendedAnswer = merge(extension, answer);
-            answerTable.recordAnswer(extendedAnswer);
-        });
-        Message toSend = answerTable.answerAt(firstAnswerIndex).get();
-        subscribers.forEachRemaining(subscriber -> send(subscriber, toSend));
-        readingDelegate.readNext(sender); // KGFLAG: Strategy
+
+        ConceptMap extendedAnswer = merge(rightPortExtensions.get(onPort), answer);
+        Message toSend = answerTable.recordAnswer(extendedAnswer);
+        subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+        onPort.readNext(); // KGFLAG: Strategy
     }
 
     private ConceptMap merge(ConceptMap into, ConceptMap from) {

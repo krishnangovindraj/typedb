@@ -194,11 +194,13 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
         class RootNode extends ActorNode<RootNode> {
 
             private final NodeRegistry.SubRegistry<?,?> subRegistry;
+            private ActorNode.Port port;
 
             protected RootNode(NodeRegistry nodeRegistry, Driver<RootNode> driver) {
                 super(nodeRegistry, driver, () -> "RootNode: " + conjunction.pattern());
                 ConjunctionController.ConjunctionStreamPlan csPlan = nodeRegistry.conjunctionStreamPlan(conjunction, new ConceptMap());
-                subRegistry = nodeRegistry.getRegistry(csPlan);
+                this.subRegistry = nodeRegistry.getRegistry(csPlan);
+                this.port = null;
             }
 
             @Override
@@ -208,8 +210,10 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
             }
 
             @Override
-            public void readAnswerAt(ActorNode<?> reader, int index) {
-                subRegistry.getNode(new ConceptMap()).driver().execute(actor -> actor.readAnswerAt(this, index));
+            public void readAnswerAt(ActorNode.Port reader, int index) {
+                if (port == null) port = createPort(subRegistry.getNode(new ConceptMap()));
+                assert index == port.nextIndex();
+                port.readNext();
 //                // Test retrievable
 //                {
 //                    Retrievable retrievable = nodeRegistry.logicManager().compile(conjunction).stream().findFirst().get().asRetrievable();
@@ -224,7 +228,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
             }
 
             @Override
-            public void receive(ActorNode<?> sender, Message message) {
+            public void receive(ActorNode.Port sender, Message message) {
                 switch (message.type()) {
                     case ANSWER:
                         Basic.this.receiveAnswer(message.answer().get());
