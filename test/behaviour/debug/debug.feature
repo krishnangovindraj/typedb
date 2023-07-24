@@ -24,6 +24,10 @@ Feature: Debugging Space
     person plays cartesian:person;
     name plays cartesian:name;
 
+    lookup sub relation, relates person, relates name;
+    person plays lookup:person;
+    name plays lookup:name;
+
 
     rule naming-rule:
     when {
@@ -39,12 +43,21 @@ Feature: Debugging Space
       (person: $p, name: $n) isa cartesian;
     };
 
+    rule lookup-rule:
+    when {
+      $p isa person, has name $n;
+      $n "Doesnt exist";
+    } then {
+      (person: $p, name: $n) isa lookup;
+    };
+
     """
     Given reasoning data
     """
     insert
-    $p1 isa person, has name "Alice";
-    $p2 isa person, has name "Bob";
+    $p1 isa person, has name $n1; $n1 "Alice";
+    $p2 isa person, has name $n2; $n2 "Bob";
+    (person: $p1, name: $n2) isa lookup;
     """
 
 
@@ -76,3 +89,13 @@ Feature: Debugging Space
     """
 
     Then verify answer size is: 4
+
+  Scenario: test concludable lookup
+
+    Given reasoning query
+    """
+    match
+      (person: $p, name: $n) isa lookup;
+    """
+
+    Then verify answer size is: 1

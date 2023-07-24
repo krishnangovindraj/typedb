@@ -41,16 +41,16 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
         this.answerTable = new AnswerTable();
     }
 
-    private void ensureInitialised() {
-        if (this.leftChildPort == null) {
-            this.leftChildPort = createPort(nodeRegistry.getRegistry(leftPlan()).getNode(bounds));
-            this.rightPortExtensions = new HashMap<>();
-        }
+    @Override
+    protected void initialise() {
+        super.initialise();
+        assert this.leftChildPort == null;
+        this.leftChildPort = createPort(nodeRegistry.getRegistry(leftPlan()).getNode(bounds));
+        this.rightPortExtensions = new HashMap<>();
     }
 
     @Override
     public void readAnswerAt(ActorNode.Port reader, int index) {
-        ensureInitialised();
         // TODO: Here, we pull on everything, and we have no notion of cyclic termination
         answerTable.answerAt(index).ifPresentOrElse(
                 answer -> send(reader.owner(), reader, answer),
@@ -103,9 +103,6 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
 
     public void receiveRight(ActorNode.Port onPort, ConceptMap answer) {
         FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-
-        int firstAnswerIndex = answerTable.size();
-
         ConceptMap extendedAnswer = merge(rightPortExtensions.get(onPort), answer);
         Message toSend = answerTable.recordAnswer(extendedAnswer);
         subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
@@ -120,17 +117,4 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
 
     private ConjunctionController.ConjunctionStreamPlan leftPlan() { return compoundStreamPlan.childAt(0); }
     private ConjunctionController.ConjunctionStreamPlan rightPlan() { return compoundStreamPlan.childAt(1); }
-
-//    // Test retrievable
-//    private ActorNode<?> subscriber;
-//    @Override
-//    public void readAnswerAt(ActorNode<?> reader, int index) {
-//        subscriber = reader;
-//        Retrievable retrievable = nodeRegistry.logicManager().compile(conjunction).stream().findFirst().get().asRetrievable();
-//        nodeRegistry.retrievableSubRegistry(retrievable).getNode(new ConceptMap()).driver().execute(actor -> actor.readAnswerAt(this, index));
-//    }
-//    @Override
-//    public void receive(ActorNode<?> sender, Message message) {
-//        send(subscriber, message);
-//    }
 }
