@@ -15,7 +15,7 @@ import java.util.Set;
 public class AnswerTable {
 
     private final List<Message> answers;
-    private Set<ActorNode<?>> subscribers;
+    private Set<ActorNode.Port> subscribers;
     private boolean complete;
 
     public AnswerTable() {
@@ -33,14 +33,14 @@ public class AnswerTable {
         return index < answers.size() ? Optional.of(answers.get(index)) : Optional.empty();
     }
 
-    public void registerSubscriber(ActorNode<?> subscriber, int index) {
+    public void registerSubscriber(ActorNode.Port subscriber, int index) {
         assert index == answers.size() && !complete;
         subscribers.add(subscriber);
     }
 
-    public FunctionalIterator<ActorNode<?>> clearAndReturnSubscribers(int index) {
+    public FunctionalIterator<ActorNode.Port> clearAndReturnSubscribers(int index) {
         assert index == answers.size() && !complete;
-        Set<ActorNode<?>> subs = subscribers;
+        Set<ActorNode.Port> subs = subscribers;
         subscribers = new HashSet<>();
         return Iterators.iterate(subs);
     }
