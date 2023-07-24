@@ -34,11 +34,23 @@ Feature: Debugging Space
     person plays naming:person;
     name plays naming:name;
 
+    cartesian sub relation, relates person, relates name;
+    person plays cartesian:person;
+    name plays cartesian:name;
+
+
     rule naming-rule:
     when {
       $p isa person, has name $n;
     } then {
       (person: $p, name: $n) isa naming;
+    };
+
+    rule cartesian-rule:
+    when {
+      $p isa person; $n isa name;
+    } then {
+      (person: $p, name: $n) isa cartesian;
     };
 
     """
@@ -68,3 +80,13 @@ Feature: Debugging Space
     """
 
     Then verify answer size is: 2
+
+  Scenario: test other concludable
+
+    Given reasoning query
+    """
+    match
+      (person: $p, name: $n) isa cartesian;
+    """
+
+    Then verify answer size is: 4
