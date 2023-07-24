@@ -141,14 +141,19 @@ public class NodeRegistry {
         throw TypeDBException.of(UNIMPLEMENTED);
     }
 
+    public <NODE extends ActorNode<NODE>> Actor.Driver<NODE> createLocalNode(Function<Actor.Driver<NODE>, NODE> actorFn) {
+        return createDriverAndInitialise(actorFn);
+    }
     public <NODE extends ActorNode<NODE>> NODE createRoot(Function<Actor.Driver<NODE>, NODE> actorFn) {
-        Actor.Driver<NODE> driver = createDriver(actorFn);
+        Actor.Driver<NODE> driver = createDriverAndInitialise(actorFn);
         this.roots.add(driver.actor());
         return driver.actor();
     }
 
-    private <NODE extends ActorNode<NODE>> Actor.Driver<NODE> createDriver(Function<Actor.Driver<NODE>, NODE> actorFn) {
-        return Actor.driver(actorFn, executorService);
+    private <NODE extends ActorNode<NODE>> Actor.Driver<NODE> createDriverAndInitialise(Function<Actor.Driver<NODE>, NODE> actorFn) {
+        Actor.Driver<NODE> nodeDriver =  Actor.driver(actorFn, executorService);
+        nodeDriver.execute(node -> node.initialise());
+        return nodeDriver;
     }
 
     public void terminate(Throwable e) {
@@ -212,7 +217,7 @@ public class NodeRegistry {
 
         @Override
         protected Actor.Driver<ResolvableNode.RetrievableNode> createNode(ConceptMap bounds) {
-            return createDriver(driver -> new ResolvableNode.RetrievableNode(key, bounds, NodeRegistry.this, driver));
+            return createDriverAndInitialise(driver -> new ResolvableNode.RetrievableNode(key, bounds, NodeRegistry.this, driver));
         }
     }
 
@@ -226,7 +231,7 @@ public class NodeRegistry {
 
         @Override
         protected Actor.Driver<ResolvableNode.ConcludableNode> createNode(ConceptMap bounds) {
-            return createDriver(driver -> new ResolvableNode.ConcludableNode(key, bounds, NodeRegistry.this, driver));
+            return createDriverAndInitialise(driver -> new ResolvableNode.ConcludableNode(key, bounds, NodeRegistry.this, driver));
         }
 
     }
@@ -242,7 +247,7 @@ public class NodeRegistry {
 
         @Override
         protected Actor.Driver<ConjunctionNode> createNode(ConceptMap bounds) {
-            return createDriver(driver -> new ConjunctionNode(conjunction, bounds, key, NodeRegistry.this, driver));
+            return createDriverAndInitialise(driver -> new ConjunctionNode(conjunction, bounds, key, NodeRegistry.this, driver));
         }
     }
 }

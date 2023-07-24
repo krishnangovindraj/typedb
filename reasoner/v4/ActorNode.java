@@ -22,12 +22,16 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>>  extends Actor<NOD
         this.donePorts = 0;
     }
 
+    protected void initialise() {
+
+    }
+
     public abstract void readAnswerAt(ActorNode.Port reader, int index);
 
-    public abstract void receive(ActorNode<NODE>.Port port, Message message);
+    public abstract void receive(ActorNode.Port port, Message message);
 
     protected Port createPort(ActorNode<?> remote) {
-        Port port = new Port(remote);
+        Port port = new Port(this, remote);
         ports.add(port);
         return port;
     }
@@ -51,6 +55,10 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>>  extends Actor<NOD
         receive(port, message);
     }
 
+    private void recordDone(ActorNode.Port port) {
+        donePorts += 1;
+    }
+
     @Override
     protected void exception(Throwable e) {
         nodeRegistry.terminate(e);
@@ -61,14 +69,14 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>>  extends Actor<NOD
         super.terminate(e);
     }
 
-
-    public class Port {
-
+    public static class Port {
+        private final ActorNode<?> owner;
         private final ActorNode<?> remote;
         private State state;
         private int nextIndex;
 
-        private Port(ActorNode<?> remote) {
+        private Port(ActorNode<?> owner, ActorNode<?> remote) {
+            this.owner = owner;
             this.remote = remote;
             this.state = State.READY;
             this.nextIndex = 0;
@@ -79,7 +87,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>>  extends Actor<NOD
             nextIndex += 1;
             if (msg.type() == Message.MessageType.DONE) {
                 state = State.DONE;
-                donePorts += 1;
+                owner.recordDone(this);
             } else {
                 state = State.READY;
             }
@@ -91,8 +99,8 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>>  extends Actor<NOD
             remote.driver().execute(nodeActor -> nodeActor.readAnswerAt(Port.this, nextIndex));
         }
 
-        public ActorNode<NODE> owner() {
-            return ActorNode.this;
+        public ActorNode<?> owner() {
+            return owner;
         }
 
         public State state() {
