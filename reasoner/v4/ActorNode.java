@@ -14,13 +14,15 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
     protected final NodeRegistry nodeRegistry;
 
     List<ActorNode.Port> ports;
-    private int donePorts;
+    private int openPortsAcyclic;
+    private int openPortsCyclic;
 
     protected ActorNode(NodeRegistry nodeRegistry, Driver<NODE> driver, Supplier<String> debugName) {
         super(driver, debugName);
         this.nodeRegistry = nodeRegistry;
         this.ports = new ArrayList<>();
-        this.donePorts = 0;
+        this.openPortsAcyclic = 0;
+        this.openPortsCyclic = 0;
     }
 
     protected void initialise() {
@@ -39,11 +41,17 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
     protected Port createPort(ActorNode<?> remote, boolean isCyclic) {
         Port port = new Port(this, remote, isCyclic);
         ports.add(port);
+        if (isCyclic) openPortsCyclic += 1;
+        else openPortsAcyclic += 1;
         return port;
     }
 
     protected boolean allPortsDone() {
-        return donePorts == ports.size();
+        return openPortsAcyclic + openPortsCyclic == 0;
+    }
+
+    protected boolean acyclicPortsDone() {
+        return openPortsAcyclic == 0;
     }
 
     protected FunctionalIterator<ActorNode.Port> allPorts() {
@@ -62,7 +70,8 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
     }
 
     private void recordDone(ActorNode.Port port) {
-        donePorts += 1;
+        if (port.isCyclic) openPortsCyclic -= 1;
+        else openPortsAcyclic -= 1;
     }
 
     @Override
