@@ -106,7 +106,7 @@ public class ConjunctionGraph {
         }
     }
 
-    static class ConjunctionNode {
+    public static class ConjunctionNode {
         private final ResolvableConjunction conjunction;
         private final Set<Resolvable<?>> resolvables;
         private final Set<Variable> estimateableVars;
