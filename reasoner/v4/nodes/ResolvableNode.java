@@ -4,7 +4,6 @@ import com.vaticle.typedb.common.collection.Pair;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
-import com.vaticle.typedb.core.concurrent.actor.Actor;
 import com.vaticle.typedb.core.logic.resolvable.Concludable;
 import com.vaticle.typedb.core.logic.resolvable.Resolvable;
 import com.vaticle.typedb.core.logic.resolvable.Retrievable;
@@ -12,6 +11,7 @@ import com.vaticle.typedb.core.logic.resolvable.Unifier;
 import com.vaticle.typedb.core.pattern.Conjunction;
 import com.vaticle.typedb.core.reasoner.common.Traversal;
 import com.vaticle.typedb.core.reasoner.controller.ConjunctionController;
+import com.vaticle.typedb.core.reasoner.planner.ConjunctionGraph;
 import com.vaticle.typedb.core.reasoner.v4.ActorNode;
 import com.vaticle.typedb.core.reasoner.v4.Message;
 import com.vaticle.typedb.core.reasoner.v4.NodeRegistry;
@@ -82,14 +82,17 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
 
     public static class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode> {
         // TODO: See if I can get away without storing answers
+        private final ConjunctionGraph.ConjunctionNode infoNode;
         private final AnswerTable answerTable;
         private final Set<ConceptMap> seenAnswers;
         private Map<Port, Pair<ConceptMap, Unifier.Requirements.Instance>> conditionNodePorts; // TODO: Improve
         private ActorNode.Port lookupPort;
 
         public ConcludableNode(Concludable concludable, ConceptMap bounds,
+                               ConjunctionGraph.ConjunctionNode infoNode,
                                NodeRegistry nodeRegistry, Driver<ConcludableNode> driver) {
             super(concludable, bounds, nodeRegistry, driver);
+            this.infoNode = infoNode;
             this.answerTable = new AnswerTable();
             this.seenAnswers = new HashSet<>();
             this.conditionNodePorts = null;
@@ -105,10 +108,11 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
 
             nodeRegistry.logicManager().applicableRules(resolvable).forEach((rule, unifiers) -> {
                 rule.condition().disjunction().conjunctions().forEach(conjunction -> {
+                    boolean isCyclic = infoNode.cyclicDependencies(resolvable).contains(conjunction);
                     unifiers.forEach(unifier -> unifier.unify(bounds).ifPresent(boundsAndRequirements -> {
                         ConjunctionController.ConjunctionStreamPlan csPlan = nodeRegistry.conjunctionStreamPlan(conjunction, boundsAndRequirements.first());
                         ActorNode<?> conditionNode = nodeRegistry.getRegistry(csPlan).getNode(boundsAndRequirements.first());
-                        conditionNodePorts.put(createPort(conditionNode), boundsAndRequirements);
+                        conditionNodePorts.put(createPort(conditionNode, isCyclic), boundsAndRequirements);
                     }));
                 });
             });
