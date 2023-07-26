@@ -139,10 +139,10 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
         public void receive(ActorNode.Port onPort, Message received) {
             switch (received.type()) {
                 case ANSWER: {
-                    if (seenAnswers.contains(received.answer().get())) return;
-                    seenAnswers.add(received.answer().get());
+                    if (seenAnswers.contains(received.asAnswer().answer())) return;
+                    seenAnswers.add(received.asAnswer().answer());
                     FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-                    Message toSend = answerTable.recordAnswer(received.answer().get());
+                    Message toSend = answerTable.recordAnswer(received.asAnswer().answer());
                     subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
 
                     onPort.readNext(); // KGFLAG: Strategy

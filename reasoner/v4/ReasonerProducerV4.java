@@ -216,7 +216,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
             public void receive(ActorNode.Port sender, Message message) {
                 switch (message.type()) {
                     case ANSWER:
-                        Basic.this.receiveAnswer(message.answer().get());
+                        Basic.this.receiveAnswer(message.asAnswer().answer());
                         break;
                     case DONE:
                         Basic.this.finish();
