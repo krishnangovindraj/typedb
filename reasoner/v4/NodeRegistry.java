@@ -17,6 +17,7 @@ import com.vaticle.typedb.core.logic.resolvable.Retrievable;
 import com.vaticle.typedb.core.pattern.variable.Variable;
 import com.vaticle.typedb.core.reasoner.controller.ConjunctionController;
 import com.vaticle.typedb.core.reasoner.controller.ConjunctionController.ConjunctionStreamPlan.CompoundStreamPlan;
+import com.vaticle.typedb.core.reasoner.planner.ConjunctionGraph;
 import com.vaticle.typedb.core.reasoner.planner.ReasonerPlanner;
 import com.vaticle.typedb.core.reasoner.planner.RecursivePlanner;
 import com.vaticle.typedb.core.reasoner.v4.nodes.ConjunctionNode;
@@ -107,7 +108,8 @@ public class NodeRegistry {
     private void populateResolvableRegistries(ResolvableConjunction conjunction) {
         logicManager().compile(conjunction).forEach(resolvable -> {
             if (resolvable.isConcludable()) {
-                concludableSubRegistries.computeIfAbsent(resolvable.asConcludable(), ConcludableRegistry::new);
+                ConjunctionGraph.ConjunctionNode infoNode  = planner.conjunctionGraph().conjunctionNode(conjunction);
+                concludableSubRegistries.computeIfAbsent(resolvable.asConcludable(), concludable -> new ConcludableRegistry(concludable, infoNode));
             } else if (resolvable.isRetrievable()) {
                 retrievableSubRegistries.computeIfAbsent(resolvable.asRetrievable(), RetrievableRegistry::new);
             } else if (resolvable.isNegated()) {
@@ -225,13 +227,16 @@ public class NodeRegistry {
     public class ConcludableRegistry extends SubRegistry<Concludable, ResolvableNode.ConcludableNode> {
 
 
-        private ConcludableRegistry(Concludable concludable) {
+        private final ConjunctionGraph.ConjunctionNode infoNode;
+
+        private ConcludableRegistry(Concludable concludable, ConjunctionGraph.ConjunctionNode infoNode) {
             super(concludable);
+            this.infoNode = infoNode;
         }
 
         @Override
         protected Actor.Driver<ResolvableNode.ConcludableNode> createNode(ConceptMap bounds) {
-            return createDriverAndInitialise(driver -> new ResolvableNode.ConcludableNode(key, bounds, NodeRegistry.this, driver));
+            return createDriverAndInitialise(driver -> new ResolvableNode.ConcludableNode(key, bounds, infoNode, NodeRegistry.this, driver));
         }
 
     }

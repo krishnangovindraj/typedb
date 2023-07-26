@@ -8,8 +8,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
 
-public abstract class ActorNode<NODE extends ActorNode<NODE>>  extends Actor<NODE> {
-    protected enum State { READY, PULLING, DONE }
+public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE> {
+    protected enum State {READY, PULLING, DONE}
+
     protected final NodeRegistry nodeRegistry;
 
     List<ActorNode.Port> ports;
@@ -26,12 +27,17 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>>  extends Actor<NOD
 
     }
 
+    // TODO: Since port has the index in it, maybe we don't need index here?
     public abstract void readAnswerAt(ActorNode.Port reader, int index);
 
     public abstract void receive(ActorNode.Port port, Message message);
 
     protected Port createPort(ActorNode<?> remote) {
-        Port port = new Port(this, remote);
+        return createPort(remote, false);
+    }
+
+    protected Port createPort(ActorNode<?> remote, boolean isCyclic) {
+        Port port = new Port(this, remote, isCyclic);
         ports.add(port);
         return port;
     }
@@ -74,12 +80,14 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>>  extends Actor<NOD
         private final ActorNode<?> remote;
         private State state;
         private int nextIndex;
+        private final boolean isCyclic; // Is the edge potentially a cycle? Only true for edges from concludable to conjunction
 
-        private Port(ActorNode<?> owner, ActorNode<?> remote) {
+        private Port(ActorNode<?> owner, ActorNode<?> remote, boolean isCyclic) {
             this.owner = owner;
             this.remote = remote;
             this.state = State.READY;
             this.nextIndex = 0;
+            this.isCyclic = isCyclic;
         }
 
         public void recordReceive(Message msg) {
