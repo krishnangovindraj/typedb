@@ -21,6 +21,7 @@ import com.vaticle.typedb.core.reasoner.planner.ConjunctionGraph;
 import com.vaticle.typedb.core.reasoner.planner.ReasonerPlanner;
 import com.vaticle.typedb.core.reasoner.planner.RecursivePlanner;
 import com.vaticle.typedb.core.reasoner.v4.nodes.ConjunctionNode;
+import com.vaticle.typedb.core.reasoner.v4.nodes.MaterialiserNode;
 import com.vaticle.typedb.core.reasoner.v4.nodes.ResolvableNode;
 import com.vaticle.typedb.core.traversal.TraversalEngine;
 import com.vaticle.typedb.core.traversal.common.Identifier;
@@ -49,6 +50,7 @@ public class NodeRegistry {
     private AtomicBoolean terminated;
     private final TraversalEngine traversalEngine;
     private final ConceptManager conceptManager;
+    private Actor.Driver<MaterialiserNode> materialiserNode;
 
     public NodeRegistry(ActorExecutorGroup executorService,
                         ConceptManager conceptManager, LogicManager logicManager, TraversalEngine traversalEngine,
@@ -78,6 +80,9 @@ public class NodeRegistry {
         });
         Iterators.iterate(csPlans.keySet()).map(callMode -> callMode.conjunction).distinct()
                 .forEachRemaining(this::populateResolvableRegistries);
+        materialiserNode = Actor.driver(
+                materialiserNodeDriver -> new MaterialiserNode(this, materialiserNodeDriver),
+                executorService);
     }
 
     private void cacheConjunctionStreamPlans(ReasonerPlanner.CallMode callMode) {
@@ -108,7 +113,7 @@ public class NodeRegistry {
     private void populateResolvableRegistries(ResolvableConjunction conjunction) {
         logicManager().compile(conjunction).forEach(resolvable -> {
             if (resolvable.isConcludable()) {
-                ConjunctionGraph.ConjunctionNode infoNode  = planner.conjunctionGraph().conjunctionNode(conjunction);
+                ConjunctionGraph.ConjunctionNode infoNode = planner.conjunctionGraph().conjunctionNode(conjunction);
                 concludableSubRegistries.computeIfAbsent(resolvable.asConcludable(), concludable -> new ConcludableRegistry(concludable, infoNode));
             } else if (resolvable.isRetrievable()) {
                 retrievableSubRegistries.computeIfAbsent(resolvable.asRetrievable(), RetrievableRegistry::new);
@@ -122,6 +127,10 @@ public class NodeRegistry {
         ReasonerPlanner.CallMode callMode = new ReasonerPlanner.CallMode(conjunction,
                 Iterators.iterate(bounds.concepts().keySet()).map(id -> conjunction.pattern().variable(id)).toSet());
         return csPlans.get(callMode);
+    }
+
+    public Actor.Driver<MaterialiserNode> materialiserNode() {
+        return materialiserNode;
     }
 
     public SubConjunctionRegistry conjunctionSubRegistry(CompoundStreamPlan compoundStreamPlan) {
@@ -146,6 +155,7 @@ public class NodeRegistry {
     public <NODE extends ActorNode<NODE>> Actor.Driver<NODE> createLocalNode(Function<Actor.Driver<NODE>, NODE> actorFn) {
         return createDriverAndInitialise(actorFn);
     }
+
     public <NODE extends ActorNode<NODE>> NODE createRoot(Function<Actor.Driver<NODE>, NODE> actorFn) {
         Actor.Driver<NODE> driver = createDriverAndInitialise(actorFn);
         this.roots.add(driver.actor());
@@ -153,7 +163,7 @@ public class NodeRegistry {
     }
 
     private <NODE extends ActorNode<NODE>> Actor.Driver<NODE> createDriverAndInitialise(Function<Actor.Driver<NODE>, NODE> actorFn) {
-        Actor.Driver<NODE> nodeDriver =  Actor.driver(actorFn, executorService);
+        Actor.Driver<NODE> nodeDriver = Actor.driver(actorFn, executorService);
         nodeDriver.execute(node -> node.initialise());
         return nodeDriver;
     }
@@ -187,7 +197,7 @@ public class NodeRegistry {
 
     public SubRegistry<?, ?> getRegistry(ConjunctionController.ConjunctionStreamPlan csPlan) {
         return csPlan.isCompoundStreamPlan() ?
-                conjunctionSubRegistry(csPlan.asCompoundStreamPlan()):
+                conjunctionSubRegistry(csPlan.asCompoundStreamPlan()) :
                 resolvableSubRegistry(csPlan.asResolvablePlan().resolvable());
     }
 

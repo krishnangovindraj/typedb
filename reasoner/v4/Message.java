@@ -28,7 +28,7 @@ public class Message {
         this.index = index;
     }
 
-    public static Message answer(int index, ConceptMap conceptMap) {
+    public static Message.Answer answer(int index, ConceptMap conceptMap) {
         return new Message.Answer(MessageType.ANSWER, index, conceptMap);
     }
 
