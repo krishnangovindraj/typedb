@@ -2,13 +2,16 @@ package com.vaticle.typedb.core.reasoner.v4.nodes;
 
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.common.iterator.Iterators;
+import com.vaticle.typedb.core.concept.Concept;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.reasoner.v4.ActorNode;
 import com.vaticle.typedb.core.reasoner.v4.Message;
+import com.vaticle.typedb.core.traversal.common.Identifier;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -48,6 +51,12 @@ public class AnswerTable {
     public Message recordAnswer(ConceptMap answer) {
         assert !complete;
         Message msg = Message.answer(answers.size(), answer);
+        answers.add(msg);
+        return msg;
+    }
+
+    public Message recordConclusion(Map<Identifier.Variable, Concept> conclusionAnswer) { // TODO: Generics
+        Message msg = new Message.Conclusion(answers.size(), conclusionAnswer);
         answers.add(msg);
         return msg;
     }

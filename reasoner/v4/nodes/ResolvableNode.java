@@ -3,6 +3,8 @@ package com.vaticle.typedb.core.reasoner.v4.nodes;
 import com.vaticle.typedb.common.collection.Pair;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
+import com.vaticle.typedb.core.common.iterator.Iterators;
+import com.vaticle.typedb.core.concept.Concept;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.logic.resolvable.Concludable;
 import com.vaticle.typedb.core.logic.resolvable.Resolvable;
@@ -10,11 +12,11 @@ import com.vaticle.typedb.core.logic.resolvable.Retrievable;
 import com.vaticle.typedb.core.logic.resolvable.Unifier;
 import com.vaticle.typedb.core.pattern.Conjunction;
 import com.vaticle.typedb.core.reasoner.common.Traversal;
-import com.vaticle.typedb.core.reasoner.controller.ConjunctionController;
 import com.vaticle.typedb.core.reasoner.planner.ConjunctionGraph;
 import com.vaticle.typedb.core.reasoner.v4.ActorNode;
 import com.vaticle.typedb.core.reasoner.v4.Message;
 import com.vaticle.typedb.core.reasoner.v4.NodeRegistry;
+import com.vaticle.typedb.core.traversal.common.Identifier;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -30,7 +32,7 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
     protected final ConceptMap bounds;
 
     public ResolvableNode(RESOLVABLE resolvable, ConceptMap bounds, NodeRegistry nodeRegistry, Driver<NODE> driver) {
-        super(nodeRegistry, driver, () -> "ResolvableNode[" + resolvable + ", " + bounds + "]");
+        super(nodeRegistry, driver, () -> String.format("ResolvableNode[%s, %s]", resolvable, bounds));
         this.resolvable = resolvable;
         this.bounds = bounds;
     }
@@ -47,6 +49,7 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
             this.traversal = Traversal.traversalIterator(nodeRegistry, resolvable.pattern(), bounds);
             this.answerTable = new AnswerTable();
         }
+
         @Override
         public void readAnswerAt(ActorNode.Port reader, int index) {
             answerTable.answerAt(index).ifPresentOrElse(
@@ -85,7 +88,7 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
         private final ConjunctionGraph.ConjunctionNode infoNode;
         private final AnswerTable answerTable;
         private final Set<ConceptMap> seenAnswers;
-        private Map<Port, Pair<ConceptMap, Unifier.Requirements.Instance>> conditionNodePorts; // TODO: Improve
+        private Map<Port, Pair<Unifier, Unifier.Requirements.Instance>> conclusioNodePorts; // TODO: Improve
         private ActorNode.Port lookupPort;
 
         public ConcludableNode(Concludable concludable, ConceptMap bounds,
@@ -95,28 +98,26 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
             this.infoNode = infoNode;
             this.answerTable = new AnswerTable();
             this.seenAnswers = new HashSet<>();
-            this.conditionNodePorts = null;
+            this.conclusioNodePorts = null;
         }
 
         @Override
         protected void initialise() {
             super.initialise();
-            assert conditionNodePorts == null;
-            this.conditionNodePorts = new HashMap<>();
+            assert conclusioNodePorts == null;
+            this.conclusioNodePorts = new HashMap<>();
             Driver<ConcludableLookupNode> lookupNode = nodeRegistry.createLocalNode(driver -> new ConcludableLookupNode(resolvable, bounds, nodeRegistry, driver));
             this.lookupPort = createPort(lookupNode.actor());
 
             nodeRegistry.logicManager().applicableRules(resolvable).forEach((rule, unifiers) -> {
-                rule.condition().disjunction().conjunctions().forEach(conjunction -> {
-                    boolean isCyclic = infoNode.cyclicDependencies(resolvable).contains(conjunction);
-                    unifiers.forEach(unifier -> unifier.unify(bounds).ifPresent(boundsAndRequirements -> {
-                        ConjunctionController.ConjunctionStreamPlan csPlan = nodeRegistry.conjunctionStreamPlan(conjunction, boundsAndRequirements.first());
-                        ActorNode<?> conditionNode = nodeRegistry.getRegistry(csPlan).getNode(boundsAndRequirements.first());
-                        conditionNodePorts.put(createPort(conditionNode, isCyclic), boundsAndRequirements);
-                    }));
-                });
+                unifiers.forEach(unifier -> unifier.unify(bounds).ifPresent(boundsAndRequirements -> {
+                    boolean isCyclic = infoNode.cyclicConcludables().contains(resolvable);
+                    ActorNode<?> conclusionNode = nodeRegistry.conclusionSubRegistry(rule.conclusion()).getNode(boundsAndRequirements.first());
+                    conclusioNodePorts.put(createPort(conclusionNode, isCyclic), new Pair<>(unifier, boundsAndRequirements.second()));
+                }));
             });
         }
+
 
         @Override
         public void readAnswerAt(ActorNode.Port reader, int index) {
@@ -132,7 +133,7 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
 
             // KGFLAG: Strategy
             if (lookupPort.state() == ActorNode.State.READY) lookupPort.readNext();
-            conditionNodePorts.keySet().forEach(port -> {
+            conclusioNodePorts.keySet().forEach(port -> {
                 if (port.state() == ActorNode.State.READY) {
                     port.readNext();
                 }
@@ -143,13 +144,18 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
         public void receive(ActorNode.Port onPort, Message received) {
             switch (received.type()) {
                 case ANSWER: {
-                    if (seenAnswers.contains(received.asAnswer().answer())) return;
-                    seenAnswers.add(received.asAnswer().answer());
-                    FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-                    Message toSend = answerTable.recordAnswer(received.asAnswer().answer());
-                    subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+                    assert onPort == lookupPort;
+                    handleAnswers(Iterators.single(received.asAnswer().answer()));
+                    onPort.readNext();
+                    break;
+                }
+                case CONCLUSION: {
+                    Pair<Unifier, Unifier.Requirements.Instance> unifierAndRequirements = conclusioNodePorts.get(onPort);
+                    Map<Identifier.Variable, Concept> mappedBack = new HashMap<>();
 
-                    onPort.readNext(); // KGFLAG: Strategy
+                    handleAnswers(unifierAndRequirements.first()
+                            .unUnify(received.asConclusion().conclusionAnswer(), unifierAndRequirements.second()));
+                    onPort.readNext();
                     break;
                 }
                 case DONE: {
@@ -163,6 +169,17 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
                 default:
                     throw TypeDBException.of(ILLEGAL_STATE);
             }
+        }
+
+        private void handleAnswers(FunctionalIterator<ConceptMap> answers) {
+            answers.forEachRemaining(conceptMap -> {
+                if (seenAnswers.contains(conceptMap)) return;
+                seenAnswers.add(conceptMap);
+                // We can do this multiple times, since subscribers will be empty
+                FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+                Message toSend = answerTable.recordAnswer(conceptMap);
+                subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+            });
         }
     }
 }
