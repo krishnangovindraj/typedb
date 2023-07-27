@@ -45,7 +45,7 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
     protected void initialise() {
         super.initialise();
         assert this.leftChildPort == null;
-        this.leftChildPort = createPort(nodeRegistry.getRegistry(leftPlan()).getNode(bounds));
+        this.leftChildPort = createPort(nodeRegistry.getRegistry(leftPlan()).getNode(bounds.filter(leftPlan().identifiers())));
         this.rightPortExtensions = new HashMap<>();
     }
 
@@ -69,7 +69,7 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
 
     @Override
     public void receive(ActorNode.Port onPort, Message received) {
-        LOG.info("Received {} from {}", received, onPort.remote().debugName().get() );
+//        LOG.info("Received {} from {}", received, onPort.remote().debugName().get() );
         switch (received.type()) {
             case ANSWER: {
                 if (onPort == leftChildPort) receiveLeft(onPort, received.asAnswer().answer());

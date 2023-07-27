@@ -28,6 +28,7 @@ import com.vaticle.typedb.core.reasoner.v4.nodes.ResolvableNode;
 import com.vaticle.typedb.core.traversal.TraversalEngine;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -37,6 +38,7 @@ import java.util.function.Function;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
+import static com.vaticle.typedb.core.common.iterator.Iterators.iterate;
 
 // TODO: See if we can use ConjunctionStreamPlan as the only one key we need. The nodes can do safe-downcasting
 public class NodeRegistry {
@@ -63,18 +65,18 @@ public class NodeRegistry {
         this.conceptManager = conceptManager;
         this.logicManager = logicManager;
         this.planner = planner.asRecursivePlanner();
-        this.csPlans = new ConcurrentHashMap<>();
-        this.conjunctionSubRegistries = new ConcurrentHashMap<>();
-        this.conclusionSubRegistries = new ConcurrentHashMap<>();
-        this.retrievableSubRegistries = new ConcurrentHashMap<>();
-        this.concludableSubRegistries = new ConcurrentHashMap<>();
-        this.negatedSubRegistries = new ConcurrentHashMap<>();
+        this.csPlans = new HashMap<>();
+        this.conjunctionSubRegistries = new HashMap<>();
+        this.conclusionSubRegistries = new HashMap<>();
+        this.retrievableSubRegistries = new HashMap<>();
+        this.concludableSubRegistries = new HashMap<>();
+        this.negatedSubRegistries = new HashMap<>();
         this.roots = new ConcurrentSet<>();
         this.terminated = new AtomicBoolean(false);
     }
 
     void prepare(ResolvableConjunction rootConjunction, ConceptMap bounds) {
-        Set<Variable> boundVars = Iterators.iterate(bounds.concepts().keySet()).map(id -> rootConjunction.pattern().variable(id)).toSet();
+        Set<Variable> boundVars = iterate(bounds.concepts().keySet()).map(id -> rootConjunction.pattern().variable(id)).toSet();
         planner.plan(rootConjunction, boundVars);
         cacheConjunctionStreamPlans(new ReasonerPlanner.CallMode(rootConjunction, boundVars));
         csPlans.forEach((callMode, csPlan) -> {
@@ -82,11 +84,11 @@ public class NodeRegistry {
                 populateConjunctionRegistries(callMode.conjunction, csPlan.asCompoundStreamPlan());
             }
         });
-        Iterators.iterate(csPlans.keySet()).map(callMode -> callMode.conjunction).distinct()
+        iterate(csPlans.keySet()).map(callMode -> callMode.conjunction).distinct()
                 .forEachRemaining(this::populateResolvableRegistries);
 
-        Iterators.iterate(concludableSubRegistries.keySet())
-                .flatMap(concludable -> Iterators.iterate(logicManager.applicableRules(concludable).keySet()))
+        iterate(concludableSubRegistries.keySet())
+                .flatMap(concludable -> iterate(logicManager.applicableRules(concludable).keySet()))
                 .forEachRemaining(this::registerConclusions);
         materialiserNode = Actor.driver(
                 materialiserNodeDriver -> new MaterialiserNode(this, materialiserNodeDriver),
@@ -102,7 +104,7 @@ public class NodeRegistry {
     private void cacheConjunctionStreamPlans(ReasonerPlanner.CallMode callMode) {
         if (!csPlans.containsKey(callMode)) {
             ReasonerPlanner.Plan plan = planner.getPlan(callMode.conjunction, callMode.mode);
-            Set<Identifier.Variable.Retrievable> modeIds = Iterators.iterate(callMode.mode).map(Variable::id)
+            Set<Identifier.Variable.Retrievable> modeIds = iterate(callMode.mode).map(Variable::id)
                     .filter(Identifier::isRetrievable).map(Identifier.Variable::asRetrievable).toSet();
             ConjunctionController.ConjunctionStreamPlan csPlan = ConjunctionController.ConjunctionStreamPlan.createUnflattened(
                     plan.plan(), modeIds, callMode.conjunction.pattern().retrieves());
@@ -115,13 +117,18 @@ public class NodeRegistry {
                     planner.triggeredCalls(resolvable.asConcludable(), concludableBounds, null)
                             .forEach(this::cacheConjunctionStreamPlans);
                 }
-                runningBounds.addAll(resolvable.variables());
+                iterate(resolvable.variables()).filter(v -> v.id().isRetrievable()).forEachRemaining(runningBounds::add);
             }
         }
     }
 
     private void populateConjunctionRegistries(ResolvableConjunction conjunction, CompoundStreamPlan compoundStreamPlan) {
         conjunctionSubRegistries.put(compoundStreamPlan, new SubConjunctionRegistry(conjunction, compoundStreamPlan));
+        for (int i = 0; i < compoundStreamPlan.size(); i++) {
+            if (compoundStreamPlan.childAt(i).isCompoundStreamPlan()) {
+                populateConjunctionRegistries(conjunction, compoundStreamPlan.childAt(i).asCompoundStreamPlan());
+            }
+        }
     }
 
     private void populateResolvableRegistries(ResolvableConjunction conjunction) {
@@ -139,7 +146,7 @@ public class NodeRegistry {
 
     public ConjunctionController.ConjunctionStreamPlan conjunctionStreamPlan(ResolvableConjunction conjunction, ConceptMap bounds) {
         ReasonerPlanner.CallMode callMode = new ReasonerPlanner.CallMode(conjunction,
-                Iterators.iterate(bounds.concepts().keySet()).map(id -> conjunction.pattern().variable(id)).toSet());
+                iterate(bounds.concepts().keySet()).map(id -> conjunction.pattern().variable(id)).toSet());
         return csPlans.get(callMode);
     }
 
