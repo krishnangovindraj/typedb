@@ -1,24 +1,19 @@
 package com.vaticle.typedb.core.reasoner.v4;
 
-import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.common.iterator.Iterators;
 import com.vaticle.typedb.core.concurrent.actor.Actor;
-import com.vaticle.typedb.core.logic.Rule;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.function.Supplier;
-
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_OPERATION;
 
 public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE> {
     protected enum State {READY, PULLING, DONE}
 
     protected final NodeRegistry nodeRegistry;
 
-    List<ActorNode.Port> ports;
+    protected List<ActorNode.Port> ports;
     private int openPortsAcyclic;
     private int openPortsCyclic;
 
@@ -32,17 +27,6 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
 
     protected void initialise() {
 
-    }
-
-    TODO: You want to store answers to the then in the table. Possibly along with the .
-
-    protected void requestMaterialisation(Port onPort, Message.Answer whenConcepts, Rule rule) {
-        nodeRegistry.materialiserNode()
-                .execute(materialiserNode -> materialiserNode.materialise(onPort, whenConcepts, rule.conclusion()));
-    }
-
-    public void receiveMaterialisation(Port sender, Optional<Message.Answer> thenConcepts) {
-        throw TypeDBException.of(ILLEGAL_OPERATION);
     }
 
     // TODO: Since port has the index in it, maybe we don't need index here?
@@ -115,7 +99,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
             this.isCyclic = isCyclic;
         }
 
-        public void recordReceive(Message msg) {
+        private void recordReceive(Message msg) {
             assert nextIndex == msg.index();
             nextIndex += 1;
             if (msg.type() == Message.MessageType.DONE) {
@@ -142,6 +126,10 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
 
         public int nextIndex() {
             return nextIndex;
+        }
+
+        public ActorNode<?>  remote() {
+            return remote;
         }
     }
 }

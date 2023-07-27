@@ -31,23 +31,15 @@ public class MaterialiserNode extends Actor<MaterialiserNode> {
         nodeRegistry.terminate(e);
     }
 
-    public void materialise(ActorNode.Port sender, Message.Answer msg, Rule.Conclusion conclusion) {
+    public void materialise(ActorNode<ConclusionNode> sender, ActorNode.Port port, Message.Answer msg, Rule.Conclusion conclusion) {
+        assert sender == port.owner();
         Rule.Conclusion.Materialisable materialisable = conclusion.materialisable(msg.answer(), nodeRegistry.conceptManager());
 
-        Optional<Message.Answer> response;
-        Optional<Map<Identifier.Variable, Concept>> toBeHackedBack = Materialiser
+        Optional<Message.Conclusion> response = Materialiser
                 .materialise(materialisable, nodeRegistry.traversalEngine(), nodeRegistry.conceptManager())
-                .map(materialisation -> materialisation.bindToConclusion(conclusion, msg.answer()));
-                if (toBeHackedBack.isEmpty()) {
-                    response = Optional.empty();
-                }else {
-                    Map<Identifier.Variable.Retrievable, Concept> hackBackToConceptMap = new HashMap<>();
-                    toBeHackedBack.get().forEach((k,v) -> {
-                        if (k.isRetrievable()) throw TypeDBException.of(UNIMPLEMENTED);
-                        hackBackToConceptMap.put(k.asRetrievable(), v);
-                    });
-                    response = Optional.of(Message.answer(msg.index(), new ConceptMap(hackBackToConceptMap)));
-                }
-        sender.owner().driver().execute(node -> node.receiveMaterialisation(sender, response));
+                .map(materialisation -> materialisation.bindToConclusion(conclusion, msg.answer()))
+                .map(conclusionAnswer -> new Message.Conclusion(msg.index(), conclusionAnswer));
+
+        sender.driver().execute(node -> node.receiveMaterialisation(port, response));
     }
 }

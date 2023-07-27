@@ -1,9 +1,12 @@
 package com.vaticle.typedb.core.reasoner.v4;
 
 import com.vaticle.typedb.core.common.exception.TypeDBException;
+import com.vaticle.typedb.core.concept.Concept;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
+import com.vaticle.typedb.core.traversal.common.Identifier;
 
 import javax.annotation.Nullable;
+import java.util.Map;
 import java.util.Optional;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_CAST;
@@ -16,9 +19,13 @@ public class Message {
         throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Answer.class);
     }
 
+    public Message.Conclusion asConclusion() {
+        throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Conclusion.class);
+    }
+
     public enum MessageType {
         ANSWER,
-        DONE,
+        DONE, CONCLUSION,
 //        ACYCLIC_DONE ?
     }
 
@@ -70,6 +77,24 @@ public class Message {
         @Override
         public String toString() {
             return String.format("Msg:[%d: %s | %s]", index(), type().name(), answer);
+        }
+    }
+
+    public static class Conclusion extends Message {
+
+        private final Map<Identifier.Variable, Concept> conclusionAnswer;
+
+        public Conclusion(int index, Map<Identifier.Variable, Concept> conclusionAnswer) {
+            super(MessageType.CONCLUSION, index);
+            this.conclusionAnswer = conclusionAnswer;
+        }
+
+        public Map<Identifier.Variable, Concept> conclusionAnswer() {
+            return conclusionAnswer;
+        }
+
+        public Message.Conclusion asConclusion() {
+            return this;
         }
     }
 }
