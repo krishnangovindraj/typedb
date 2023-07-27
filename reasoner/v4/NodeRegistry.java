@@ -9,6 +9,7 @@ import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.concurrent.actor.Actor;
 import com.vaticle.typedb.core.concurrent.actor.ActorExecutorGroup;
 import com.vaticle.typedb.core.logic.LogicManager;
+import com.vaticle.typedb.core.logic.Rule;
 import com.vaticle.typedb.core.logic.resolvable.Concludable;
 import com.vaticle.typedb.core.logic.resolvable.Negated;
 import com.vaticle.typedb.core.logic.resolvable.Resolvable;
@@ -20,6 +21,7 @@ import com.vaticle.typedb.core.reasoner.controller.ConjunctionController.Conjunc
 import com.vaticle.typedb.core.reasoner.planner.ConjunctionGraph;
 import com.vaticle.typedb.core.reasoner.planner.ReasonerPlanner;
 import com.vaticle.typedb.core.reasoner.planner.RecursivePlanner;
+import com.vaticle.typedb.core.reasoner.v4.nodes.ConclusionNode;
 import com.vaticle.typedb.core.reasoner.v4.nodes.ConjunctionNode;
 import com.vaticle.typedb.core.reasoner.v4.nodes.MaterialiserNode;
 import com.vaticle.typedb.core.reasoner.v4.nodes.ResolvableNode;
@@ -40,6 +42,7 @@ import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNI
 public class NodeRegistry {
     private final ActorExecutorGroup executorService;
     private final Map<CompoundStreamPlan, SubConjunctionRegistry> conjunctionSubRegistries;
+    private final Map<Rule.Conclusion, ConclusionRegistry> conclusionSubRegistries;
     private final Map<Retrievable, RetrievableRegistry> retrievableSubRegistries;
     private final Map<Concludable, ConcludableRegistry> concludableSubRegistries;
     private final Map<Concludable, ConcludableRegistry> negatedSubRegistries;
@@ -62,6 +65,7 @@ public class NodeRegistry {
         this.planner = planner.asRecursivePlanner();
         this.csPlans = new ConcurrentHashMap<>();
         this.conjunctionSubRegistries = new ConcurrentHashMap<>();
+        this.conclusionSubRegistries = new ConcurrentHashMap<>();
         this.retrievableSubRegistries = new ConcurrentHashMap<>();
         this.concludableSubRegistries = new ConcurrentHashMap<>();
         this.negatedSubRegistries = new ConcurrentHashMap<>();
@@ -80,9 +84,19 @@ public class NodeRegistry {
         });
         Iterators.iterate(csPlans.keySet()).map(callMode -> callMode.conjunction).distinct()
                 .forEachRemaining(this::populateResolvableRegistries);
+
+        Iterators.iterate(concludableSubRegistries.keySet())
+                .flatMap(concludable -> Iterators.iterate(logicManager.applicableRules(concludable).keySet()))
+                .forEachRemaining(this::registerConclusions);
         materialiserNode = Actor.driver(
                 materialiserNodeDriver -> new MaterialiserNode(this, materialiserNodeDriver),
                 executorService);
+    }
+
+    private void registerConclusions(Rule rule) {
+        if (!this.conclusionSubRegistries.containsKey(rule.conclusion())) {
+            conclusionSubRegistries.put(rule.conclusion(), new ConclusionRegistry(rule.conclusion()));
+        }
     }
 
     private void cacheConjunctionStreamPlans(ReasonerPlanner.CallMode callMode) {
@@ -195,10 +209,21 @@ public class NodeRegistry {
         else throw TypeDBException.of(ILLEGAL_STATE);
     }
 
+
+    public SubRegistry<Rule.Conclusion, ConclusionNode> conclusionSubRegistry(Rule.Conclusion conclusion) {
+        assert conclusionSubRegistries.containsKey(conclusion);
+        return conclusionSubRegistries.get(conclusion);
+    }
+
+
     public SubRegistry<?, ?> getRegistry(ConjunctionController.ConjunctionStreamPlan csPlan) {
         return csPlan.isCompoundStreamPlan() ?
                 conjunctionSubRegistry(csPlan.asCompoundStreamPlan()) :
                 resolvableSubRegistry(csPlan.asResolvablePlan().resolvable());
+    }
+
+    public RecursivePlanner planner() {
+        return planner;
     }
 
     public abstract class SubRegistry<KEY, NODE extends ActorNode<NODE>> {
@@ -233,7 +258,6 @@ public class NodeRegistry {
         }
     }
 
-
     public class ConcludableRegistry extends SubRegistry<Concludable, ResolvableNode.ConcludableNode> {
 
 
@@ -264,5 +288,19 @@ public class NodeRegistry {
         protected Actor.Driver<ConjunctionNode> createNode(ConceptMap bounds) {
             return createDriverAndInitialise(driver -> new ConjunctionNode(conjunction, bounds, key, NodeRegistry.this, driver));
         }
+    }
+
+    public class ConclusionRegistry extends SubRegistry<Rule.Conclusion, ConclusionNode> {
+
+
+        private ConclusionRegistry(Rule.Conclusion conclusion) {
+            super(conclusion);
+        }
+
+        @Override
+        protected Actor.Driver<ConclusionNode> createNode(ConceptMap bounds) {
+            return createDriverAndInitialise(driver -> new ConclusionNode(key, bounds, NodeRegistry.this, driver));
+        }
+
     }
 }

@@ -69,7 +69,7 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
 
     @Override
     public void receive(ActorNode.Port onPort, Message received) {
-        LOG.info("Received {} from {}", received, onPort.owner().debugName().get() );
+        LOG.info("Received {} from {}", received, onPort.remote().debugName().get() );
         switch (received.type()) {
             case ANSWER: {
                 if (onPort == leftChildPort) receiveLeft(onPort, received.asAnswer().answer());
