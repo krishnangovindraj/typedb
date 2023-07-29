@@ -231,7 +231,7 @@ public class Reasoner {
     public FunctionalIterator<ConceptMap> executeReasoner(Disjunction disjunction, Filter filter, Context.Query context) {
         ReasonerProducerV4.Basic producer;
         if (disjunction.conjunctions().size() == 1) {
-            producer = new ReasonerProducerV4.Basic(ResolvableConjunction.of(disjunction.conjunctions().get(0)), context.options(), nodeRegistry, explainablesManager);
+            producer = new ReasonerProducerV4.Basic(ResolvableConjunction.of(disjunction.conjunctions().get(0)), filter, context.options(), nodeRegistry, explainablesManager);
         } else throw TypeDBException.of(UNIMPLEMENTED);
 //        ReasonerProducer.Match producer = disjunction.conjunctions().size() == 1
 //                ? new ReasonerProducer.Match.Conjunction(disjunction.conjunctions().get(0), filter, context.options(), controllerRegistry, explainablesManager)
