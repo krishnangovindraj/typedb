@@ -27,6 +27,7 @@ import com.vaticle.typedb.core.reasoner.v4.nodes.MaterialiserNode;
 import com.vaticle.typedb.core.reasoner.v4.nodes.ResolvableNode;
 import com.vaticle.typedb.core.traversal.TraversalEngine;
 import com.vaticle.typedb.core.traversal.common.Identifier;
+import com.vaticle.typedb.core.traversal.common.Modifiers;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -75,10 +76,10 @@ public class NodeRegistry {
         this.terminated = new AtomicBoolean(false);
     }
 
-    void prepare(ResolvableConjunction rootConjunction, ConceptMap bounds) {
-        Set<Variable> boundVars = iterate(bounds.concepts().keySet()).map(id -> rootConjunction.pattern().variable(id)).toSet();
+    void prepare(ResolvableConjunction rootConjunction, ConceptMap rootBounds, Modifiers.Filter rootFilter) {
+        Set<Variable> boundVars = iterate(rootBounds.concepts().keySet()).map(id -> rootConjunction.pattern().variable(id)).toSet();
         planner.plan(rootConjunction, boundVars);
-        cacheConjunctionStreamPlans(new ReasonerPlanner.CallMode(rootConjunction, boundVars));
+        cacheConjunctionStreamPlans(new ReasonerPlanner.CallMode(rootConjunction, boundVars), rootFilter.variables());
         csPlans.forEach((callMode, csPlan) -> {
             if (csPlan.isCompoundStreamPlan()) {
                 populateConjunctionRegistries(callMode.conjunction, csPlan.asCompoundStreamPlan());
@@ -101,21 +102,27 @@ public class NodeRegistry {
         }
     }
 
-    private void cacheConjunctionStreamPlans(ReasonerPlanner.CallMode callMode) {
+    private void cacheConjunctionStreamPlans(ReasonerPlanner.CallMode callMode, Set<Identifier.Variable.Retrievable> outputVariables) {
         if (!csPlans.containsKey(callMode)) {
             ReasonerPlanner.Plan plan = planner.getPlan(callMode.conjunction, callMode.mode);
             Set<Identifier.Variable.Retrievable> modeIds = iterate(callMode.mode).map(Variable::id)
                     .filter(Identifier::isRetrievable).map(Identifier.Variable::asRetrievable).toSet();
             ConjunctionController.ConjunctionStreamPlan csPlan = ConjunctionController.ConjunctionStreamPlan.createUnflattened(
-                    plan.plan(), modeIds, callMode.conjunction.pattern().retrieves());
+                    plan.plan(), modeIds, outputVariables);
             csPlans.put(callMode, csPlan);
 
             Set<Variable> runningBounds = new HashSet<>(callMode.mode);
             for (Resolvable<?> resolvable : plan.plan()) {
                 if (resolvable.isConcludable()) {
                     Set<Variable> concludableBounds = Collections.intersection(runningBounds, resolvable.variables());
+                    // Ooops, I need the rules too.
+                    Map<ResolvableConjunction, Set<Identifier.Variable.Retrievable>> conclusionVars = new HashMap<>();
+                    logicManager.applicableRules(resolvable.asConcludable()).keySet().forEach(rule -> {
+                        iterate(rule.condition().disjunction().conjunctions())
+                                .forEachRemaining(conjunction -> conclusionVars.put(conjunction, rule.conclusion().retrievableIds()));
+                    });
                     planner.triggeredCalls(resolvable.asConcludable(), concludableBounds, null)
-                            .forEach(this::cacheConjunctionStreamPlans);
+                            .forEach(triggeredMode -> cacheConjunctionStreamPlans(triggeredMode, conclusionVars.get(triggeredMode.conjunction)));
                 }
                 iterate(resolvable.variables()).filter(v -> v.id().isRetrievable()).forEachRemaining(runningBounds::add);
             }
