@@ -24,6 +24,7 @@ import com.vaticle.typedb.core.concurrent.producer.Producer;
 import com.vaticle.typedb.core.logic.resolvable.ResolvableConjunction;
 import com.vaticle.typedb.core.reasoner.ExplainablesManager;
 import com.vaticle.typedb.core.reasoner.controller.ConjunctionController;
+import com.vaticle.typedb.core.traversal.common.Modifiers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -159,17 +160,19 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
     public static class Basic extends ReasonerProducerV4<Basic.RootNode, ConceptMap> {
 
         private final ResolvableConjunction conjunction;
+        private final Modifiers.Filter filter;
         private AtomicInteger answersReceived;
 
-        public Basic(ResolvableConjunction conjunction, Options.Query options, NodeRegistry nodeRegistry, ExplainablesManager explainablesManager) {
+        public Basic(ResolvableConjunction conjunction, Modifiers.Filter filter, Options.Query options, NodeRegistry nodeRegistry, ExplainablesManager explainablesManager) {
             super(options, nodeRegistry, explainablesManager);
             this.conjunction = conjunction;
+            this.filter = filter;
             this.answersReceived = new AtomicInteger(0);
         }
 
         @Override
         protected void prepare() {
-            nodeRegistry.prepare(conjunction, new ConceptMap());
+            nodeRegistry.prepare(conjunction, new ConceptMap(), filter);
         }
 
         @Override
