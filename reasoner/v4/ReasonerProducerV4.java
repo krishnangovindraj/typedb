@@ -203,7 +203,13 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
             }
 
             @Override
+            public void initialise() {
+                nodeRegistry.perfCounters().startPeriodicPrinting();
+            }
+
+            @Override
             public void terminate(Throwable e) {
+                nodeRegistry.perfCounters().stopPrinting();
                 super.terminate(e);
                 Basic.this.exception(e);
             }
@@ -223,6 +229,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
                         break;
                     case DONE:
                         Basic.this.finish();
+                        nodeRegistry.perfCounters().stopPrinting();
                         break;
                     default:
                         throw TypeDBException.of(ILLEGAL_STATE);

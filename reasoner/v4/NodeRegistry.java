@@ -3,7 +3,7 @@ package com.vaticle.typedb.core.reasoner.v4;
 import com.vaticle.typedb.common.collection.Collections;
 import com.vaticle.typedb.common.collection.ConcurrentSet;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
-import com.vaticle.typedb.core.common.iterator.Iterators;
+import com.vaticle.typedb.core.common.perfcounter.PerfCounters;
 import com.vaticle.typedb.core.concept.ConceptManager;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.concurrent.actor.Actor;
@@ -16,6 +16,7 @@ import com.vaticle.typedb.core.logic.resolvable.Resolvable;
 import com.vaticle.typedb.core.logic.resolvable.ResolvableConjunction;
 import com.vaticle.typedb.core.logic.resolvable.Retrievable;
 import com.vaticle.typedb.core.pattern.variable.Variable;
+import com.vaticle.typedb.core.reasoner.common.ReasonerPerfCounters;
 import com.vaticle.typedb.core.reasoner.controller.ConjunctionController;
 import com.vaticle.typedb.core.reasoner.controller.ConjunctionController.ConjunctionStreamPlan.CompoundStreamPlan;
 import com.vaticle.typedb.core.reasoner.planner.ConjunctionGraph;
@@ -38,12 +39,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 import static com.vaticle.typedb.core.common.iterator.Iterators.iterate;
 
 // TODO: See if we can use ConjunctionStreamPlan as the only one key we need. The nodes can do safe-downcasting
 public class NodeRegistry {
     private final ActorExecutorGroup executorService;
+    private final PerfCounterFields perfCountersFields;
     private final Map<CompoundStreamPlan, SubConjunctionRegistry> conjunctionSubRegistries;
     private final Map<Rule.Conclusion, ConclusionRegistry> conclusionSubRegistries;
     private final Map<Retrievable, RetrievableRegistry> retrievableSubRegistries;
@@ -52,16 +53,19 @@ public class NodeRegistry {
     private final Map<ReasonerPlanner.CallMode, ConjunctionController.ConjunctionStreamPlan> csPlans;
     private final Set<ActorNode<?>> roots;
     private final LogicManager logicManager;
-    private final RecursivePlanner planner;
+    private final RecursivePlanner planner;;
+    private final ReasonerPerfCounters perfCounters;
     private AtomicBoolean terminated;
     private final TraversalEngine traversalEngine;
     private final ConceptManager conceptManager;
     private Actor.Driver<MaterialiserNode> materialiserNode;
 
-    public NodeRegistry(ActorExecutorGroup executorService,
+    public NodeRegistry(ActorExecutorGroup executorService, ReasonerPerfCounters perfCounters,
                         ConceptManager conceptManager, LogicManager logicManager, TraversalEngine traversalEngine,
                         ReasonerPlanner planner) {
         this.executorService = executorService;
+        this.perfCounters = perfCounters;
+        this.perfCountersFields = new PerfCounterFields(perfCounters);
         this.traversalEngine = traversalEngine;
         this.conceptManager = conceptManager;
         this.logicManager = logicManager;
@@ -248,6 +252,15 @@ public class NodeRegistry {
         return planner;
     }
 
+    public ReasonerPerfCounters perfCounters() {
+        return perfCounters;
+    }
+
+    public PerfCounterFields perfCounterFields() {
+        return perfCountersFields;
+    }
+
+
     public abstract class SubRegistry<KEY, NODE extends ActorNode<NODE>> {
         protected final KEY key;
         private final Map<ConceptMap, NODE> subRegistry;
@@ -334,6 +347,22 @@ public class NodeRegistry {
         @Override
         protected Actor.Driver<ConclusionNode> createNode(ConceptMap bounds) {
             return createDriverAndInitialise(driver -> new ConclusionNode(key, bounds, NodeRegistry.this, driver));
+        }
+
+    }
+
+    public class PerfCounterFields {
+        public final PerfCounters.Counter subConjunctionNodes;
+        public final PerfCounters.Counter resolvableNodes;
+        public final PerfCounters.Counter materialisations;
+        public final PerfCounters.Counter answersInTables;
+
+        private PerfCounterFields(PerfCounters perfCounters) {
+
+            subConjunctionNodes = perfCounters.register("v4_subConjunctionNodes");;
+            resolvableNodes = perfCounters.register("v4_resolvableNodes");
+            materialisations = perfCounters.register("v4_materialisations");
+            answersInTables = perfCounters.register("v4_tabledAnswers");
         }
 
     }
