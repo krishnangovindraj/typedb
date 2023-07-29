@@ -48,7 +48,7 @@ public class NodeRegistry {
     private final Map<Rule.Conclusion, ConclusionRegistry> conclusionSubRegistries;
     private final Map<Retrievable, RetrievableRegistry> retrievableSubRegistries;
     private final Map<Concludable, ConcludableRegistry> concludableSubRegistries;
-    private final Map<Concludable, ConcludableRegistry> negatedSubRegistries;
+    private final Map<Negated, NegatedRegistry> negatedSubRegistries;
     private final Map<ReasonerPlanner.CallMode, ConjunctionController.ConjunctionStreamPlan> csPlans;
     private final Set<ActorNode<?>> roots;
     private final LogicManager logicManager;
@@ -123,6 +123,12 @@ public class NodeRegistry {
                     });
                     planner.triggeredCalls(resolvable.asConcludable(), concludableBounds, null)
                             .forEach(triggeredMode -> cacheConjunctionStreamPlans(triggeredMode, conclusionVars.get(triggeredMode.conjunction)));
+                } else if (resolvable.isNegated()) {
+                    Set<Variable> negatedBounds = Collections.intersection(runningBounds, resolvable.variables());
+                    Set<Identifier.Variable.Retrievable> negatedBoundIds = iterate(negatedBounds).map(v -> v.id().asRetrievable()).toSet();
+                    resolvable.asNegated().disjunction().conjunctions().forEach(nestedConj -> {
+                        cacheConjunctionStreamPlans(new ReasonerPlanner.CallMode(nestedConj, negatedBounds), negatedBoundIds);
+                    });
                 }
                 iterate(resolvable.variables()).filter(v -> v.id().isRetrievable()).forEachRemaining(runningBounds::add);
             }
@@ -146,7 +152,7 @@ public class NodeRegistry {
             } else if (resolvable.isRetrievable()) {
                 retrievableSubRegistries.computeIfAbsent(resolvable.asRetrievable(), RetrievableRegistry::new);
             } else if (resolvable.isNegated()) {
-                throw TypeDBException.of(UNIMPLEMENTED);
+                negatedSubRegistries.computeIfAbsent(resolvable.asNegated(), NegatedRegistry::new);
             } else throw TypeDBException.of(ILLEGAL_STATE);
         });
     }
@@ -161,6 +167,7 @@ public class NodeRegistry {
         return materialiserNode;
     }
 
+    // Now that we have conclusions, Top-level conjunction nodes are local too. But the ones after them aren't
     public SubConjunctionRegistry conjunctionSubRegistry(CompoundStreamPlan compoundStreamPlan) {
         assert conjunctionSubRegistries.containsKey(compoundStreamPlan);
         return conjunctionSubRegistries.get(compoundStreamPlan);
@@ -176,8 +183,9 @@ public class NodeRegistry {
         return concludableSubRegistries.get(concludable);
     }
 
-    public ConcludableRegistry negatedSubRegistry(Negated negated) {
-        throw TypeDBException.of(UNIMPLEMENTED);
+    public NegatedRegistry negatedSubRegistry(Negated negated) {
+        assert negatedSubRegistries.containsKey(negated);
+        return negatedSubRegistries.get(negated);
     }
 
     public <NODE extends ActorNode<NODE>> Actor.Driver<NODE> createLocalNode(Function<Actor.Driver<NODE>, NODE> actorFn) {
@@ -287,6 +295,18 @@ public class NodeRegistry {
             return createDriverAndInitialise(driver -> new ResolvableNode.ConcludableNode(key, bounds, infoNode, NodeRegistry.this, driver));
         }
 
+    }
+
+    public class NegatedRegistry extends SubRegistry<Negated, ResolvableNode.NegatedNode> {
+
+        private NegatedRegistry(Negated negated) {
+            super(negated);
+        }
+
+        @Override
+        protected Actor.Driver<ResolvableNode.NegatedNode> createNode(ConceptMap bounds) {
+            return createDriverAndInitialise(driver -> new ResolvableNode.NegatedNode(key, bounds, NodeRegistry.this, driver));
+        }
     }
 
     public class SubConjunctionRegistry extends SubRegistry<ConjunctionController.ConjunctionStreamPlan.CompoundStreamPlan, ConjunctionNode> {

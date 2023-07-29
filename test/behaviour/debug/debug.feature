@@ -42,6 +42,10 @@ Feature: Debugging Space
     person plays lookup:person;
     name plays lookup:name;
 
+    lookup-complement sub relation, relates person, relates name;
+    person plays lookup-complement:person;
+    name plays lookup-complement:name;
+
 
     rule naming-rule:
     when {
@@ -63,6 +67,14 @@ Feature: Debugging Space
       $n "Doesnt exist";
     } then {
       (person: $p, name: $n) isa lookup;
+    };
+
+    rule lookup-complement:
+    when {
+      $p isa person; $n isa name;
+      not {(person: $p, name: $n) isa lookup;};
+    } then {
+      (person: $p, name: $n) isa lookup-complement;
     };
 
     """
@@ -113,3 +125,14 @@ Feature: Debugging Space
     """
 
     Then verify answer size is: 1
+
+
+  Scenario: test negated
+
+    Given reasoning query
+    """
+    match
+      (person: $p, name: $n) isa lookup-complement;
+    """
+
+    Then verify answer size is: 3

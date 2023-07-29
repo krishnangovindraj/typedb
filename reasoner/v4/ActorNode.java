@@ -3,6 +3,8 @@ package com.vaticle.typedb.core.reasoner.v4;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.common.iterator.Iterators;
 import com.vaticle.typedb.core.concurrent.actor.Actor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -11,8 +13,9 @@ import java.util.function.Supplier;
 public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE> {
     protected enum State {READY, PULLING, DONE}
 
-    protected final NodeRegistry nodeRegistry;
+    private static final Logger LOG = LoggerFactory.getLogger(ActorNode.class);
 
+    protected final NodeRegistry nodeRegistry;
     protected List<ActorNode.Port> ports;
     private int openPortsAcyclic;
     private int openPortsCyclic;
@@ -65,7 +68,8 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
     }
 
     protected void receiveOnPort(Port port, Message message) {
-        port.recordReceive(message);
+        LOG.debug(port.owner() + " received " + message + " from " + port.remote());
+        port.recordReceive(message); // Is it strange that I call this implicitly?
         receive(port, message);
     }
 
