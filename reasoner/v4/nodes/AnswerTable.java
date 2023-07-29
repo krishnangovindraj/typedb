@@ -31,6 +31,10 @@ public class AnswerTable {
         return answers.size();
     }
 
+    public boolean isComplete() {
+        return complete;
+    }
+
     public Optional<Message> answerAt(int index) {
         assert index < answers.size() || (index == answers.size() && !complete);
         return index < answers.size() ? Optional.of(answers.get(index)) : Optional.empty();

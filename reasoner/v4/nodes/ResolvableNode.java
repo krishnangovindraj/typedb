@@ -7,6 +7,7 @@ import com.vaticle.typedb.core.common.iterator.Iterators;
 import com.vaticle.typedb.core.concept.Concept;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.logic.resolvable.Concludable;
+import com.vaticle.typedb.core.logic.resolvable.Negated;
 import com.vaticle.typedb.core.logic.resolvable.Resolvable;
 import com.vaticle.typedb.core.logic.resolvable.Retrievable;
 import com.vaticle.typedb.core.logic.resolvable.Unifier;
@@ -17,6 +18,8 @@ import com.vaticle.typedb.core.reasoner.v4.ActorNode;
 import com.vaticle.typedb.core.reasoner.v4.Message;
 import com.vaticle.typedb.core.reasoner.v4.NodeRegistry;
 import com.vaticle.typedb.core.traversal.common.Identifier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -24,9 +27,12 @@ import java.util.Map;
 import java.util.Set;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
+import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 
 public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE extends ResolvableNode<RESOLVABLE, NODE>>
         extends ActorNode<NODE> {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ResolvableNode.class);
 
     protected final RESOLVABLE resolvable;
     protected final ConceptMap bounds;
@@ -35,6 +41,11 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
         super(nodeRegistry, driver, () -> String.format("ResolvableNode[%s, %s]", resolvable, bounds));
         this.resolvable = resolvable;
         this.bounds = bounds;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("%s[%s::%s]", this.getClass().getSimpleName(), this.resolvable.pattern(), this.bounds);
     }
 
     public static class RetrievalNode<RES extends Resolvable<Conjunction>, RESNODE extends ResolvableNode<RES, RESNODE>>
@@ -75,7 +86,6 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
             super(retrievable, bounds, nodeRegistry, driver);
         }
     }
-
 
     public static class ConcludableLookupNode extends RetrievalNode<Concludable, ConcludableLookupNode> {
         public ConcludableLookupNode(Concludable concludable, ConceptMap bounds, NodeRegistry nodeRegistry, Driver<ConcludableLookupNode> driver) {
@@ -180,6 +190,67 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
                 Message toSend = answerTable.recordAnswer(conceptMap);
                 subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
             });
+        }
+    }
+
+    public static class NegatedNode extends ResolvableNode<Negated, NegatedNode> {
+
+        private final AnswerTable answerTable;
+
+        public NegatedNode(Negated resolvable, ConceptMap bounds, NodeRegistry nodeRegistry, Driver<NegatedNode> driver) {
+            super(resolvable, bounds, nodeRegistry, driver);
+            this.answerTable = new AnswerTable();
+        }
+
+        @Override
+        public void initialise() {
+            super.initialise();
+            resolvable.disjunction().conjunctions().forEach(conjunction -> {
+                createPort(nodeRegistry.getRegistry(nodeRegistry.conjunctionStreamPlan(conjunction, bounds)).getNode(bounds));
+            });
+        }
+
+        @Override
+        public void readAnswerAt(Port reader, int index) {
+            assert index <= 1; // Can only be
+            answerTable.answerAt(index).ifPresentOrElse(
+                    answer -> send(reader.owner(), reader, answer),
+                    () -> propagatePull(reader, index));
+        }
+
+        private void propagatePull(Port reader, int index) {
+            answerTable.registerSubscriber(reader, index);
+            ports.forEach(port -> {
+                assert port.state() == State.READY;
+                port.readNext();
+            });
+        }
+
+        @Override
+        public void receive(Port port, Message message) {
+            switch (message.type()) {
+                case ANSWER: {
+                    if (!answerTable.isComplete()) {
+                        FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+                        Message toSend = answerTable.recordDone();
+                        subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+                        // And we're done. No more pulling.
+                    }
+                    break;
+                }
+                case DONE: {
+                    if (allPortsDone() && !answerTable.isComplete()) {
+                        FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+                        Message toSend = answerTable.recordAnswer(bounds);
+                        subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+                        answerTable.recordDone();
+                    }
+                    break;
+                }
+                default:
+                    throw TypeDBException.of(UNIMPLEMENTED);
+            }
+
         }
     }
 }
