@@ -87,7 +87,7 @@ public class Reasoner {
         this.controllerRegistry = new ControllerRegistry(actor(), traversalEng, conceptMgr, logicMgr, planner, perfCounters, context);
         this.explainablesManager = new ExplainablesManager();
 
-        this.nodeRegistry = new NodeRegistry(actor(), conceptMgr, logicMgr , traversalEng, planner);
+        this.nodeRegistry = new NodeRegistry(actor(), perfCounters, conceptMgr, logicMgr , traversalEng, planner);
     }
 
     public ControllerRegistry controllerRegistry() {

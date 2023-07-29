@@ -41,6 +41,7 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
         super(nodeRegistry, driver, () -> String.format("ResolvableNode[%s, %s]", resolvable, bounds));
         this.resolvable = resolvable;
         this.bounds = bounds;
+        nodeRegistry.perfCounterFields().resolvableNodes.add(1);
     }
 
     @Override

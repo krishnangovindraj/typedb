@@ -39,6 +39,7 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
         this.bounds = bounds;
         this.compoundStreamPlan = compoundStreamPlan;
         this.answerTable = new AnswerTable();
+        nodeRegistry.perfCounterFields().subConjunctionNodes.add(1);
     }
 
     @Override
