@@ -91,7 +91,8 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
     private void receiveLeft(ActorNode.Port onPort, ConceptMap answer) {
         assert onPort == leftChildPort;
         Set<Identifier.Variable.Retrievable> extensionVars = Collections.intersection(answer.concepts().keySet(), compoundStreamPlan.outputs());
-        ActorNode<?> newRightChildNode = nodeRegistry.getRegistry(rightPlan()).getNode(answer.filter(rightPlan().identifiers()));
+        ConceptMap rightChildBounds = merge(answer, this.bounds).filter(rightPlan().identifiers());
+        ActorNode<?> newRightChildNode = nodeRegistry.getRegistry(rightPlan()).getNode(rightChildBounds);
         Port newRightChildPort = createPort(newRightChildNode);
         newRightChildPort.readNext(); // KGFLAG: Strategy
         rightPortExtensions.put(newRightChildPort, answer.filter(extensionVars));
@@ -101,7 +102,7 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
 
     public void receiveRight(ActorNode.Port onPort, ConceptMap answer) {
         FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-        ConceptMap extendedAnswer = merge(rightPortExtensions.get(onPort), answer);
+        ConceptMap extendedAnswer = merge(merge(rightPortExtensions.get(onPort), answer), bounds).filter(compoundStreamPlan.outputs());
         Message toSend = answerTable.recordAnswer(extendedAnswer);
         subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
         onPort.readNext(); // KGFLAG: Strategy
