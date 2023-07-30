@@ -76,31 +76,6 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
         });
     }
 
-    @Override
-    public void receive(Port onPort, Message received) {
-        switch (received.type()) {
-            case ANSWER: {
-                handleAnswer(onPort, received.asAnswer());
-                break;
-            }
-            case CONCLUSION: {
-                handleConclusion(onPort, received.asConclusion());
-                break;
-            }
-            case CONDITIONALLY_DONE: {
-                handleConditionallyDone(onPort);
-                break;
-            }
-            case DONE: {
-                handleDone(onPort);
-                break;
-            }
-            default:
-                throw TypeDBException.of(ILLEGAL_STATE);
-        }
-    }
-
-
     protected void handleAnswer(Port onPort, Message.Answer received) {
         assert onPort == lookupPort;
         recordAndForwardAnswers(Iterators.single(received.answer()));
@@ -114,7 +89,8 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
         onPort.readNext();
     }
 
-    private void handleConditionallyDone(Port onPort) {
+    @Override
+    protected void handleConditionallyDone(Port onPort) {
         if (!onPort.isCyclic()) return;
         if (allPortsDoneConditionally()) {
             assert !answerTable.isConditionallyDone();

@@ -223,18 +223,14 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
             }
 
             @Override
-            public void receive(ActorNode.Port sender, Message message) {
-                switch (message.type()) {
-                    case ANSWER:
-                        Basic.this.receiveAnswer(message.asAnswer().answer());
-                        break;
-                    case DONE:
-                        Basic.this.finish();
-                        nodeRegistry.perfCounters().stopPrinting();
-                        break;
-                    default:
-                        throw TypeDBException.of(ILLEGAL_STATE);
-                }
+            protected void handleAnswer(Port onPort, Message.Answer answer) {
+                Basic.this.receiveAnswer(answer.answer());
+            }
+
+            @Override
+            protected void handleDone(Port onPort) {
+                Basic.this.finish();
+                nodeRegistry.perfCounters().stopPrinting();
             }
         }
     }

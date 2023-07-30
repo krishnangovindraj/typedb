@@ -56,34 +56,20 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
     }
 
     @Override
-    public void receive(Port onPort, Message message) {
-        switch (message.type()) {
-            case ANSWER:
-                handleAnswer(onPort, message.asAnswer());
-                break;
-            case CONDITIONALLY_DONE:
-                handleConditionallyDone(onPort);
-                break;
-            case DONE:
-                handleDone(onPort);
-                break;
-            default: throw TypeDBException.of(UNIMPLEMENTED);
-        }
-    }
-
-    private void handleConditionallyDone(Port onPort) {
+    protected void handleConditionallyDone(Port onPort) {
         if (allPortsDoneConditionally()) {
             handleAllPortsDoneConditionally();
         }
         if (onPort.state() == State.READY) onPort.readNext();
     }
 
+    @Override
     protected void handleAnswer(Port onPort, Message.Answer answer) {
         requestMaterialisation(onPort, answer);
         // Do NOT readNext.
     }
 
-    protected void handleAllPortsDoneConditionally() {
+    private void handleAllPortsDoneConditionally() {
         assert answerTable.isConditionallyDone(); // It is possible that 'cyclic' ports are conditionally done before the acyclic ones are done. but that path should handle it.
 
         // TODO: Consider sending the termination proposal
@@ -91,10 +77,10 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
         throw TypeDBException.of(UNIMPLEMENTED);
     }
 
+    @Override
     protected void handleDone(Port onPort) {
         checkDoneAndMayForward();
     }
-
 
     private void requestMaterialisation(Port onPort, Message.Answer whenConcepts) {
         pendingMaterialisations += 1;

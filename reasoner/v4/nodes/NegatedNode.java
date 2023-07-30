@@ -44,36 +44,22 @@ public class NegatedNode extends ResolvableNode<Negated, NegatedNode> {
     }
 
     @Override
-    public void receive(Port onPort, Message message) {
-        switch (message.type()) {
-            case ANSWER: {
-                handleAnswer(onPort, message.asAnswer());
-                break;
-            }
-            case DONE: {
-                handleDone(onPort);
-                break;
-            }
-            default:
-                throw TypeDBException.of(UNIMPLEMENTED);
+    protected void handleAnswer(Port onPort, Message.Answer asAnswer) {
+        if (!answerTable.isComplete()) {
+            FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+            Message toSend = answerTable.recordDone();
+            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+            // And we're done. No more pulling.
         }
     }
 
+    @Override
     protected void handleDone(Port onPort) {
         if (allPortsDone() && !answerTable.isComplete()) {
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Message toSend = answerTable.recordAnswer(bounds);
             subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
             answerTable.recordDone();
-        }
-    }
-
-    private void handleAnswer(Port onPort, Message.Answer asAnswer) {
-        if (!answerTable.isComplete()) {
-            FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-            Message toSend = answerTable.recordDone();
-            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
-            // And we're done. No more pulling.
         }
     }
 }
