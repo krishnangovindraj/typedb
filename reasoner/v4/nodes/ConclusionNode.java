@@ -10,10 +10,7 @@ import com.vaticle.typedb.core.reasoner.v4.Message;
 import com.vaticle.typedb.core.reasoner.v4.NodeRegistry;
 
 import java.util.Optional;
-import java.util.function.Supplier;
 
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_OPERATION;
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 
 public class ConclusionNode extends ActorNode<ConclusionNode> {
@@ -59,17 +56,31 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
     }
 
     @Override
-    public void receive(Port port, Message message) {
+    public void receive(Port onPort, Message message) {
         switch (message.type()) {
             case ANSWER:
-                requestMaterialisation(port, message.asAnswer());
+                requestMaterialisation(onPort, message.asAnswer());
                 // Do NOT readNext.
+                break;
+            case CONDITIONALLY_DONE:
+                if (allPortsDoneConditionally()) {
+                    handlePortsDoneConditionally();
+                }
+                if (onPort.state() == State.READY) onPort.readNext();
                 break;
             case DONE:
                 checkDoneAndMayForward();
                 break;
             default: throw TypeDBException.of(UNIMPLEMENTED);
         }
+    }
+
+    private void handlePortsDoneConditionally() {
+        assert answerTable.isConditionallyDone(); // It is possible that 'cyclic' ports are conditionally done before the acyclic ones are done. but that path should handle it.
+
+        // TODO: Consider sending the termination proposal
+
+        throw TypeDBException.of(UNIMPLEMENTED);
     }
 
     private void requestMaterialisation(Port onPort, Message.Answer whenConcepts) {
@@ -97,10 +108,14 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
             Message toSend = answerTable.recordDone();
             subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
             return true;
-        } else if (acyclicPortsDone() && !answerTable.isAcyclicDone()) { // Record acyclic done only once
+        } else if (acyclicPortsDone() && !answerTable.isConditionallyDone()) { // Record acyclic done only once
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Message toSend = answerTable.recordAcyclicDone();
             subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+            // May have caused this to be true
+            if (allPortsDoneConditionally()) {
+                handlePortsDoneConditionally();
+            }
             return false;
         }
         return false;

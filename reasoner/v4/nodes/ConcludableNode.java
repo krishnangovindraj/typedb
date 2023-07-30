@@ -4,7 +4,6 @@ import com.vaticle.typedb.common.collection.Pair;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.common.iterator.Iterators;
-import com.vaticle.typedb.core.concept.Concept;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.logic.resolvable.Concludable;
 import com.vaticle.typedb.core.logic.resolvable.Unifier;
@@ -12,7 +11,6 @@ import com.vaticle.typedb.core.reasoner.planner.ConjunctionGraph;
 import com.vaticle.typedb.core.reasoner.v4.ActorNode;
 import com.vaticle.typedb.core.reasoner.v4.Message;
 import com.vaticle.typedb.core.reasoner.v4.NodeRegistry;
-import com.vaticle.typedb.core.traversal.common.Identifier;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -89,11 +87,17 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
             }
             case CONCLUSION: {
                 Pair<Unifier, Unifier.Requirements.Instance> unifierAndRequirements = conclusioNodePorts.get(onPort);
-                Map<Identifier.Variable, Concept> mappedBack = new HashMap<>();
-
                 handleAnswers(unifierAndRequirements.first()
                         .unUnify(received.asConclusion().conclusionAnswer(), unifierAndRequirements.second()));
                 onPort.readNext();
+                break;
+            }
+            case CONDITIONALLY_DONE: {
+                if (allPortsDoneConditionally()) {
+                    assert !answerTable.isConditionallyDone();
+                    handleConditionallyDone();
+                }
+                if (onPort.state() == State.READY) onPort.readNext();
                 break;
             }
             case DONE: {
@@ -101,11 +105,21 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
                     FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
                     Message toSend = answerTable.recordDone();
                     subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+                } else if (allPortsDoneConditionally()) {
+                    handleConditionallyDone();
                 }
                 break;
             }
             default:
                 throw TypeDBException.of(ILLEGAL_STATE);
+        }
+    }
+
+    private void handleConditionallyDone() {
+        if (!answerTable.isConditionallyDone()) {
+            FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+            Message toSend = answerTable.recordAcyclicDone();
+            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
         }
     }
 

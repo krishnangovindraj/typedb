@@ -56,7 +56,8 @@ public class NodeRegistry {
     private final Map<ReasonerPlanner.CallMode, ConjunctionController.ConjunctionStreamPlan> csPlans;
     private final Set<ActorNode<?>> roots;
     private final LogicManager logicManager;
-    private final RecursivePlanner planner;;
+    private final RecursivePlanner planner;
+    ;
     private final ReasonerPerfCounters perfCounters;
     private AtomicBoolean terminated;
     private final TraversalEngine traversalEngine;
@@ -64,6 +65,7 @@ public class NodeRegistry {
     private Actor.Driver<MaterialiserNode> materialiserNode;
 
     private final AtomicInteger nodeAgeClock;
+    private final Set<ConjunctionController.ConjunctionStreamPlan> cyclicConjunctionStreamPlans;
 
     public NodeRegistry(ActorExecutorGroup executorService, ReasonerPerfCounters perfCounters,
                         ConceptManager conceptManager, LogicManager logicManager, TraversalEngine traversalEngine,
@@ -76,6 +78,7 @@ public class NodeRegistry {
         this.logicManager = logicManager;
         this.planner = planner.asRecursivePlanner();
         this.csPlans = new HashMap<>();
+        this.cyclicConjunctionStreamPlans = new HashSet<>();
         this.conjunctionSubRegistries = new HashMap<>();
         this.conclusionSubRegistries = new HashMap<>();
         this.retrievableSubRegistries = new HashMap<>();
@@ -94,6 +97,9 @@ public class NodeRegistry {
         Set<Variable> boundVars = iterate(rootBounds.concepts().keySet()).map(id -> rootConjunction.pattern().variable(id)).toSet();
         planner.plan(rootConjunction, boundVars);
         cacheConjunctionStreamPlans(new ReasonerPlanner.CallMode(rootConjunction, boundVars), rootFilter.variables());
+        csPlans.forEach((callMode, csPlan) -> {
+            cacheIsCyclicConjunctionStreamPlans(planner.conjunctionGraph().conjunctionNode(callMode.conjunction), csPlan);
+        });
         csPlans.forEach((callMode, csPlan) -> {
             if (csPlan.isCompoundStreamPlan()) {
                 populateConjunctionRegistries(callMode.conjunction, csPlan.asCompoundStreamPlan());
@@ -149,6 +155,23 @@ public class NodeRegistry {
         }
     }
 
+    private boolean cacheIsCyclicConjunctionStreamPlans(ConjunctionGraph.ConjunctionNode infoNode, ConjunctionController.ConjunctionStreamPlan conjunctionStreamPlan) {
+        boolean isCyclic = false;
+        if (conjunctionStreamPlan.isResolvablePlan()) {
+            isCyclic  = infoNode.cyclicConcludables().contains(conjunctionStreamPlan.asResolvablePlan().resolvable());
+        } else if (conjunctionStreamPlan.isCompoundStreamPlan()) {
+            for (int i=0; i < conjunctionStreamPlan.asCompoundStreamPlan().size(); i++) {
+                ConjunctionController.ConjunctionStreamPlan child = conjunctionStreamPlan.asCompoundStreamPlan().childAt(i);
+                isCyclic = isCyclic || cacheIsCyclicConjunctionStreamPlans(infoNode, child);
+            }
+        } else throw TypeDBException.of(ILLEGAL_STATE);
+
+        if (isCyclic) {
+            cyclicConjunctionStreamPlans.add(conjunctionStreamPlan);
+            return true;
+        } else return false;
+    }
+
     private void populateConjunctionRegistries(ResolvableConjunction conjunction, CompoundStreamPlan compoundStreamPlan) {
         conjunctionSubRegistries.put(compoundStreamPlan, new SubConjunctionRegistry(conjunction, compoundStreamPlan));
         for (int i = 0; i < compoundStreamPlan.size(); i++) {
@@ -175,6 +198,10 @@ public class NodeRegistry {
         ReasonerPlanner.CallMode callMode = new ReasonerPlanner.CallMode(conjunction,
                 iterate(bounds.concepts().keySet()).map(id -> conjunction.pattern().variable(id)).toSet());
         return csPlans.get(callMode);
+    }
+
+    public boolean isCyclicEdge(ConjunctionController.ConjunctionStreamPlan plan) {
+        return cyclicConjunctionStreamPlans.contains(plan);
     }
 
     public Actor.Driver<MaterialiserNode> materialiserNode() {
@@ -369,7 +396,8 @@ public class NodeRegistry {
 
         private PerfCounterFields(PerfCounters perfCounters) {
 
-            subConjunctionNodes = perfCounters.register("v4_subConjunctionNodes");;
+            subConjunctionNodes = perfCounters.register("v4_subConjunctionNodes");
+            ;
             resolvableNodes = perfCounters.register("v4_resolvableNodes");
             materialisations = perfCounters.register("v4_materialisations");
             answersInTables = perfCounters.register("v4_tabledAnswers");

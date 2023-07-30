@@ -136,3 +136,44 @@ Feature: Debugging Space
     """
 
     Then verify answer size is: 3
+
+
+
+  Scenario: test cycles
+    Given reasoning schema
+     """
+     define
+     node sub attribute, value long;
+     edge sub relation, relates from, relates to;
+     node plays edge:from, plays edge:to;
+     direct-edge sub edge;
+
+     rule transitive-edge:
+     when {
+        (from: $a, to: $b) isa edge;
+        (from: $b, to: $c) isa direct-edge;
+     } then {
+        (from: $a, to: $c) isa edge;
+     };
+     """
+
+    Given reasoning data
+    """
+    insert
+      $n1 1 isa node;
+      $n2 2 isa node;
+      $n3 3 isa node;
+
+      (from: $n1, to: $n2) isa direct-edge;
+      (from: $n2, to: $n3) isa direct-edge;
+    """
+
+    Given reasoning query
+
+    """
+    match
+      (from: $p, to: $n) isa edge;
+    """
+
+    Then verify answer size is: 3
+
