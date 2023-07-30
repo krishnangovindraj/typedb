@@ -115,6 +115,7 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
     }
 
     private void handleConditionallyDone(Port onPort) {
+        if (!onPort.isCyclic()) return;
         if (allPortsDoneConditionally()) {
             assert !answerTable.isConditionallyDone();
             handleAllPortsDoneConditionally();
