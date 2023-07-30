@@ -156,16 +156,20 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
             return owner;
         }
 
+        public ActorNode<?>  remote() {
+            return remote;
+        }
+
+        public boolean isCyclic() {
+            return isCyclic;
+        }
+
         public State state() {
             return state;
         }
 
         public int nextIndex() {
             return nextIndex;
-        }
-
-        public ActorNode<?>  remote() {
-            return remote;
         }
     }
 }
