@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.function.Supplier;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
+import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 
 public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE> {
 
@@ -26,8 +27,8 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
     private int conditionallyOpenCyclicPorts; // How many cyclic ports are still not DONE?
 
     // Termination proposal
-    private final Integer birthTime;
-    private Integer earliestReachableNodeBirth;
+    protected final Integer birthTime;
+    protected Integer earliestReachableNodeBirth;
 
     protected ActorNode(NodeRegistry nodeRegistry, Driver<NODE> driver, Supplier<String> debugName) {
         super(driver, debugName);
@@ -63,6 +64,10 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
                 handleConditionallyDone(onPort);
                 break;
             }
+            case TERMINATION_PROPOSAL: {
+                handleTerminationProposal();
+                break;
+            }
             case DONE: {
                 handleDone(onPort);
                 break;
@@ -70,6 +75,10 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
             default:
                 throw TypeDBException.of(ILLEGAL_STATE);
         }
+    }
+
+    protected void handleTerminationProposal() {
+        throw TypeDBException.of(UNIMPLEMENTED);
     }
 
     protected abstract void handleAnswer(Port onPort, Message.Answer answer);
@@ -157,7 +166,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
         private final ActorNode<?> owner;
         private final ActorNode<?> remote;
         private State state;
-        private int nextIndex;
+        private int lastRequestedIndex;
         private final boolean isCyclic; // Is the edge potentially a cycle? Only true for edges from concludable to conjunction
         private boolean isConditionallyDone; // This should be in the state
 
@@ -165,14 +174,13 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
             this.owner = owner;
             this.remote = remote;
             this.state = State.READY;
-            this.nextIndex = 0;
+            this.lastRequestedIndex = -1;
             this.isCyclic = isCyclic;
             this.isConditionallyDone = false;
         }
 
         private void recordReceive(Message msg) {
-            assert nextIndex == msg.index();
-            nextIndex += 1;
+            assert lastRequestedIndex == msg.index();
             if (msg.type() == Message.MessageType.DONE) {
                 state = State.DONE;
                 this.isConditionallyDone = true; // incase
@@ -180,15 +188,19 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
             } else if (msg.type() == Message.MessageType.CONDITIONALLY_DONE) {
                 this.isConditionallyDone = true;
                 owner.recordConditionallyDone(this);
+                state = State.READY;
             } else {
                 state = State.READY;
             }
+            assert state != State.PULLING;
         }
 
         public void readNext() {
             assert state == State.READY;
             state = State.PULLING;
-            remote.driver().execute(nodeActor -> nodeActor.readAnswerAt(Port.this, nextIndex));
+            lastRequestedIndex += 1;
+            int readIndex = lastRequestedIndex;
+            remote.driver().execute(nodeActor -> nodeActor.readAnswerAt(Port.this, readIndex));
         }
 
         public ActorNode<?> owner() {
@@ -207,8 +219,8 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
             return state;
         }
 
-        public int nextIndex() {
-            return nextIndex;
+        public int lastRequestedIndex() {
+            return lastRequestedIndex;
         }
     }
 }

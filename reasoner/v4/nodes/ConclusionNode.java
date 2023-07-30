@@ -71,10 +71,17 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
 
     private void handleAllPortsDoneConditionally() {
         assert answerTable.isConditionallyDone(); // It is possible that 'cyclic' ports are conditionally done before the acyclic ones are done. but that path should handle it.
+        maySendTerminationProposal();
+//        throw TypeDBException.of(UNIMPLEMENTED);
+    }
 
-        // TODO: Consider sending the termination proposal
-
-        throw TypeDBException.of(UNIMPLEMENTED);
+    private void maySendTerminationProposal() {
+        assert earliestReachableNodeBirth <= birthTime && allPortsDoneConditionally();
+        if (earliestReachableNodeBirth.equals(birthTime)) {
+            FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+            Message toSend = answerTable.recordTerminationProposal(new Message.TerminationProposal(birthTime, answerTable.size()));
+            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+        }
     }
 
     @Override

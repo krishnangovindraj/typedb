@@ -86,4 +86,9 @@ public class AnswerTable {
         this.conditionallyDone = true;
         return msg;
     }
+
+    public Message recordTerminationProposal(Message.TerminationProposal terminationProposal) {
+        answers.add(terminationProposal);
+        return terminationProposal;
+    }
 }

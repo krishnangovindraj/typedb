@@ -172,7 +172,7 @@ Feature: Debugging Space
 
     """
     match
-      (from: $p, to: $n) isa edge;
+      (from: $x, to: $y) isa edge;
     """
 
     Then verify answer size is: 3
