@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
@@ -60,6 +61,8 @@ public class NodeRegistry {
     private final ConceptManager conceptManager;
     private Actor.Driver<MaterialiserNode> materialiserNode;
 
+    private final AtomicInteger nodeAgeClock;
+
     public NodeRegistry(ActorExecutorGroup executorService, ReasonerPerfCounters perfCounters,
                         ConceptManager conceptManager, LogicManager logicManager, TraversalEngine traversalEngine,
                         ReasonerPlanner planner) {
@@ -78,6 +81,11 @@ public class NodeRegistry {
         this.negatedSubRegistries = new HashMap<>();
         this.roots = new ConcurrentSet<>();
         this.terminated = new AtomicBoolean(false);
+        this.nodeAgeClock = new AtomicInteger();
+    }
+
+    public Integer nextNodeAge() {
+        return nodeAgeClock.getAndIncrement();
     }
 
     void prepare(ResolvableConjunction rootConjunction, ConceptMap rootBounds, Modifiers.Filter rootFilter) {

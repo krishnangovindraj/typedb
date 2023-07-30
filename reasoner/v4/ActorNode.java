@@ -11,21 +11,30 @@ import java.util.List;
 import java.util.function.Supplier;
 
 public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE> {
+
     protected enum State {READY, PULLING, DONE}
 
     private static final Logger LOG = LoggerFactory.getLogger(ActorNode.class);
 
     protected final NodeRegistry nodeRegistry;
     protected List<ActorNode.Port> ports;
-    private int openPortsAcyclic;
-    private int openPortsCyclic;
+    private int openAcyclicPorts; // Out of both cyclic and acyclic ports, how many haven't returned ACYCLIC_DONE?
+    private int fullyOpenCyclicPorts; // How many cyclic ports are still not DONE?
+    private int conditionallyOpenCyclicPorts; // How many cyclic ports are still not DONE?
+
+    // Termination proposal
+    private final Integer birthTime;
+    private Integer earliestReachableNodeBirth;
 
     protected ActorNode(NodeRegistry nodeRegistry, Driver<NODE> driver, Supplier<String> debugName) {
         super(driver, debugName);
         this.nodeRegistry = nodeRegistry;
+        this.birthTime = nodeRegistry.nextNodeAge();
         this.ports = new ArrayList<>();
-        this.openPortsAcyclic = 0;
-        this.openPortsCyclic = 0;
+        this.openAcyclicPorts = 0;
+        this.fullyOpenCyclicPorts = 0;
+        this.conditionallyOpenCyclicPorts = 0;
+        this.earliestReachableNodeBirth = birthTime;
     }
 
     protected void initialise() {
@@ -38,23 +47,28 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
     public abstract void receive(ActorNode.Port port, Message message);
 
     protected Port createPort(ActorNode<?> remote) {
+        earliestReachableNodeBirth = Math.min(this.earliestReachableNodeBirth, remote.birthTime);
         return createPort(remote, false);
     }
 
     protected Port createPort(ActorNode<?> remote, boolean isCyclic) {
         Port port = new Port(this, remote, isCyclic);
         ports.add(port);
-        if (isCyclic) openPortsCyclic += 1;
-        else openPortsAcyclic += 1;
+        if (isCyclic) fullyOpenCyclicPorts += 1;
+        else openAcyclicPorts += 1;
         return port;
     }
 
     protected boolean allPortsDone() {
-        return openPortsAcyclic + openPortsCyclic == 0;
+        return openAcyclicPorts + fullyOpenCyclicPorts + conditionallyOpenCyclicPorts  == 0;
     }
 
-    protected boolean acyclicPortsDone() {
-        return openPortsAcyclic == 0;
+    protected boolean acyclicPortsDone() { // Condition for conclusions?
+        return openAcyclicPorts == 0;
+    }
+
+    protected boolean allPortsDoneConditionally() {  // Condition for concludables?
+        return openAcyclicPorts + fullyOpenCyclicPorts == 0;
     }
 
     protected FunctionalIterator<ActorNode.Port> allPorts() {
@@ -70,12 +84,24 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
     protected void receiveOnPort(Port port, Message message) {
         LOG.debug(port.owner() + " received " + message + " from " + port.remote());
         port.recordReceive(message); // Is it strange that I call this implicitly?
+        int messageEarliestReachableNodeBirth = port.remote.earliestReachableNodeBirth; // TODO: Move to message?
+        earliestReachableNodeBirth = Math.min(earliestReachableNodeBirth, messageEarliestReachableNodeBirth);
         receive(port, message);
     }
 
+    private void recordConditionallyDone(ActorNode.Port port) {
+        if (port.isCyclic) {
+            fullyOpenCyclicPorts -= 1; // Else, it's just passing through
+            conditionallyOpenCyclicPorts += 1;
+        }
+    }
+
     private void recordDone(ActorNode.Port port) {
-        if (port.isCyclic) openPortsCyclic -= 1;
-        else openPortsAcyclic -= 1;
+        if (port.isCyclic) {
+            if (!port.isConditionallyDone) recordConditionallyDone(port);
+            conditionallyOpenCyclicPorts -= 1;
+        }
+        else openAcyclicPorts -= 1;
     }
 
     @Override
@@ -94,6 +120,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
         private State state;
         private int nextIndex;
         private final boolean isCyclic; // Is the edge potentially a cycle? Only true for edges from concludable to conjunction
+        private boolean isConditionallyDone; // This should be in the state
 
         private Port(ActorNode<?> owner, ActorNode<?> remote, boolean isCyclic) {
             this.owner = owner;
@@ -101,6 +128,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
             this.state = State.READY;
             this.nextIndex = 0;
             this.isCyclic = isCyclic;
+            this.isConditionallyDone = false;
         }
 
         private void recordReceive(Message msg) {
@@ -108,7 +136,11 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
             nextIndex += 1;
             if (msg.type() == Message.MessageType.DONE) {
                 state = State.DONE;
+                this.isConditionallyDone = true; // incase
                 owner.recordDone(this);
+            } else if (msg.type() == Message.MessageType.CONDITIONALLY_DONE) {
+                this.isConditionallyDone = true;
+                owner.recordConditionallyDone(this);
             } else {
                 state = State.READY;
             }
