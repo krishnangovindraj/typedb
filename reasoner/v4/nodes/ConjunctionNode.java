@@ -1,7 +1,6 @@
 package com.vaticle.typedb.core.reasoner.v4.nodes;
 
 import com.vaticle.typedb.common.collection.Collections;
-import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.concept.Concept;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
@@ -18,9 +17,6 @@ import org.slf4j.LoggerFactory;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-
-
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
 
 public class ConjunctionNode extends ActorNode<ConjunctionNode> {
 
@@ -93,6 +89,14 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
         } else if (allPortsDoneConditionally()) {
             handleAllPortsDoneConditionally();
         }
+    }
+
+    @Override
+    protected void handleUnanimousTerminationProposal(AnswerTable.TerminationProposal terminationProposal) {
+        assert terminationProposal.proposerBirth() <= this.earliestReachableCyclicNodeBirth; // OH NOOOOO! EARLIEST REACHABLE NODE BIRTH MAY NOT BE CYCLIC!
+        FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+        Message toSend = answerTable.recordTerminationProposal(new Message.TerminationProposal(answerTable.size(), terminationProposal));
+        subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
     }
 
     private void handleAllPortsDoneConditionally() {

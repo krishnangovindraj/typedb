@@ -3,11 +3,10 @@ package com.vaticle.typedb.core.reasoner.v4;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.concept.Concept;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
+import com.vaticle.typedb.core.reasoner.v4.nodes.AnswerTable;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 
-import javax.annotation.Nullable;
 import java.util.Map;
-import java.util.Optional;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_CAST;
 
@@ -21,6 +20,10 @@ public abstract class Message {
 
     public Message.Conclusion asConclusion() {
         throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Conclusion.class);
+    }
+
+    public Message.TerminationProposal asTerminationProposal() {
+        throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Answer.class);
     }
 
     public enum MessageType {
@@ -105,10 +108,22 @@ public abstract class Message {
         }
     }
 
-    public static class TerminationProposal extends Message{
+    public static class TerminationProposal extends Message {
 
-        public TerminationProposal(int birthTime, int index) {
+        private final AnswerTable.TerminationProposal terminationProposal;
+
+        public TerminationProposal(int index, AnswerTable.TerminationProposal terminationProposal) {
             super(MessageType.TERMINATION_PROPOSAL, index);
+            this.terminationProposal = terminationProposal;
+
+        }
+
+        public Message.TerminationProposal asTerminationProposal() {
+            return this;
+        }
+
+        public AnswerTable.TerminationProposal terminationProposal() {
+            return terminationProposal;
         }
     }
 }
