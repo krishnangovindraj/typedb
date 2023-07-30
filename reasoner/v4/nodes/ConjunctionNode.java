@@ -71,31 +71,21 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
     }
 
     @Override
-    public void receive(ActorNode.Port onPort, Message received) {
-//        LOG.info("Received {} from {}", received, onPort.remote().debugName().get() );
-        switch (received.type()) {
-            case ANSWER: {
-                handleAnswer(onPort, received);
-            }
-            case CONDITIONALLY_DONE: {
-                handleConditionallyDone(onPort);
-                break;
-            }
-            case DONE: {
-                handleDone(onPort);
-                break;
-            }
-            default:
-                throw TypeDBException.of(ILLEGAL_STATE);
-        }
-    }
-
-    private void handleAnswer(Port onPort, Message received) {
+    protected void handleAnswer(Port onPort, Message.Answer received) {
         if (onPort == leftChildPort) receiveLeft(onPort, received.asAnswer().answer());
         else receiveRight(onPort, received.asAnswer().answer());
     }
 
-    private void handleDone(Port onPort) {
+    @Override
+    protected void handleConditionallyDone(Port onPort) {
+        if (allPortsDoneConditionally()) {
+            handleAllPortsDoneConditionally();
+        }
+        if (onPort.state() == State.READY) onPort.readNext();
+    }
+
+    @Override
+    protected void handleDone(Port onPort) {
         if (allPortsDone()) {
             FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Message toSend = answerTable.recordDone();
@@ -103,13 +93,6 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
         } else if (allPortsDoneConditionally()) {
             handleAllPortsDoneConditionally();
         }
-    }
-
-    protected void handleConditionallyDone(Port onPort) {
-        if (allPortsDoneConditionally()) {
-            handleAllPortsDoneConditionally();
-        }
-        if (onPort.state() == State.READY) onPort.readNext();
     }
 
     private void handleAllPortsDoneConditionally() {
