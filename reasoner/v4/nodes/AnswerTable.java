@@ -1,5 +1,6 @@
 package com.vaticle.typedb.core.reasoner.v4.nodes;
 
+import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.common.iterator.Iterators;
 import com.vaticle.typedb.core.concept.Concept;
@@ -15,16 +16,20 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
+
 public class AnswerTable {
 
     private final List<Message> answers;
     private Set<ActorNode.Port> subscribers;
     private boolean complete;
+    private boolean conditionallyDone;
 
     public AnswerTable() {
         this.answers = new ArrayList<>();
         this.subscribers = new HashSet<>();
         this.complete = false;
+        this.conditionallyDone = false;
     }
 
     public int size() {
@@ -33,6 +38,10 @@ public class AnswerTable {
 
     public boolean isComplete() {
         return complete;
+    }
+
+    public boolean isAcyclicDone() {
+        return complete || conditionallyDone;
     }
 
     public Optional<Message> answerAt(int index) {
@@ -54,7 +63,7 @@ public class AnswerTable {
 
     public Message recordAnswer(ConceptMap answer) {
         assert !complete;
-        Message msg = Message.answer(answers.size(), answer);
+        Message msg = new Message.Answer(answers.size(), answer);
         answers.add(msg);
         return msg;
     }
@@ -67,9 +76,17 @@ public class AnswerTable {
 
     public Message recordDone() {
         assert !complete;
-        Message msg = Message.done(answers.size());
+        Message msg = new Message.Done(answers.size());
         answers.add(msg);
         this.complete = true;
+        return msg;
+    }
+
+    public Message recordAcyclicDone() {
+        assert !conditionallyDone;
+        Message msg = new Message.ConditionallyDone(answers.size());
+        answers.add(msg);
+        this.conditionallyDone = true;
         return msg;
     }
 }
