@@ -75,25 +75,14 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
 //        LOG.info("Received {} from {}", received, onPort.remote().debugName().get() );
         switch (received.type()) {
             case ANSWER: {
-                if (onPort == leftChildPort) receiveLeft(onPort, received.asAnswer().answer());
-                else receiveRight(onPort, received.asAnswer().answer());
+                handleAnswer(onPort, received);
             }
             case CONDITIONALLY_DONE: {
-                if (allPortsDoneConditionally()) {
-                    handleConditionallyDone();
-                }
-                if (onPort.state() == State.READY) onPort.readNext();
+                handleConditionallyDone(onPort);
                 break;
             }
             case DONE: {
-                if (allPortsDone()) {
-                    FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-                    Message toSend = answerTable.recordDone();
-                    subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
-                } else if (allPortsDoneConditionally()) {
-                    handleConditionallyDone();
-                }
-
+                handleDone(onPort);
                 break;
             }
             default:
@@ -101,7 +90,29 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
         }
     }
 
-    private void handleConditionallyDone() {
+    private void handleAnswer(Port onPort, Message received) {
+        if (onPort == leftChildPort) receiveLeft(onPort, received.asAnswer().answer());
+        else receiveRight(onPort, received.asAnswer().answer());
+    }
+
+    private void handleDone(Port onPort) {
+        if (allPortsDone()) {
+            FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+            Message toSend = answerTable.recordDone();
+            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+        } else if (allPortsDoneConditionally()) {
+            handleAllPortsDoneConditionally();
+        }
+    }
+
+    protected void handleConditionallyDone(Port onPort) {
+        if (allPortsDoneConditionally()) {
+            handleAllPortsDoneConditionally();
+        }
+        if (onPort.state() == State.READY) onPort.readNext();
+    }
+
+    private void handleAllPortsDoneConditionally() {
         if (!answerTable.isConditionallyDone()) {
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Message toSend = answerTable.recordAcyclicDone();
