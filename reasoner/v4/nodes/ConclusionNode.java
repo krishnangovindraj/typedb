@@ -59,29 +59,42 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
     public void receive(Port onPort, Message message) {
         switch (message.type()) {
             case ANSWER:
-                requestMaterialisation(onPort, message.asAnswer());
-                // Do NOT readNext.
+                handleAnswer(onPort, message.asAnswer());
                 break;
             case CONDITIONALLY_DONE:
-                if (allPortsDoneConditionally()) {
-                    handlePortsDoneConditionally();
-                }
-                if (onPort.state() == State.READY) onPort.readNext();
+                handleConditionallyDone(onPort);
                 break;
             case DONE:
-                checkDoneAndMayForward();
+                handleDone(onPort);
                 break;
             default: throw TypeDBException.of(UNIMPLEMENTED);
         }
     }
 
-    private void handlePortsDoneConditionally() {
+    private void handleConditionallyDone(Port onPort) {
+        if (allPortsDoneConditionally()) {
+            handleAllPortsDoneConditionally();
+        }
+        if (onPort.state() == State.READY) onPort.readNext();
+    }
+
+    protected void handleAnswer(Port onPort, Message.Answer answer) {
+        requestMaterialisation(onPort, answer);
+        // Do NOT readNext.
+    }
+
+    protected void handleAllPortsDoneConditionally() {
         assert answerTable.isConditionallyDone(); // It is possible that 'cyclic' ports are conditionally done before the acyclic ones are done. but that path should handle it.
 
         // TODO: Consider sending the termination proposal
 
         throw TypeDBException.of(UNIMPLEMENTED);
     }
+
+    protected void handleDone(Port onPort) {
+        checkDoneAndMayForward();
+    }
+
 
     private void requestMaterialisation(Port onPort, Message.Answer whenConcepts) {
         pendingMaterialisations += 1;
@@ -114,7 +127,7 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
             subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
             // May have caused this to be true
             if (allPortsDoneConditionally()) {
-                handlePortsDoneConditionally();
+                handleAllPortsDoneConditionally();
             }
             return false;
         }

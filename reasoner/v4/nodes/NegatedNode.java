@@ -4,6 +4,7 @@ import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.logic.resolvable.Negated;
+import com.vaticle.typedb.core.reasoner.v4.ActorNode;
 import com.vaticle.typedb.core.reasoner.v4.Message;
 import com.vaticle.typedb.core.reasoner.v4.NodeRegistry;
 
@@ -43,29 +44,36 @@ public class NegatedNode extends ResolvableNode<Negated, NegatedNode> {
     }
 
     @Override
-    public void receive(Port port, Message message) {
+    public void receive(Port onPort, Message message) {
         switch (message.type()) {
             case ANSWER: {
-                if (!answerTable.isComplete()) {
-                    FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-                    Message toSend = answerTable.recordDone();
-                    subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
-                    // And we're done. No more pulling.
-                }
+                handleAnswer(onPort, message.asAnswer());
                 break;
             }
             case DONE: {
-                if (allPortsDone() && !answerTable.isComplete()) {
-                    FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-                    Message toSend = answerTable.recordAnswer(bounds);
-                    subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
-                    answerTable.recordDone();
-                }
+                handleDone(onPort);
                 break;
             }
             default:
                 throw TypeDBException.of(UNIMPLEMENTED);
         }
+    }
 
+    protected void handleDone(Port onPort) {
+        if (allPortsDone() && !answerTable.isComplete()) {
+            FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+            Message toSend = answerTable.recordAnswer(bounds);
+            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+            answerTable.recordDone();
+        }
+    }
+
+    private void handleAnswer(Port onPort, Message.Answer asAnswer) {
+        if (!answerTable.isComplete()) {
+            FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+            Message toSend = answerTable.recordDone();
+            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+            // And we're done. No more pulling.
+        }
     }
 }

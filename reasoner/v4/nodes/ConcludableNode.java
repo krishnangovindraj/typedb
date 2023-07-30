@@ -80,34 +80,19 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
     public void receive(Port onPort, Message received) {
         switch (received.type()) {
             case ANSWER: {
-                assert onPort == lookupPort;
-                handleAnswers(Iterators.single(received.asAnswer().answer()));
-                onPort.readNext();
+                handleAnswer(onPort, received.asAnswer());
                 break;
             }
             case CONCLUSION: {
-                Pair<Unifier, Unifier.Requirements.Instance> unifierAndRequirements = conclusioNodePorts.get(onPort);
-                handleAnswers(unifierAndRequirements.first()
-                        .unUnify(received.asConclusion().conclusionAnswer(), unifierAndRequirements.second()));
-                onPort.readNext();
+                handleConclusion(onPort, received.asConclusion());
                 break;
             }
             case CONDITIONALLY_DONE: {
-                if (allPortsDoneConditionally()) {
-                    assert !answerTable.isConditionallyDone();
-                    handleConditionallyDone();
-                }
-                if (onPort.state() == State.READY) onPort.readNext();
+                handleConditionallyDone(onPort);
                 break;
             }
             case DONE: {
-                if (allPortsDone()) {
-                    FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-                    Message toSend = answerTable.recordDone();
-                    subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
-                } else if (allPortsDoneConditionally()) {
-                    handleConditionallyDone();
-                }
+                handleDone(onPort);
                 break;
             }
             default:
@@ -115,7 +100,39 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
         }
     }
 
-    private void handleConditionallyDone() {
+
+    protected void handleAnswer(Port onPort, Message.Answer received) {
+        assert onPort == lookupPort;
+        recordAndForwardAnswers(Iterators.single(received.answer()));
+        onPort.readNext();
+    }
+
+    protected void handleConclusion(Port onPort, Message.Conclusion received) {
+        Pair<Unifier, Unifier.Requirements.Instance> unifierAndRequirements = conclusioNodePorts.get(onPort);
+        recordAndForwardAnswers(unifierAndRequirements.first()
+                .unUnify(received.conclusionAnswer(), unifierAndRequirements.second()));
+        onPort.readNext();
+    }
+
+    private void handleConditionallyDone(Port onPort) {
+        if (allPortsDoneConditionally()) {
+            assert !answerTable.isConditionallyDone();
+            handleAllPortsDoneConditionally();
+        }
+        if (onPort.state() == State.READY) onPort.readNext();
+    }
+
+    protected void handleDone(Port onPort) {
+        if (allPortsDone()) {
+            FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+            Message toSend = answerTable.recordDone();
+            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+        } else if (allPortsDoneConditionally()) {
+            handleAllPortsDoneConditionally();
+        }
+    }
+
+    private void handleAllPortsDoneConditionally() {
         if (!answerTable.isConditionallyDone()) {
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Message toSend = answerTable.recordAcyclicDone();
@@ -123,7 +140,7 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
         }
     }
 
-    private void handleAnswers(FunctionalIterator<ConceptMap> answers) {
+    private void recordAndForwardAnswers(FunctionalIterator<ConceptMap> answers) {
         answers.forEachRemaining(conceptMap -> {
             if (seenAnswers.contains(conceptMap)) return;
             seenAnswers.add(conceptMap);
