@@ -4,6 +4,7 @@ import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.common.iterator.Iterators;
 import com.vaticle.typedb.core.concurrent.actor.Actor;
+import com.vaticle.typedb.core.reasoner.v4.nodes.AnswerTable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,7 +13,6 @@ import java.util.List;
 import java.util.function.Supplier;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 
 public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE> {
 
@@ -28,7 +28,9 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
 
     // Termination proposal
     protected final Integer birthTime;
-    protected Integer earliestReachableNodeBirth;
+    protected Integer earliestReachableCyclicNodeBirth;
+
+    protected BestTerminationProposalTracker bestTerminationProposalTracker;
 
     protected ActorNode(NodeRegistry nodeRegistry, Driver<NODE> driver, Supplier<String> debugName) {
         super(driver, debugName);
@@ -38,7 +40,8 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
         this.openAcyclicPorts = 0;
         this.fullyOpenCyclicPorts = 0;
         this.conditionallyOpenCyclicPorts = 0;
-        this.earliestReachableNodeBirth = birthTime;
+        this.earliestReachableCyclicNodeBirth = birthTime;
+        this.bestTerminationProposalTracker = new BestTerminationProposalTracker();
     }
 
     protected void initialise() {
@@ -65,7 +68,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
                 break;
             }
             case TERMINATION_PROPOSAL: {
-                handleTerminationProposal();
+                handleTerminationProposal(onPort, received.asTerminationProposal());
                 break;
             }
             case DONE: {
@@ -77,8 +80,22 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
         }
     }
 
-    protected void handleTerminationProposal() {
-        throw TypeDBException.of(UNIMPLEMENTED);
+    private void handleTerminationProposal(Port onPort, Message.TerminationProposal terminationProposalMsg) {
+        if (!onPort.isCyclic) {
+            if (onPort.state() == State.READY) onPort.readNext();
+            return; // Not relevant to us
+        }
+
+        AnswerTable.TerminationProposal terminationProposal = terminationProposalMsg.terminationProposal();
+        if (bestTerminationProposalTracker.allInSupport() && bestTerminationProposalTracker.bestTerminationProposal.proposerBirth() <= this.earliestReachableCyclicNodeBirth) {
+            assert terminationProposal.equals(bestTerminationProposalTracker.bestTerminationProposal);
+            handleUnanimousTerminationProposal(terminationProposal);
+        }
+        if (onPort.state() == State.READY) onPort.readNext();
+    }
+
+    protected void handleUnanimousTerminationProposal(AnswerTable.TerminationProposal terminationProposal) {
+        throw TypeDBException.of(ILLEGAL_STATE);
     }
 
     protected abstract void handleAnswer(Port onPort, Message.Answer answer);
@@ -95,11 +112,13 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
 
 
     protected Port createPort(ActorNode<?> remote) {
-        earliestReachableNodeBirth = Math.min(this.earliestReachableNodeBirth, remote.birthTime);
         return createPort(remote, false);
     }
 
     protected Port createPort(ActorNode<?> remote, boolean isCyclic) {
+        if (isCyclic) {
+            earliestReachableCyclicNodeBirth = Math.min(this.earliestReachableCyclicNodeBirth, remote.birthTime);
+        }
         Port port = new Port(this, remote, isCyclic);
         ports.add(port);
         if (isCyclic) fullyOpenCyclicPorts += 1;
@@ -132,8 +151,10 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
     protected void receiveOnPort(Port port, Message message) {
         LOG.debug(port.owner() + " received " + message + " from " + port.remote());
         port.recordReceive(message); // Is it strange that I call this implicitly?
-        int messageEarliestReachableNodeBirth = port.remote.earliestReachableNodeBirth; // TODO: Move to message?
-        earliestReachableNodeBirth = Math.min(earliestReachableNodeBirth, messageEarliestReachableNodeBirth);
+        if (port.isCyclic) {
+            int messageEarliestReachableNodeBirth = port.remote.earliestReachableCyclicNodeBirth; // TODO: Move to message?
+            earliestReachableCyclicNodeBirth = Math.min(earliestReachableCyclicNodeBirth, messageEarliestReachableNodeBirth);
+        }
         receive(port, message);
     }
 
@@ -142,6 +163,10 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
             fullyOpenCyclicPorts -= 1; // Else, it's just passing through
             conditionallyOpenCyclicPorts += 1;
         }
+    }
+
+    private void recordTerminationProposal(AnswerTable.TerminationProposal terminationProposal) {
+        this.bestTerminationProposalTracker.update(terminationProposal);
     }
 
     private void recordDone(ActorNode.Port port) {
@@ -169,6 +194,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
         private int lastRequestedIndex;
         private final boolean isCyclic; // Is the edge potentially a cycle? Only true for edges from concludable to conjunction
         private boolean isConditionallyDone; // This should be in the state
+        private AnswerTable.TerminationProposal terminationProposal;
 
         private Port(ActorNode<?> owner, ActorNode<?> remote, boolean isCyclic) {
             this.owner = owner;
@@ -177,9 +203,11 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
             this.lastRequestedIndex = -1;
             this.isCyclic = isCyclic;
             this.isConditionallyDone = false;
+            this.terminationProposal = null;
         }
 
         private void recordReceive(Message msg) {
+            assert state == State.PULLING;
             assert lastRequestedIndex == msg.index();
             if (msg.type() == Message.MessageType.DONE) {
                 state = State.DONE;
@@ -188,6 +216,11 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
             } else if (msg.type() == Message.MessageType.CONDITIONALLY_DONE) {
                 this.isConditionallyDone = true;
                 owner.recordConditionallyDone(this);
+                state = State.READY;
+            } else if (msg.type() == Message.MessageType.TERMINATION_PROPOSAL) {
+                assert (this.terminationProposal == null) || (msg.asTerminationProposal().terminationProposal().betterThan(this.terminationProposal));
+                this.terminationProposal = msg.asTerminationProposal().terminationProposal();
+                owner.recordTerminationProposal(terminationProposal);
                 state = State.READY;
             } else {
                 state = State.READY;
@@ -221,6 +254,32 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
 
         public int lastRequestedIndex() {
             return lastRequestedIndex;
+        }
+    }
+
+    private class BestTerminationProposalTracker {
+        private AnswerTable.TerminationProposal bestTerminationProposal;
+        private int countInSupport;
+
+        private BestTerminationProposalTracker() {
+            bestTerminationProposal = null;
+            countInSupport = 0;
+        }
+
+        private void update(AnswerTable.TerminationProposal newTerminationProposal) {
+            if (bestTerminationProposal == null) {
+                bestTerminationProposal = newTerminationProposal;
+                this.countInSupport = 1;
+            } else if (newTerminationProposal.equals(this.bestTerminationProposal)) {
+                countInSupport += 1;
+            } else if (newTerminationProposal.betterThan(this.bestTerminationProposal)) {
+                this.bestTerminationProposal = newTerminationProposal;
+                this.countInSupport = 1;
+            }
+        }
+
+        private boolean allInSupport() {
+            return ActorNode.this.allPortsDoneConditionally() && this.countInSupport == ActorNode.this.conditionallyOpenCyclicPorts;
         }
     }
 }
