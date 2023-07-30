@@ -11,7 +11,7 @@ import java.util.Optional;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_CAST;
 
-public class Message {
+public abstract class Message {
     private final MessageType msgType;
     private final int index;
 
@@ -25,22 +25,14 @@ public class Message {
 
     public enum MessageType {
         ANSWER,
-        DONE, CONCLUSION,
-//        ACYCLIC_DONE ?
+        CONCLUSION,
+        CONDITIONALLY_DONE,
+        DONE,
     }
-
 
     private Message(MessageType msgType, int index) {
         this.msgType = msgType;
         this.index = index;
-    }
-
-    public static Message.Answer answer(int index, ConceptMap conceptMap) {
-        return new Message.Answer(MessageType.ANSWER, index, conceptMap);
-    }
-
-    public static Message done(int index) {
-        return new Message(MessageType.DONE, index);
     }
 
     public MessageType type() {
@@ -60,8 +52,8 @@ public class Message {
 
         private final ConceptMap answer;
 
-        private Answer(MessageType msgType, int index, ConceptMap answer) {
-            super(msgType, index);
+        public Answer(int index, ConceptMap answer) {
+            super(MessageType.ANSWER, index);
             this.answer = answer;
         }
 
@@ -97,4 +89,19 @@ public class Message {
             return this;
         }
     }
+
+    public static class ConditionallyDone extends Message {
+
+        public ConditionallyDone(int index) {
+            super(MessageType.CONDITIONALLY_DONE, index);
+        }
+    }
+
+    public static class Done extends Message {
+
+        public Done(int index) {
+            super(MessageType.DONE, index);
+        }
+    }
+
 }

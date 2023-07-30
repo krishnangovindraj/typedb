@@ -72,16 +72,6 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
         }
     }
 
-    private boolean checkDoneAndMayForward() {
-        if (allPortsDone() && pendingMaterialisations == 0) {
-            FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-            Message toSend = answerTable.recordDone();
-            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
-            return true;
-        }
-        return false;
-    }
-
     private void requestMaterialisation(Port onPort, Message.Answer whenConcepts) {
         pendingMaterialisations += 1;
         nodeRegistry.materialiserNode()
@@ -99,4 +89,20 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
         checkDoneAndMayForward();
     }
 
+    private boolean checkDoneAndMayForward() {
+        if (pendingMaterialisations > 0) {
+            return false;
+        } else if (allPortsDone() ) {
+            FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+            Message toSend = answerTable.recordDone();
+            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+            return true;
+        } else if (acyclicPortsDone() && !answerTable.isAcyclicDone()) { // Record acyclic done only once
+            FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+            Message toSend = answerTable.recordAcyclicDone();
+            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+            return false;
+        }
+        return false;
+    }
 }
