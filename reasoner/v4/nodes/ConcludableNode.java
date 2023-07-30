@@ -91,7 +91,11 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
 
     @Override
     protected void handleConditionallyDone(Port onPort) {
-        if (!onPort.isCyclic()) return;
+        if (!onPort.isCyclic()) {
+            if (onPort.state() == State.READY) onPort.readNext();
+            return;
+        }
+
         if (allPortsDoneConditionally()) {
             assert !answerTable.isConditionallyDone();
             handleAllPortsDoneConditionally();
