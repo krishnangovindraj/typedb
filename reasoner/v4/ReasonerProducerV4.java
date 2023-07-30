@@ -32,7 +32,6 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
 import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducerV4.State.EXCEPTION;
 import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducerV4.State.FINISHED;
 import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducerV4.State.INIT;
@@ -218,7 +217,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
             @Override
             public void readAnswerAt(ActorNode.Port reader, int index) {
                 if (port == null) port = createPort(subRegistry.getNode(new ConceptMap()));
-                assert index == port.nextIndex();
+                assert index == port.lastRequestedIndex() + 1;
                 port.readNext();
             }
 

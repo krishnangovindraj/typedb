@@ -27,6 +27,7 @@ public abstract class Message {
         ANSWER,
         CONCLUSION,
         CONDITIONALLY_DONE,
+        TERMINATION_PROPOSAL,
         DONE,
     }
 
@@ -104,4 +105,10 @@ public abstract class Message {
         }
     }
 
+    public static class TerminationProposal extends Message{
+
+        public TerminationProposal(int birthTime, int index) {
+            super(MessageType.TERMINATION_PROPOSAL, index);
+        }
+    }
 }
