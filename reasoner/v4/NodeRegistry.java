@@ -22,9 +22,11 @@ import com.vaticle.typedb.core.reasoner.controller.ConjunctionController.Conjunc
 import com.vaticle.typedb.core.reasoner.planner.ConjunctionGraph;
 import com.vaticle.typedb.core.reasoner.planner.ReasonerPlanner;
 import com.vaticle.typedb.core.reasoner.planner.RecursivePlanner;
+import com.vaticle.typedb.core.reasoner.v4.nodes.ConcludableNode;
 import com.vaticle.typedb.core.reasoner.v4.nodes.ConclusionNode;
 import com.vaticle.typedb.core.reasoner.v4.nodes.ConjunctionNode;
 import com.vaticle.typedb.core.reasoner.v4.nodes.MaterialiserNode;
+import com.vaticle.typedb.core.reasoner.v4.nodes.NegatedNode;
 import com.vaticle.typedb.core.reasoner.v4.nodes.ResolvableNode;
 import com.vaticle.typedb.core.traversal.TraversalEngine;
 import com.vaticle.typedb.core.traversal.common.Identifier;
@@ -301,7 +303,7 @@ public class NodeRegistry {
         }
     }
 
-    public class ConcludableRegistry extends SubRegistry<Concludable, ResolvableNode.ConcludableNode> {
+    public class ConcludableRegistry extends SubRegistry<Concludable, ConcludableNode> {
 
 
         private final ConjunctionGraph.ConjunctionNode infoNode;
@@ -312,21 +314,21 @@ public class NodeRegistry {
         }
 
         @Override
-        protected Actor.Driver<ResolvableNode.ConcludableNode> createNode(ConceptMap bounds) {
-            return createDriverAndInitialise(driver -> new ResolvableNode.ConcludableNode(key, bounds, infoNode, NodeRegistry.this, driver));
+        protected Actor.Driver<ConcludableNode> createNode(ConceptMap bounds) {
+            return createDriverAndInitialise(driver -> new ConcludableNode(key, bounds, infoNode, NodeRegistry.this, driver));
         }
 
     }
 
-    public class NegatedRegistry extends SubRegistry<Negated, ResolvableNode.NegatedNode> {
+    public class NegatedRegistry extends SubRegistry<Negated, NegatedNode> {
 
         private NegatedRegistry(Negated negated) {
             super(negated);
         }
 
         @Override
-        protected Actor.Driver<ResolvableNode.NegatedNode> createNode(ConceptMap bounds) {
-            return createDriverAndInitialise(driver -> new ResolvableNode.NegatedNode(key, bounds, NodeRegistry.this, driver));
+        protected Actor.Driver<NegatedNode> createNode(ConceptMap bounds) {
+            return createDriverAndInitialise(driver -> new NegatedNode(key, bounds, NodeRegistry.this, driver));
         }
     }
 
