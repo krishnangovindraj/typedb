@@ -1,6 +1,5 @@
 package com.vaticle.typedb.core.reasoner.v4.nodes;
 
-import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.common.iterator.Iterators;
 import com.vaticle.typedb.core.concept.Concept;
@@ -15,8 +14,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 
 public class AnswerTable {
 
@@ -40,7 +37,7 @@ public class AnswerTable {
         return complete;
     }
 
-    public boolean isAcyclicDone() {
+    public boolean isConditionallyDone() {
         return complete || conditionallyDone;
     }
 

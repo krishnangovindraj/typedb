@@ -31,6 +31,7 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
     private final AnswerTable answerTable;
     private Port leftChildPort;
     private Map<Port, ConceptMap> rightPortExtensions;
+    private boolean rightChildIsCyclic;
 
 
     public ConjunctionNode(ResolvableConjunction conjunction, ConceptMap bounds, CompoundStreamPlan compoundStreamPlan, NodeRegistry nodeRegistry, Driver<ConjunctionNode> driver) {
@@ -38,6 +39,7 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
         this.conjunction = conjunction;
         this.bounds = bounds;
         this.compoundStreamPlan = compoundStreamPlan;
+        this.rightChildIsCyclic = nodeRegistry.isCyclicEdge(rightPlan());
         this.answerTable = new AnswerTable();
         nodeRegistry.perfCounterFields().subConjunctionNodes.add(1);
     }
@@ -46,7 +48,7 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
     protected void initialise() {
         super.initialise();
         assert this.leftChildPort == null;
-        this.leftChildPort = createPort(nodeRegistry.getRegistry(leftPlan()).getNode(bounds.filter(leftPlan().identifiers())));
+        this.leftChildPort = createPort(nodeRegistry.getRegistry(leftPlan()).getNode(bounds.filter(leftPlan().identifiers())), nodeRegistry.isCyclicEdge(leftPlan()));
         this.rightPortExtensions = new HashMap<>();
     }
 
@@ -62,7 +64,7 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
     private void propagatePull(ActorNode.Port reader, int index) {
         answerTable.registerSubscriber(reader, index);
         allPorts().forEachRemaining(port -> {
-            if (port.state() == ActorNode.State.READY) {
+            if (port.state() == ActorNode.State.READY) { // TODO: Get rid of all of these so we only pull when needed
                 port.readNext();
             }
         });
@@ -76,16 +78,34 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
                 if (onPort == leftChildPort) receiveLeft(onPort, received.asAnswer().answer());
                 else receiveRight(onPort, received.asAnswer().answer());
             }
+            case CONDITIONALLY_DONE: {
+                if (allPortsDoneConditionally()) {
+                    handleConditionallyDone();
+                }
+                if (onPort.state() == State.READY) onPort.readNext();
+                break;
+            }
             case DONE: {
                 if (allPortsDone()) {
                     FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
                     Message toSend = answerTable.recordDone();
                     subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+                } else if (allPortsDoneConditionally()) {
+                    handleConditionallyDone();
                 }
+
                 break;
             }
             default:
                 throw TypeDBException.of(ILLEGAL_STATE);
+        }
+    }
+
+    private void handleConditionallyDone() {
+        if (!answerTable.isConditionallyDone()) {
+            FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+            Message toSend = answerTable.recordAcyclicDone();
+            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
         }
     }
 
@@ -94,7 +114,7 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
         Set<Identifier.Variable.Retrievable> extensionVars = Collections.intersection(answer.concepts().keySet(), compoundStreamPlan.outputs());
         ConceptMap rightChildBounds = merge(answer, this.bounds).filter(rightPlan().identifiers());
         ActorNode<?> newRightChildNode = nodeRegistry.getRegistry(rightPlan()).getNode(rightChildBounds);
-        Port newRightChildPort = createPort(newRightChildNode);
+        Port newRightChildPort = createPort(newRightChildNode, rightChildIsCyclic);
         newRightChildPort.readNext(); // KGFLAG: Strategy
         rightPortExtensions.put(newRightChildPort, answer.filter(extensionVars));
 
