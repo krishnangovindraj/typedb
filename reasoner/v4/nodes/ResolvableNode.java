@@ -80,6 +80,17 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
         public void receive(ActorNode.Port onPort, Message message) {
             throw TypeDBException.of(ILLEGAL_STATE);
         }
+
+        @Override
+        protected void handleAnswer(Port onPort, Message.Answer answer) {
+            throw TypeDBException.of(ILLEGAL_STATE);
+        }
+
+        @Override
+        protected void handleDone(Port onPort) {
+            throw TypeDBException.of(ILLEGAL_STATE);
+        }
+
     }
 
     public static class RetrievableNode extends RetrievalNode<Retrievable, RetrievableNode> {
