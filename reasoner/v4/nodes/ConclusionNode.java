@@ -11,13 +11,14 @@ import com.vaticle.typedb.core.reasoner.v4.NodeRegistry;
 
 import java.util.Optional;
 
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
+import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
 
 public class ConclusionNode extends ActorNode<ConclusionNode> {
     private final Rule.Conclusion conclusion;
     private final AnswerTable answerTable;
     private final ConceptMap bounds;
     private int pendingMaterialisations;
+    private boolean pendingCycleTerminationAcknowledgement;
 
     public ConclusionNode(Rule.Conclusion conclusion, ConceptMap bounds, NodeRegistry nodeRegistry, Driver<ConclusionNode> driver) {
         super(nodeRegistry, driver, () -> String.format("Conclusion[%s, %s, %s]", conclusion.rule(), conclusion, bounds));
@@ -25,6 +26,7 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
         this.bounds = bounds;
         this.answerTable = new AnswerTable();
         this.pendingMaterialisations = 0;
+        this.pendingCycleTerminationAcknowledgement = true;
     }
 
     @Override
@@ -76,12 +78,27 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
     }
 
     private void maySendTerminationProposal() {
-        assert earliestReachableNodeBirth <= birthTime && allPortsDoneConditionally();
-        if (earliestReachableNodeBirth.equals(birthTime)) {
+        assert earliestReachableCyclicNodeBirth <= birthTime && allPortsDoneConditionally();
+        if (earliestReachableCyclicNodeBirth.equals(birthTime)) {
             FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-            Message toSend = answerTable.recordTerminationProposal(new Message.TerminationProposal(birthTime, answerTable.size()));
+            AnswerTable.TerminationProposal proposal = new AnswerTable.TerminationProposal(birthTime, answerTable.size());
+            Message toSend = answerTable.recordTerminationProposal(new Message.TerminationProposal(answerTable.size(), proposal));
             subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
         }
+    }
+
+    @Override
+    protected void handleUnanimousTerminationProposal(AnswerTable.TerminationProposal terminationProposal) {
+        if (terminationProposal.proposerBirth() == this.birthTime && terminationProposal.proposerIndex() == this.answerTable.size()) {
+            FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+            Message toSend = answerTable.recordDone(); // WOOHOO!
+            this.pendingCycleTerminationAcknowledgement = true;
+            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+        } else if (terminationProposal.proposerBirth() < this.birthTime) {
+            FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+            Message toSend = answerTable.recordTerminationProposal(new Message.TerminationProposal(answerTable.size(), terminationProposal));
+            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+        } // else ignore - We should get a better one eventually
     }
 
     @Override
@@ -110,10 +127,15 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
         if (pendingMaterialisations > 0) {
             return false;
         } else if (allPortsDone() ) {
-            FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-            Message toSend = answerTable.recordDone();
-            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
-            return true;
+            if (!answerTable.isComplete()) {
+                FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+                Message toSend = answerTable.recordDone();
+                subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+                return true;
+            } else {
+                if (!pendingCycleTerminationAcknowledgement) throw TypeDBException.of(ILLEGAL_STATE);
+                pendingCycleTerminationAcknowledgement = false;
+            }
         } else if (acyclicPortsDone() && !answerTable.isConditionallyDone()) { // Record acyclic done only once
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Message toSend = answerTable.recordAcyclicDone();

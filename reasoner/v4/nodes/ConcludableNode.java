@@ -103,6 +103,7 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
         if (onPort.state() == State.READY) onPort.readNext();
     }
 
+    @Override
     protected void handleDone(Port onPort) {
         if (allPortsDone()) {
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
@@ -111,6 +112,14 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
         } else if (allPortsDoneConditionally()) {
             handleAllPortsDoneConditionally();
         }
+    }
+
+    @Override
+    protected void handleUnanimousTerminationProposal(AnswerTable.TerminationProposal terminationProposal) {
+        assert terminationProposal.proposerBirth() <= this.earliestReachableCyclicNodeBirth; // OH NOOOOO! EARLIEST REACHABLE NODE BIRTH MAY NOT BE CYCLIC!
+        FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+        Message toSend = answerTable.recordTerminationProposal(new Message.TerminationProposal(answerTable.size(), terminationProposal));
+        subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
     }
 
     private void handleAllPortsDoneConditionally() {
