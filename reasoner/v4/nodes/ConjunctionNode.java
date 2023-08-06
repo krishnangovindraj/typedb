@@ -27,7 +27,6 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
     private final ResolvableConjunction conjunction;
     private final ConceptMap bounds;
     private final CompoundStreamPlan compoundStreamPlan;
-    private final AnswerTable answerTable;
     private Port leftChildPort;
     private Map<Port, ConceptMap> rightPortExtensions;
 
@@ -36,7 +35,6 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
         this.conjunction = conjunction;
         this.bounds = bounds;
         this.compoundStreamPlan = compoundStreamPlan;
-        this.answerTable = new AnswerTable();
         nodeRegistry.perfCounterFields().subConjunctionNodes.add(1);
     }
 

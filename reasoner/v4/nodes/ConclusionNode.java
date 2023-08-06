@@ -16,7 +16,6 @@ import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNI
 
 public class ConclusionNode extends ActorNode<ConclusionNode> {
     private final Rule.Conclusion conclusion;
-    private final AnswerTable answerTable;
     private final ConceptMap bounds;
     private int pendingMaterialisations;
     private boolean pendingCycleTerminationAcknowledgement;
@@ -25,7 +24,6 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
         super(nodeRegistry, driver, () -> String.format("Conclusion[%s, %s, %s]", conclusion.rule(), conclusion, bounds));
         this.conclusion = conclusion;
         this.bounds = bounds;
-        this.answerTable = new AnswerTable();
         this.pendingMaterialisations = 0;
         this.pendingCycleTerminationAcknowledgement = true;
     }
