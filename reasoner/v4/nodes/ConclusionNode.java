@@ -36,15 +36,7 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
         });
     }
 
-    @Override
-    public void readAnswerAt(Port reader, int index) {
-        answerTable.answerAt(index).ifPresentOrElse(
-                answer -> send(reader.owner(), reader, answer),
-                () -> propagatePull(reader, index)
-        );
-    }
-
-    private void propagatePull(ActorNode.Port reader, int index) {
+    protected void propagatePull(ActorNode.Port reader, int index) {
         answerTable.registerSubscriber(reader, index);
 
         // KGFLAG: Strategy

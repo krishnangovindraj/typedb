@@ -26,14 +26,8 @@ public class NegatedNode extends ResolvableNode<Negated, NegatedNode> {
     }
 
     @Override
-    public void readAnswerAt(Port reader, int index) {
-        assert index <= 1; // Can only be
-        answerTable.answerAt(index).ifPresentOrElse(
-                answer -> send(reader.owner(), reader, answer),
-                () -> propagatePull(reader, index));
-    }
-
-    private void propagatePull(Port reader, int index) {
+    public void propagatePull(Port reader, int index) {
+        assert index == 0 && answerTable.answerAt(index).isEmpty();
         answerTable.registerSubscriber(reader, index);
         ports.forEach(port -> {
             assert port.isReady();

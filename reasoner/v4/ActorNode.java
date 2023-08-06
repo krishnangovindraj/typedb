@@ -12,10 +12,12 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
+import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 
 public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE> {
 
@@ -45,11 +47,23 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
 
     // TODO: Since port has the index in it, maybe we don't need index here?
     public void readAnswerAt(ActorNode.Port reader, int index, @Nullable Integer pullerId) {
-        readAnswerAt(reader, index); // TODO
+        int effectivePullerId = (pullerId != null) ? pullerId : reader.owner.nodeId;
+
+        Optional<Message> peekAnswer = answerTable.answerAt(index);
+        if (peekAnswer.isPresent()) {
+            send(reader.owner, reader, peekAnswer.get());
+            return;
+        } else if (effectivePullerId >= nodeId) { //  strictly < would let you loop.
+            send(reader.owner, reader, new Message.Snapshot(nodeId, answerTable.size()));
+        } else {
+            propagatePull(reader, index); // This is now effectively a 'pull'
+        }
     }
 
-    public abstract void readAnswerAt(ActorNode.Port reader, int index);
-
+    public final void readAnswerAt(ActorNode.Port reader, int index) {
+        throw TypeDBException.of(ILLEGAL_STATE);
+    }
+    protected abstract void propagatePull(Port reader, int index);
 
     public void receive(Port onPort, Message received) {
         switch (received.type()) {
@@ -153,6 +167,10 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
 
         private void recordReceive(Message msg) {
             assert state == State.PULLING;
+            if (msg.type() == Message.MessageType.SNAPSHOT) { // TODO
+                throw TypeDBException.of(UNIMPLEMENTED);
+            }
+
             assert lastRequestedIndex == msg.index();
             if (msg.type() == Message.MessageType.DONE) {
                 state = State.DONE;
