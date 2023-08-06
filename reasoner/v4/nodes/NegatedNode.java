@@ -38,7 +38,7 @@ public class NegatedNode extends ResolvableNode<Negated, NegatedNode> {
     private void propagatePull(Port reader, int index) {
         answerTable.registerSubscriber(reader, index);
         ports.forEach(port -> {
-            assert port.state() == State.READY;
+            assert port.isReady();
             port.readNext();
         });
     }
