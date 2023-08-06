@@ -28,7 +28,7 @@ import com.vaticle.typedb.core.concurrent.producer.Producers;
 import com.vaticle.typedb.core.pattern.Conjunction;
 import com.vaticle.typedb.core.pattern.variable.Variable;
 import com.vaticle.typedb.core.reasoner.controller.ControllerRegistry;
-import com.vaticle.typedb.core.reasoner.v4.NodeRegistry;
+import com.vaticle.typedb.core.reasoner.v4.nodes.NodeRegistry;
 import com.vaticle.typedb.core.traversal.GraphTraversal;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 

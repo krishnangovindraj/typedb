@@ -44,7 +44,7 @@ import com.vaticle.typedb.core.reasoner.answer.Explanation;
 import com.vaticle.typedb.core.reasoner.common.ReasonerPerfCounters;
 import com.vaticle.typedb.core.reasoner.controller.ControllerRegistry;
 import com.vaticle.typedb.core.reasoner.planner.ReasonerPlanner;
-import com.vaticle.typedb.core.reasoner.v4.NodeRegistry;
+import com.vaticle.typedb.core.reasoner.v4.nodes.NodeRegistry;
 import com.vaticle.typedb.core.reasoner.v4.ReasonerProducerV4;
 import com.vaticle.typedb.core.traversal.TraversalEngine;
 import com.vaticle.typedb.core.traversal.common.Identifier;
