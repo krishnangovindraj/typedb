@@ -47,15 +47,7 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
     }
 
     @Override
-    public void readAnswerAt(ActorNode.Port reader, int index) {
-        // TODO: Here, we pull on everything, and we have no notion of cyclic termination
-        answerTable.answerAt(index).ifPresentOrElse(
-                answer -> send(reader.owner(), reader, answer),
-                () -> propagatePull(reader, index)
-        );
-    }
-
-    private void propagatePull(ActorNode.Port reader, int index) {
+    protected void propagatePull(ActorNode.Port reader, int index) {
         answerTable.registerSubscriber(reader, index);
         allPorts().forEachRemaining(port -> {
             if (port.isReady()) port.readNext();

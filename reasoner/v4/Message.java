@@ -3,7 +3,6 @@ package com.vaticle.typedb.core.reasoner.v4;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.concept.Concept;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
-import com.vaticle.typedb.core.reasoner.v4.nodes.AnswerTable;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 
 import java.util.Map;
@@ -97,4 +96,14 @@ public abstract class Message {
         }
     }
 
+    public static class Snapshot extends Message {
+        public final int ofNode;
+        public final int answerCount;
+
+        public Snapshot(int ofNode, int answerCount) {
+            super(MessageType.SNAPSHOT, -1);
+            this.ofNode = ofNode;
+            this.answerCount = answerCount;
+        }
+    }
 }

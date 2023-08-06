@@ -49,7 +49,7 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
         return String.format("%s[%s::%s]", this.getClass().getSimpleName(), this.resolvable.pattern(), this.bounds);
     }
 
-    public static class RetrievalNode<RES extends Resolvable<Conjunction>, RESNODE extends ResolvableNode<RES, RESNODE>>
+    public abstract static class RetrievalNode<RES extends Resolvable<Conjunction>, RESNODE extends ResolvableNode<RES, RESNODE>>
             extends ResolvableNode<RES, RESNODE> {
 
         private final FunctionalIterator<ConceptMap> traversal;
@@ -60,11 +60,9 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
         }
 
         @Override
-        public void readAnswerAt(ActorNode.Port reader, int index) {
-            answerTable.answerAt(index).ifPresentOrElse(
-                    answer -> send(reader.owner(), reader, answer),
-                    () -> send(reader.owner(), reader, pullTraversalSynchronous())
-            );
+        public void propagatePull(ActorNode.Port reader, int index) {
+            assert answerTable.answerAt(index).isEmpty();
+            send(reader.owner(), reader, pullTraversalSynchronous());
         }
 
         private Message pullTraversalSynchronous() {
