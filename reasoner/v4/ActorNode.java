@@ -8,6 +8,7 @@ import com.vaticle.typedb.core.reasoner.v4.nodes.AnswerTable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -24,9 +25,9 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
     protected List<ActorNode.Port> ports;
     private final Set<Port> activePorts;
     private final Set<Port> pendingPorts;
-
-    // Termination proposal
     protected final Integer nodeId;
+    protected final AnswerTable answerTable;
+
 
     protected ActorNode(NodeRegistry nodeRegistry, Driver<NODE> driver, Supplier<String> debugName) {
         super(driver, debugName);
@@ -35,6 +36,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
         ports = new ArrayList<>();
         activePorts = new HashSet<>();
         pendingPorts = new HashSet<>();
+        answerTable = new AnswerTable();
     }
 
     protected void initialise() {
@@ -42,8 +44,11 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
     }
 
     // TODO: Since port has the index in it, maybe we don't need index here?
-    public abstract void readAnswerAt(ActorNode.Port reader, int index);
+    public void readAnswerAt(ActorNode.Port reader, int index, @Nullable Integer pullerId) {
+        readAnswerAt(reader, index); // TODO
+    }
 
+    public abstract void readAnswerAt(ActorNode.Port reader, int index);
 
 
     public void receive(Port onPort, Message received) {
@@ -166,7 +171,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
             state = State.PULLING;
             lastRequestedIndex += 1;
             int readIndex = lastRequestedIndex;
-            remote.driver().execute(nodeActor -> nodeActor.readAnswerAt(Port.this, readIndex));
+            remote.driver().execute(nodeActor -> nodeActor.readAnswerAt(Port.this, readIndex, null));
         }
 
         public ActorNode<?> owner() {

@@ -53,13 +53,10 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
             extends ResolvableNode<RES, RESNODE> {
 
         private final FunctionalIterator<ConceptMap> traversal;
-        private final AnswerTable answerTable;
-
 
         public RetrievalNode(RES resolvable, ConceptMap bounds, NodeRegistry nodeRegistry, Driver<RESNODE> driver) {
             super(resolvable, bounds, nodeRegistry, driver);
             this.traversal = Traversal.traversalIterator(nodeRegistry, resolvable.pattern(), bounds);
-            this.answerTable = new AnswerTable();
         }
 
         @Override

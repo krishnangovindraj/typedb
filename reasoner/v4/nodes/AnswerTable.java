@@ -78,42 +78,4 @@ public class AnswerTable {
         this.complete = true;
         return msg;
     }
-
-    public Message recordAcyclicDone() {
-        assert !conditionallyDone;
-        Message msg = new Message.ConditionallyDone(answers.size());
-        answers.add(msg);
-        this.conditionallyDone = true;
-        return msg;
-    }
-
-    public Message recordTerminationProposal(Message.TerminationProposal terminationProposal) {
-        // TODO: Find a way to get away without storing all of these but store just one
-        answers.add(terminationProposal);
-        return terminationProposal;
-    }
-
-    public static class TerminationProposal {
-
-        private final int proposerBirth;
-        private final int proposerIndex;
-
-        public TerminationProposal(int proposerBirth, int proposerIndex) {
-            this.proposerBirth = proposerBirth;
-            this.proposerIndex = proposerIndex;
-        }
-
-        public boolean betterThan(TerminationProposal other) {
-            return other.proposerBirth < this.proposerBirth ||
-                    (other.proposerBirth == this.proposerBirth && other.proposerIndex() > this.proposerIndex());
-        }
-
-        public int proposerBirth() {
-            return proposerBirth;
-        }
-
-        public int proposerIndex() {
-            return proposerBirth;
-        }
-    }
 }
