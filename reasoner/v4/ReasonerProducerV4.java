@@ -28,6 +28,7 @@ import com.vaticle.typedb.core.traversal.common.Modifiers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -216,10 +217,16 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
             }
 
             @Override
-            public void readAnswerAt(ActorNode.Port reader, int index) {
+            public void readAnswerAt(ActorNode.Port reader, int index, @Nullable Integer pullerId) {
                 assert index == port.lastRequestedIndex() + 1;
+                propagatePull(reader, index);
+            }
+
+            @Override
+            protected void propagatePull(ActorNode.Port reader, int index) {
                 port.readNext();
             }
+
 
             @Override
             protected void handleAnswer(Port onPort, Message.Answer answer) {

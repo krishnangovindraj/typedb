@@ -51,15 +51,7 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
 
 
     @Override
-    public void readAnswerAt(Port reader, int index) {
-        // TODO: Here, we pull on everything, and we have no notion of cyclic termination
-        answerTable.answerAt(index).ifPresentOrElse(
-                answer -> send(reader.owner(), reader, answer),
-                () -> propagatePull(reader, index)
-        );
-    }
-
-    private void propagatePull(Port reader, int index) {
+    protected void propagatePull(Port reader, int index) {
         answerTable.registerSubscriber(reader, index);
 
         // KGFLAG: Strategy
