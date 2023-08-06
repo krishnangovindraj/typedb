@@ -29,7 +29,7 @@ public abstract class Message {
     public enum MessageType {
         ANSWER,
         CONCLUSION,
-        CONDITIONALLY_DONE,
+        SNAPSHOT,
         TERMINATION_PROPOSAL,
         DONE,
     }
@@ -97,7 +97,7 @@ public abstract class Message {
     public static class ConditionallyDone extends Message {
 
         public ConditionallyDone(int index) {
-            super(MessageType.CONDITIONALLY_DONE, index);
+            super(MessageType.SNAPSHOT, index);
         }
     }
 
