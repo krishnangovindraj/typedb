@@ -1,6 +1,7 @@
 package com.vaticle.typedb.core.reasoner.v4.nodes;
 
 import com.vaticle.typedb.common.collection.Collections;
+import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.concept.Concept;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
@@ -18,6 +19,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
+import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
+
 public class ConjunctionNode extends ActorNode<ConjunctionNode> {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConjunctionNode.class);
@@ -27,15 +30,12 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
     private final AnswerTable answerTable;
     private Port leftChildPort;
     private Map<Port, ConceptMap> rightPortExtensions;
-    private boolean rightChildIsCyclic;
-
 
     public ConjunctionNode(ResolvableConjunction conjunction, ConceptMap bounds, CompoundStreamPlan compoundStreamPlan, NodeRegistry nodeRegistry, Driver<ConjunctionNode> driver) {
         super(nodeRegistry, driver, () -> "ConjunctionNode[" + conjunction + ", " + bounds + "]");
         this.conjunction = conjunction;
         this.bounds = bounds;
         this.compoundStreamPlan = compoundStreamPlan;
-        this.rightChildIsCyclic = nodeRegistry.isCyclicEdge(rightPlan());
         this.answerTable = new AnswerTable();
         nodeRegistry.perfCounterFields().subConjunctionNodes.add(1);
     }
@@ -44,7 +44,7 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
     protected void initialise() {
         super.initialise();
         assert this.leftChildPort == null;
-        this.leftChildPort = createPort(nodeRegistry.getRegistry(leftPlan()).getNode(bounds.filter(leftPlan().identifiers())), nodeRegistry.isCyclicEdge(leftPlan()));
+        this.leftChildPort = createPort(nodeRegistry.getRegistry(leftPlan()).getNode(bounds.filter(leftPlan().identifiers())));
         this.rightPortExtensions = new HashMap<>();
     }
 
@@ -60,9 +60,7 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
     private void propagatePull(ActorNode.Port reader, int index) {
         answerTable.registerSubscriber(reader, index);
         allPorts().forEachRemaining(port -> {
-            if (port.state() == ActorNode.State.READY) { // TODO: Get rid of all of these so we only pull when needed
-                port.readNext();
-            }
+            if (port.isReady()) port.readNext();
         });
     }
 
@@ -73,11 +71,8 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
     }
 
     @Override
-    protected void handleConditionallyDone(Port onPort) {
-        if (allPortsDoneConditionally()) {
-            handleAllPortsDoneConditionally();
-        }
-        if (onPort.state() == State.READY) onPort.readNext();
+    protected void handleSnapshot(Port onPort) {
+        throw TypeDBException.of(UNIMPLEMENTED);
     }
 
     @Override
@@ -86,24 +81,8 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
             FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Message toSend = answerTable.recordDone();
             subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
-        } else if (allPortsDoneConditionally()) {
-            handleAllPortsDoneConditionally();
-        }
-    }
-
-    @Override
-    protected void handleUnanimousTerminationProposal(AnswerTable.TerminationProposal terminationProposal) {
-        assert terminationProposal.proposerBirth() <= this.earliestReachableCyclicNodeBirth; // OH NOOOOO! EARLIEST REACHABLE NODE BIRTH MAY NOT BE CYCLIC!
-        FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-        Message toSend = answerTable.recordTerminationProposal(new Message.TerminationProposal(answerTable.size(), terminationProposal));
-        subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
-    }
-
-    private void handleAllPortsDoneConditionally() {
-        if (!answerTable.isConditionallyDone()) {
-            FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-            Message toSend = answerTable.recordAcyclicDone();
-            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+        } else if (!anyPortsActive()) {
+            throw TypeDBException.of(UNIMPLEMENTED);
         }
     }
 
@@ -112,7 +91,7 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
         Set<Identifier.Variable.Retrievable> extensionVars = Collections.intersection(answer.concepts().keySet(), compoundStreamPlan.outputs());
         ConceptMap rightChildBounds = merge(answer, this.bounds).filter(rightPlan().identifiers());
         ActorNode<?> newRightChildNode = nodeRegistry.getRegistry(rightPlan()).getNode(rightChildBounds);
-        Port newRightChildPort = createPort(newRightChildNode, rightChildIsCyclic);
+        Port newRightChildPort = createPort(newRightChildNode);
         newRightChildPort.readNext(); // KGFLAG: Strategy
         rightPortExtensions.put(newRightChildPort, answer.filter(extensionVars));
 
@@ -133,6 +112,11 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
         return new ConceptMap(compounded, into.explainables().merge(from.explainables()));
     }
 
-    private ConjunctionController.ConjunctionStreamPlan leftPlan() { return compoundStreamPlan.childAt(0); }
-    private ConjunctionController.ConjunctionStreamPlan rightPlan() { return compoundStreamPlan.childAt(1); }
+    private ConjunctionController.ConjunctionStreamPlan leftPlan() {
+        return compoundStreamPlan.childAt(0);
+    }
+
+    private ConjunctionController.ConjunctionStreamPlan rightPlan() {
+        return compoundStreamPlan.childAt(1);
+    }
 }

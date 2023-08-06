@@ -97,9 +97,9 @@ public class NodeRegistry {
         Set<Variable> boundVars = iterate(rootBounds.concepts().keySet()).map(id -> rootConjunction.pattern().variable(id)).toSet();
         planner.plan(rootConjunction, boundVars);
         cacheConjunctionStreamPlans(new ReasonerPlanner.CallMode(rootConjunction, boundVars), rootFilter.variables());
-        csPlans.forEach((callMode, csPlan) -> {
-            cacheIsCyclicConjunctionStreamPlans(planner.conjunctionGraph().conjunctionNode(callMode.conjunction), csPlan);
-        });
+//        csPlans.forEach((callMode, csPlan) -> {
+//            cacheIsCyclicConjunctionStreamPlans(planner.conjunctionGraph().conjunctionNode(callMode.conjunction), csPlan);
+//        });
         csPlans.forEach((callMode, csPlan) -> {
             if (csPlan.isCompoundStreamPlan()) {
                 populateConjunctionRegistries(callMode.conjunction, csPlan.asCompoundStreamPlan());
@@ -154,23 +154,23 @@ public class NodeRegistry {
             }
         }
     }
-
-    private boolean cacheIsCyclicConjunctionStreamPlans(ConjunctionGraph.ConjunctionNode infoNode, ConjunctionController.ConjunctionStreamPlan conjunctionStreamPlan) {
-        boolean isCyclic = false;
-        if (conjunctionStreamPlan.isResolvablePlan()) {
-            isCyclic  = infoNode.cyclicConcludables().contains(conjunctionStreamPlan.asResolvablePlan().resolvable());
-        } else if (conjunctionStreamPlan.isCompoundStreamPlan()) {
-            for (int i=0; i < conjunctionStreamPlan.asCompoundStreamPlan().size(); i++) {
-                ConjunctionController.ConjunctionStreamPlan child = conjunctionStreamPlan.asCompoundStreamPlan().childAt(i);
-                isCyclic = isCyclic || cacheIsCyclicConjunctionStreamPlans(infoNode, child);
-            }
-        } else throw TypeDBException.of(ILLEGAL_STATE);
-
-        if (isCyclic) {
-            cyclicConjunctionStreamPlans.add(conjunctionStreamPlan);
-            return true;
-        } else return false;
-    }
+//
+//    private boolean cacheIsCyclicConjunctionStreamPlans(ConjunctionGraph.ConjunctionNode infoNode, ConjunctionController.ConjunctionStreamPlan conjunctionStreamPlan) {
+//        boolean isCyclic = false;
+//        if (conjunctionStreamPlan.isResolvablePlan()) {
+//            isCyclic  = infoNode.cyclicConcludables().contains(conjunctionStreamPlan.asResolvablePlan().resolvable());
+//        } else if (conjunctionStreamPlan.isCompoundStreamPlan()) {
+//            for (int i=0; i < conjunctionStreamPlan.asCompoundStreamPlan().size(); i++) {
+//                ConjunctionController.ConjunctionStreamPlan child = conjunctionStreamPlan.asCompoundStreamPlan().childAt(i);
+//                isCyclic = isCyclic || cacheIsCyclicConjunctionStreamPlans(infoNode, child);
+//            }
+//        } else throw TypeDBException.of(ILLEGAL_STATE);
+//
+//        if (isCyclic) {
+//            cyclicConjunctionStreamPlans.add(conjunctionStreamPlan);
+//            return true;
+//        } else return false;
+//    }
 
     private void populateConjunctionRegistries(ResolvableConjunction conjunction, CompoundStreamPlan compoundStreamPlan) {
         conjunctionSubRegistries.put(compoundStreamPlan, new SubConjunctionRegistry(conjunction, compoundStreamPlan));
@@ -198,10 +198,6 @@ public class NodeRegistry {
         ReasonerPlanner.CallMode callMode = new ReasonerPlanner.CallMode(conjunction,
                 iterate(bounds.concepts().keySet()).map(id -> conjunction.pattern().variable(id)).toSet());
         return csPlans.get(callMode);
-    }
-
-    public boolean isCyclicEdge(ConjunctionController.ConjunctionStreamPlan plan) {
-        return cyclicConjunctionStreamPlans.contains(plan);
     }
 
     public Actor.Driver<MaterialiserNode> materialiserNode() {
@@ -333,7 +329,7 @@ public class NodeRegistry {
     public class ConcludableRegistry extends SubRegistry<Concludable, ConcludableNode> {
 
 
-        private final ConjunctionGraph.ConjunctionNode infoNode;
+        private final ConjunctionGraph.ConjunctionNode infoNode; // TODO: Remove
 
         private ConcludableRegistry(Concludable concludable, ConjunctionGraph.ConjunctionNode infoNode) {
             super(concludable);
@@ -342,7 +338,7 @@ public class NodeRegistry {
 
         @Override
         protected Actor.Driver<ConcludableNode> createNode(ConceptMap bounds) {
-            return createDriverAndInitialise(driver -> new ConcludableNode(key, bounds, infoNode, NodeRegistry.this, driver));
+            return createDriverAndInitialise(driver -> new ConcludableNode(key, bounds, NodeRegistry.this, driver));
         }
 
     }

@@ -18,20 +18,18 @@ import java.util.Map;
 import java.util.Set;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
+import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 
 public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode> {
     // TODO: See if I can get away without storing answers
-    private final ConjunctionGraph.ConjunctionNode infoNode;
     private final AnswerTable answerTable;
     private final Set<ConceptMap> seenAnswers;
     private Map<Port, Pair<Unifier, Unifier.Requirements.Instance>> conclusioNodePorts; // TODO: Improve
     private Port lookupPort;
 
     public ConcludableNode(Concludable concludable, ConceptMap bounds,
-                           ConjunctionGraph.ConjunctionNode infoNode,
                            NodeRegistry nodeRegistry, Driver<com.vaticle.typedb.core.reasoner.v4.nodes.ConcludableNode> driver) {
         super(concludable, bounds, nodeRegistry, driver);
-        this.infoNode = infoNode;
         this.answerTable = new AnswerTable();
         this.seenAnswers = new HashSet<>();
         this.conclusioNodePorts = null;
@@ -47,9 +45,8 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
 
         nodeRegistry.logicManager().applicableRules(resolvable).forEach((rule, unifiers) -> {
             unifiers.forEach(unifier -> unifier.unify(bounds).ifPresent(boundsAndRequirements -> {
-                boolean isCyclic = infoNode.cyclicConcludables().contains(resolvable);
                 ActorNode<?> conclusionNode = nodeRegistry.conclusionSubRegistry(rule.conclusion()).getNode(boundsAndRequirements.first());
-                conclusioNodePorts.put(createPort(conclusionNode, isCyclic), new Pair<>(unifier, boundsAndRequirements.second()));
+                conclusioNodePorts.put(createPort(conclusionNode), new Pair<>(unifier, boundsAndRequirements.second()));
             }));
         });
     }
@@ -68,11 +65,9 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
         answerTable.registerSubscriber(reader, index);
 
         // KGFLAG: Strategy
-        if (lookupPort.state() == State.READY) lookupPort.readNext();
+        if (lookupPort.isReady()) lookupPort.readNext();
         conclusioNodePorts.keySet().forEach(port -> {
-            if (port.state() == State.READY) {
-                port.readNext();
-            }
+            if (port.isReady()) port.readNext();
         });
     }
 
@@ -90,17 +85,8 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
     }
 
     @Override
-    protected void handleConditionallyDone(Port onPort) {
-        if (!onPort.isCyclic()) {
-            if (onPort.state() == State.READY) onPort.readNext();
-            return;
-        }
-
-        if (allPortsDoneConditionally()) {
-            assert !answerTable.isConditionallyDone();
-            handleAllPortsDoneConditionally();
-        }
-        if (onPort.state() == State.READY) onPort.readNext();
+    protected void handleSnapshot(Port onPort) {
+        throw TypeDBException.of(UNIMPLEMENTED);
     }
 
     @Override
@@ -109,24 +95,8 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Message toSend = answerTable.recordDone();
             subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
-        } else if (allPortsDoneConditionally()) {
-            handleAllPortsDoneConditionally();
-        }
-    }
-
-    @Override
-    protected void handleUnanimousTerminationProposal(AnswerTable.TerminationProposal terminationProposal) {
-        assert terminationProposal.proposerBirth() <= this.earliestReachableCyclicNodeBirth; // OH NOOOOO! EARLIEST REACHABLE NODE BIRTH MAY NOT BE CYCLIC!
-        FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-        Message toSend = answerTable.recordTerminationProposal(new Message.TerminationProposal(answerTable.size(), terminationProposal));
-        subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
-    }
-
-    private void handleAllPortsDoneConditionally() {
-        if (!answerTable.isConditionallyDone()) {
-            FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-            Message toSend = answerTable.recordAcyclicDone();
-            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+        } else if (!anyPortsActive()) {
+            throw TypeDBException.of(UNIMPLEMENTED);
         }
     }
 
