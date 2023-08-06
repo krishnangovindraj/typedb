@@ -22,7 +22,6 @@ import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNI
 
 public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode> {
     // TODO: See if I can get away without storing answers
-    private final AnswerTable answerTable;
     private final Set<ConceptMap> seenAnswers;
     private Map<Port, Pair<Unifier, Unifier.Requirements.Instance>> conclusioNodePorts; // TODO: Improve
     private Port lookupPort;
@@ -30,7 +29,6 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
     public ConcludableNode(Concludable concludable, ConceptMap bounds,
                            NodeRegistry nodeRegistry, Driver<com.vaticle.typedb.core.reasoner.v4.nodes.ConcludableNode> driver) {
         super(concludable, bounds, nodeRegistry, driver);
-        this.answerTable = new AnswerTable();
         this.seenAnswers = new HashSet<>();
         this.conclusioNodePorts = null;
     }

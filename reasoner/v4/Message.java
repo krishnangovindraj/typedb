@@ -22,10 +22,6 @@ public abstract class Message {
         throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Conclusion.class);
     }
 
-    public Message.TerminationProposal asTerminationProposal() {
-        throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Answer.class);
-    }
-
     public enum MessageType {
         ANSWER,
         CONCLUSION,
@@ -94,13 +90,6 @@ public abstract class Message {
         }
     }
 
-    public static class ConditionallyDone extends Message {
-
-        public ConditionallyDone(int index) {
-            super(MessageType.SNAPSHOT, index);
-        }
-    }
-
     public static class Done extends Message {
 
         public Done(int index) {
@@ -108,22 +97,4 @@ public abstract class Message {
         }
     }
 
-    public static class TerminationProposal extends Message {
-
-        private final AnswerTable.TerminationProposal terminationProposal;
-
-        public TerminationProposal(int index, AnswerTable.TerminationProposal terminationProposal) {
-            super(MessageType.TERMINATION_PROPOSAL, index);
-            this.terminationProposal = terminationProposal;
-
-        }
-
-        public Message.TerminationProposal asTerminationProposal() {
-            return this;
-        }
-
-        public AnswerTable.TerminationProposal terminationProposal() {
-            return terminationProposal;
-        }
-    }
 }

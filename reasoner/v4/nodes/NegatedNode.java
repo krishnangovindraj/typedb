@@ -12,11 +12,9 @@ import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNI
 
 public class NegatedNode extends ResolvableNode<Negated, NegatedNode> {
 
-    private final AnswerTable answerTable;
 
     public NegatedNode(Negated resolvable, ConceptMap bounds, NodeRegistry nodeRegistry, Driver<com.vaticle.typedb.core.reasoner.v4.nodes.NegatedNode> driver) {
         super(resolvable, bounds, nodeRegistry, driver);
-        this.answerTable = new AnswerTable();
     }
 
     @Override
