@@ -1,4 +1,4 @@
-package com.vaticle.typedb.core.reasoner.v4;
+package com.vaticle.typedb.core.reasoner.v4.nodes;
 
 import com.vaticle.typedb.common.collection.Collections;
 import com.vaticle.typedb.common.collection.ConcurrentSet;
@@ -22,12 +22,6 @@ import com.vaticle.typedb.core.reasoner.controller.ConjunctionController.Conjunc
 import com.vaticle.typedb.core.reasoner.planner.ConjunctionGraph;
 import com.vaticle.typedb.core.reasoner.planner.ReasonerPlanner;
 import com.vaticle.typedb.core.reasoner.planner.RecursivePlanner;
-import com.vaticle.typedb.core.reasoner.v4.nodes.ConcludableNode;
-import com.vaticle.typedb.core.reasoner.v4.nodes.ConclusionNode;
-import com.vaticle.typedb.core.reasoner.v4.nodes.ConjunctionNode;
-import com.vaticle.typedb.core.reasoner.v4.nodes.MaterialiserNode;
-import com.vaticle.typedb.core.reasoner.v4.nodes.NegatedNode;
-import com.vaticle.typedb.core.reasoner.v4.nodes.ResolvableNode;
 import com.vaticle.typedb.core.traversal.TraversalEngine;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 import com.vaticle.typedb.core.traversal.common.Modifiers;
@@ -93,7 +87,7 @@ public class NodeRegistry {
         return nodeAgeClock.getAndIncrement();
     }
 
-    void prepare(ResolvableConjunction rootConjunction, ConceptMap rootBounds, Modifiers.Filter rootFilter) {
+    public void prepare(ResolvableConjunction rootConjunction, ConceptMap rootBounds, Modifiers.Filter rootFilter) {
         Set<Variable> boundVars = iterate(rootBounds.concepts().keySet()).map(id -> rootConjunction.pattern().variable(id)).toSet();
         planner.plan(rootConjunction, boundVars);
         cacheConjunctionStreamPlans(new ReasonerPlanner.CallMode(rootConjunction, boundVars), rootFilter.variables());
