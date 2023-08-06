@@ -24,6 +24,8 @@ import com.vaticle.typedb.core.concurrent.producer.Producer;
 import com.vaticle.typedb.core.logic.resolvable.ResolvableConjunction;
 import com.vaticle.typedb.core.reasoner.ExplainablesManager;
 import com.vaticle.typedb.core.reasoner.controller.ConjunctionController;
+import com.vaticle.typedb.core.reasoner.v4.nodes.ActorNode;
+import com.vaticle.typedb.core.reasoner.v4.nodes.NodeRegistry;
 import com.vaticle.typedb.core.traversal.common.Modifiers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

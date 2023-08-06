@@ -1,14 +1,9 @@
 package com.vaticle.typedb.core.reasoner.v4.nodes;
 
-import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.logic.resolvable.Negated;
-import com.vaticle.typedb.core.reasoner.v4.ActorNode;
 import com.vaticle.typedb.core.reasoner.v4.Message;
-import com.vaticle.typedb.core.reasoner.v4.NodeRegistry;
-
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 
 public class NegatedNode extends ResolvableNode<Negated, NegatedNode> {
 
