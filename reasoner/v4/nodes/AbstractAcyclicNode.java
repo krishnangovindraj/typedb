@@ -71,6 +71,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
                 break;
             }
             case SNAPSHOT: {
+                activePorts.remove(onPort); pendingPorts.add(onPort);
                 handleSnapshot(onPort);
                 break;
             }

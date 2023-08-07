@@ -3,6 +3,7 @@ package com.vaticle.typedb.core.reasoner.v4;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.concept.Concept;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
+import com.vaticle.typedb.core.reasoner.v4.nodes.ActorNode;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 
 import java.util.Map;
@@ -19,6 +20,10 @@ public abstract class Message {
 
     public Message.Conclusion asConclusion() {
         throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Conclusion.class);
+    }
+
+    public Snapshot asSnapshot() {
+        throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Snapshot.class);
     }
 
     public enum MessageType {
@@ -97,13 +102,17 @@ public abstract class Message {
     }
 
     public static class Snapshot extends Message {
-        public final int ofNode;
-        public final int answerCount;
+        public final ActorNode.NodeSnapshot youngest;
+        public final ActorNode.NodeSnapshot oldest;
 
-        public Snapshot(int ofNode, int answerCount) {
+        public Snapshot(ActorNode.NodeSnapshot youngest, ActorNode.NodeSnapshot oldest) {
             super(MessageType.SNAPSHOT, -1);
-            this.ofNode = ofNode;
-            this.answerCount = answerCount;
+            this.youngest = youngest;
+            this.oldest = oldest;
+        }
+
+        public Snapshot asSnapshot() {
+            return this;
         }
     }
 }
