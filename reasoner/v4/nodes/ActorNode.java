@@ -1,30 +1,31 @@
 package com.vaticle.typedb.core.reasoner.v4.nodes;
 
+import com.vaticle.typedb.common.collection.Pair;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
-import com.vaticle.typedb.core.common.iterator.Iterators;
-import com.vaticle.typedb.core.concurrent.actor.Actor;
 import com.vaticle.typedb.core.reasoner.v4.Message;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Supplier;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
+import static com.vaticle.typedb.core.common.iterator.Iterators.iterate;
 
 public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAcyclicNode<NODE> {
 
     static final Logger LOG = LoggerFactory.getLogger(ActorNode.class);
 
+    private final Integer externalPullerId;
+    private int pullingPorts;
+
     protected ActorNode(NodeRegistry nodeRegistry, Driver<NODE> driver, Supplier<String> debugName) {
         super(nodeRegistry, driver, debugName);
+        externalPullerId = null;
+        pullingPorts = 0;
     }
 
     // TODO: Since port has the index in it, maybe we don't need index here?
@@ -36,14 +37,11 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             send(reader.owner, reader, peekAnswer.get());
             return;
         } else if (effectivePullerId >= nodeId) { //  strictly < would let you loop.
-            send(reader.owner, reader, new Message.Snapshot(nodeId, answerTable.size()));
+            NodeSnapshot nodeSnapshot = new NodeSnapshot(nodeId, answerTable.size());
+            send(reader.owner, reader, new Message.Snapshot(nodeSnapshot, nodeSnapshot));
         } else {
             propagatePull(reader, index); // This is now effectively a 'pull'
         }
-    }
-
-    public final void readAnswerAt(ActorNode.Port reader, int index) {
-        throw TypeDBException.of(ILLEGAL_STATE);
     }
 
     protected abstract void handleAnswer(Port onPort, Message.Answer answer);
@@ -53,7 +51,34 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     }
 
     protected void handleSnapshot(Port onPort) {
-        throw TypeDBException.of(ILLEGAL_STATE);
+        // First:
+        if (activePorts.isEmpty() && pullingPorts == 0) { // TODO: Find a way to pull one at a time
+            assert !pendingPorts.isEmpty();
+            Message.Snapshot sMinMax = findMinMaxSnapshots();
+//                NodeSnapshot currentState = new NodeSnapshot(nodeId, answerTable.size());
+            if ( sMinMax.oldest.nodeId <= this.nodeId ) {
+                if (sMinMax.youngest.nodeId == this.nodeId && sMinMax.youngest.answerCount == this.answerTable.size()) {
+                    TERMINATE!
+                } else {
+                    RESOLVE! PULL WITH OUR ID EXPLICIT!
+                    // We can resolve things. Pull everywhere?
+                }
+            } else {
+                FORWARD SO AN ELDER CAN HANDLE
+                FunctionalIterator<Port> subs = answerTable.clearAndReturnSubscribers(answerTable.size());
+                subs.forEachRemaining(subPort -> send(subPort.owner(), subPort, sMinMax));
+            }
+        } // else do nothing and wait
+    }
+
+    private Message.Snapshot findMinMaxSnapshots() {
+        NodeSnapshot sMin = null, sMax = null;
+        for (Port port: pendingPorts) {
+            assert port.receivedSnapshot != null;
+            if (sMin == null ||  port.receivedSnapshot.youngest.compareTo(sMin) < 0) sMin = port.receivedSnapshot.youngest;
+            if (sMax == null || port.receivedSnapshot.oldest.compareTo(sMax) > 0) sMax = port.receivedSnapshot.oldest;
+        }
+        return new Message.Snapshot(sMin, sMax);
     }
 
     protected abstract void handleDone(Port onPort);
@@ -72,14 +97,14 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         private final ActorNode<?> remote;
         private State state;
         private int lastRequestedIndex;
-        private boolean isPending;
+        private Message.Snapshot receivedSnapshot;
 
         protected Port(ActorNode<?> owner, ActorNode<?> remote) {
             this.owner = owner;
             this.remote = remote;
             this.state = State.READY;
             this.lastRequestedIndex = -1;
-            this.isPending = false;
+            this.receivedSnapshot = null;
         }
 
         protected void recordReceive(Message msg) {
@@ -92,12 +117,14 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             if (msg.type() == Message.MessageType.DONE) {
                 state = State.DONE;
             } else if (msg.type() == Message.MessageType.SNAPSHOT) {
-                this.isPending = true;
+                this.receivedSnapshot = msg.asSnapshot();
+                lastRequestedIndex -= 1; // Is this the right way to do it?
                 state = State.READY;
             } else {
                 state = State.READY;
             }
             assert state != State.PULLING;
+            owner.pullingPorts -= 1;
         }
 
         public void readNext() {
@@ -105,6 +132,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             state = State.PULLING;
             lastRequestedIndex += 1;
             int readIndex = lastRequestedIndex;
+            owner.pullingPorts += 1;
             remote.driver().execute(nodeActor -> nodeActor.readAnswerAt(Port.this, readIndex, null));
         }
 
@@ -125,6 +153,23 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         }
 
         public boolean isReady() { return state == State.READY; }
+    }
+
+    public static class NodeSnapshot implements Comparable<NodeSnapshot> {
+        public final int nodeId;
+        public final int answerCount;
+
+        public NodeSnapshot(int nodeId, int answerCount) {
+            this.nodeId = nodeId;
+            this.answerCount = answerCount;
+        }
+
+        @Override
+        public int compareTo(NodeSnapshot other) {
+            return (this.nodeId == other.nodeId) ?
+                        Integer.compare(this.answerCount, other.answerCount) :
+                        Integer.compare(this.nodeId, other.nodeId);
+        }
     }
 
 }
