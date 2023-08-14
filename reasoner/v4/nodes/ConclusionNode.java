@@ -43,11 +43,6 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
         // Do NOT readNext.
     }
 
-    @Override
-    protected void handleDone(Port onPort) {
-        checkTermination();
-    }
-
     private void requestMaterialisation(Port onPort, Message.Answer whenConcepts) {
         pendingMaterialisations += 1;
         nodeRegistry.materialiserNode()
@@ -62,7 +57,15 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
             subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
         }
         if (port.isReady()) port.readNext();
-        checkTermination();
+        if (checkTermination()) {
+            onTermination();
+        } else checkRetry();
+    }
+
+    @Override
+    protected void checkRetry() {
+        if (pendingMaterialisations > 0) return;
+        else super.checkRetry();
     }
 
     @Override
