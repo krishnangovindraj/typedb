@@ -121,6 +121,14 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
         else throw TypeDBException.of(ILLEGAL_STATE);
     }
 
+    protected boolean allPortsDone() {
+        return activePorts.isEmpty() && pendingPorts.isEmpty();
+    }
+
+    protected boolean anyPortsActive() {
+        return !activePorts.isEmpty();
+    }
+
     @Override
     protected void exception(Throwable e) {
         nodeRegistry.terminate(e);

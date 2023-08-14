@@ -58,22 +58,6 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
         else receiveRight(onPort, received.asAnswer().answer());
     }
 
-    @Override
-    protected void handleSnapshot(Port onPort) {
-        throw TypeDBException.of(UNIMPLEMENTED);
-    }
-
-    @Override
-    protected void handleDone(Port onPort) {
-        if (allPortsDone()) {
-            FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-            Message toSend = answerTable.recordDone();
-            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
-        } else if (!anyPortsActive()) {
-            throw TypeDBException.of(UNIMPLEMENTED);
-        }
-    }
-
     private void receiveLeft(ActorNode.Port onPort, ConceptMap answer) {
         assert onPort == leftChildPort;
         Set<Identifier.Variable.Retrievable> extensionVars = Collections.intersection(answer.concepts().keySet(), compoundStreamPlan.outputs());

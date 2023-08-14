@@ -42,6 +42,7 @@ public class NegatedNode extends ResolvableNode<Negated, NegatedNode> {
 
     @Override
     protected void handleDone(Port onPort) {
+
         if (allPortsDone() && !answerTable.isComplete()) {
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Message toSend = answerTable.recordAnswer(bounds);
