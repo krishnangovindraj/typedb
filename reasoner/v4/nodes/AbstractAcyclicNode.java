@@ -5,8 +5,6 @@ import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.common.iterator.Iterators;
 import com.vaticle.typedb.core.concurrent.actor.Actor;
 import com.vaticle.typedb.core.reasoner.v4.Message;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -17,7 +15,6 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 
 public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>> extends Actor<NODE> {
 
@@ -27,7 +24,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     protected final Set<ActorNode.Port> activePorts;
     protected final Set<ActorNode.Port> pendingPorts;
     protected final AnswerTable answerTable;
-
+    protected Integer pullerId;
 
     protected AbstractAcyclicNode(NodeRegistry nodeRegistry, Driver<NODE> driver, Supplier<String> debugName) {
         super(driver, debugName);
@@ -37,6 +34,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
         activePorts = new HashSet<>();
         pendingPorts = new HashSet<>();
         answerTable = new AnswerTable();
+        pullerId = null; THIS LEADS TO DEADLOCKS. WHAT IF YOU PULL FROM A HIGHER NODE OUTSIDE THE CYCLE?
     }
 
     protected void initialise() {
@@ -45,6 +43,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
 
     // TODO: Since port has the index in it, maybe we don't need index here?
     public void readAnswerAt(ActorNode.Port reader, int index, @Nullable Integer pullerId) {
+        if (pullerId != null && pullerId > nodeId) this.pullerId = pullerId;
         int effectivePullerId = (pullerId != null) ? pullerId : reader.owner().nodeId;
 
         Optional<Message> peekAnswer = answerTable.answerAt(index);
