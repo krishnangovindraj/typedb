@@ -1,6 +1,5 @@
 package com.vaticle.typedb.core.reasoner.v4.nodes;
 
-import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.logic.Rule;
@@ -9,21 +8,16 @@ import com.vaticle.typedb.core.reasoner.v4.Message;
 
 import java.util.Optional;
 
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
-
 public class ConclusionNode extends ActorNode<ConclusionNode> {
     private final Rule.Conclusion conclusion;
     private final ConceptMap bounds;
     private int pendingMaterialisations;
-    private boolean pendingCycleTerminationAcknowledgement;
 
     public ConclusionNode(Rule.Conclusion conclusion, ConceptMap bounds, NodeRegistry nodeRegistry, Driver<ConclusionNode> driver) {
         super(nodeRegistry, driver, () -> String.format("Conclusion[%s, %s, %s]", conclusion.rule(), conclusion, bounds));
         this.conclusion = conclusion;
         this.bounds = bounds;
         this.pendingMaterialisations = 0;
-        this.pendingCycleTerminationAcknowledgement = true;
     }
 
     @Override
@@ -44,11 +38,6 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
     }
 
     @Override
-    protected void handleSnapshot(Port onPort) {
-        throw TypeDBException.of(UNIMPLEMENTED);
-    }
-
-    @Override
     protected void handleAnswer(Port onPort, Message.Answer answer) {
         requestMaterialisation(onPort, answer);
         // Do NOT readNext.
@@ -56,7 +45,7 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
 
     @Override
     protected void handleDone(Port onPort) {
-        checkDoneAndMayForward();
+        checkTermination();
     }
 
     private void requestMaterialisation(Port onPort, Message.Answer whenConcepts) {
@@ -73,25 +62,15 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
             subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
         }
         if (port.isReady()) port.readNext();
-        checkDoneAndMayForward();
+        checkTermination();
     }
 
-    private boolean checkDoneAndMayForward() {
+    @Override
+    protected boolean checkTermination() {
         if (pendingMaterialisations > 0) {
             return false;
-        } else if (allPortsDone()) {
-            if (!answerTable.isComplete()) {
-                FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-                Message toSend = answerTable.recordDone();
-                subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
-                return true;
-            } else {
-                if (!pendingCycleTerminationAcknowledgement) throw TypeDBException.of(ILLEGAL_STATE);
-                pendingCycleTerminationAcknowledgement = false;
-            }
-        } else if (!anyPortsActive()) { // Record acyclic done only once
-            throw TypeDBException.of(UNIMPLEMENTED);
+        } else {
+            return super.checkTermination();
         }
-        return false;
     }
 }
