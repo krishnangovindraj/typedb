@@ -18,12 +18,10 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
     static final Logger LOG = LoggerFactory.getLogger(ActorNode.class);
 
-    private final Integer externalPullerId;
     private int pullingPorts;
 
     protected ActorNode(NodeRegistry nodeRegistry, Driver<NODE> driver, Supplier<String> debugName) {
         super(nodeRegistry, driver, debugName);
-        externalPullerId = null;
         pullingPorts = 0;
     }
 
@@ -53,9 +51,9 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
     @Override
     protected void handleDone(Port onPort) {
-        if (!checkTermination()) {
-            checkRetry();
-        }
+        if (checkTermination()) {
+            onTermination();
+        } else checkRetry();
     }
 
     protected void checkRetry() {
@@ -73,7 +71,8 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
                  } else {
                      assert (DEBUG__stateWhenLastPulled == null || DEBUG__stateWhenLastPulled.answerCount < answerTable.size()); // Ah we might just have gotten more answers :/ Can't assert
                      // RESOLVE! PULL WITH OUR ID EXPLICIT!
-                     pendingPorts.forEach(port -> port.readNext(this.nodeId));
+                     this.pullerId = nodeId;
+                     pendingPorts.forEach(port -> port.readNext());
                      DEBUG__stateWhenLastPulled = new NodeSnapshot(nodeId, answerTable.size());
                  }
              } else {
@@ -85,14 +84,15 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     }
 
     protected boolean checkTermination() {
-        if (allPortsDone()) {
-            FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-            Message toSend = answerTable.recordDone();
-            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
-            return true;
-        } else return false;
+        return allPortsDone();
     }
 
+    protected void onTermination() {
+        assert allPortsDone();
+        FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+        Message toSend = answerTable.recordDone();
+        subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+    }
     protected void handleSnapshot(Port onPort) {
         checkRetry();
     }
@@ -149,16 +149,12 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         }
 
         public void readNext() {
-            readNext(null);
-        }
-
-        public void readNext(Integer pullerId) {
             assert state == State.READY;
             state = State.PULLING;
             lastRequestedIndex += 1;
             int readIndex = lastRequestedIndex;
             owner.pullingPorts += 1;
-            remote.driver().execute(nodeActor -> nodeActor.readAnswerAt(Port.this, readIndex, null));
+            remote.driver().execute(nodeActor -> nodeActor.readAnswerAt(Port.this, readIndex, owner.pullerId));
         }
 
         public ActorNode<?> owner() {
