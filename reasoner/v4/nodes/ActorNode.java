@@ -1,6 +1,5 @@
 package com.vaticle.typedb.core.reasoner.v4.nodes;
 
-import com.vaticle.typedb.common.collection.Pair;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.reasoner.v4.Message;
@@ -50,38 +49,64 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         throw TypeDBException.of(ILLEGAL_STATE);
     }
 
+    private NodeSnapshot DEBUG__stateWhenLastPulled = null;
+
+    @Override
+    protected void handleDone(Port onPort) {
+        if (!checkTermination()) {
+            checkRetry();
+        }
+    }
+
+    protected void checkRetry() {
+         // First:
+         if (activePorts.isEmpty() && pullingPorts == 0) { // TODO: Find a way to pull one at a time
+             assert !pendingPorts.isEmpty();
+             Message.Snapshot sMinMax = findMinMaxSnapshots();
+//          NodeSnapshot currentState = new NodeSnapshot(nodeId, answerTable.size());
+             if ( sMinMax.oldest.nodeId >= this.nodeId ) { // older or same
+                 if (sMinMax.youngest.nodeId == this.nodeId && sMinMax.youngest.answerCount == this.answerTable.size()) {
+                     // TERMINATE!
+                     FunctionalIterator<Port> subs = answerTable.clearAndReturnSubscribers(answerTable.size());
+                     Message msg = answerTable.recordDone();
+                     subs.forEachRemaining(sub -> send(sub.owner, sub, msg));
+                 } else {
+                     assert (DEBUG__stateWhenLastPulled == null || DEBUG__stateWhenLastPulled.answerCount < answerTable.size()); // Ah we might just have gotten more answers :/ Can't assert
+                     // RESOLVE! PULL WITH OUR ID EXPLICIT!
+                     pendingPorts.forEach(port -> port.readNext(this.nodeId));
+                     DEBUG__stateWhenLastPulled = new NodeSnapshot(nodeId, answerTable.size());
+                 }
+             } else {
+                 //  FORWARD SO AN ELDER CAN HANDLE
+                 FunctionalIterator<Port> subs = answerTable.clearAndReturnSubscribers(answerTable.size());
+                 subs.forEachRemaining(subPort -> send(subPort.owner(), subPort, sMinMax));
+             }
+         } // else do nothing and wait
+    }
+
+    protected boolean checkTermination() {
+        if (allPortsDone()) {
+            FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+            Message toSend = answerTable.recordDone();
+            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+            return true;
+        } else return false;
+    }
+
     protected void handleSnapshot(Port onPort) {
-        // First:
-        if (activePorts.isEmpty() && pullingPorts == 0) { // TODO: Find a way to pull one at a time
-            assert !pendingPorts.isEmpty();
-            Message.Snapshot sMinMax = findMinMaxSnapshots();
-//                NodeSnapshot currentState = new NodeSnapshot(nodeId, answerTable.size());
-            if ( sMinMax.oldest.nodeId <= this.nodeId ) {
-                if (sMinMax.youngest.nodeId == this.nodeId && sMinMax.youngest.answerCount == this.answerTable.size()) {
-                    TERMINATE!
-                } else {
-                    RESOLVE! PULL WITH OUR ID EXPLICIT!
-                    // We can resolve things. Pull everywhere?
-                }
-            } else {
-                FORWARD SO AN ELDER CAN HANDLE
-                FunctionalIterator<Port> subs = answerTable.clearAndReturnSubscribers(answerTable.size());
-                subs.forEachRemaining(subPort -> send(subPort.owner(), subPort, sMinMax));
-            }
-        } // else do nothing and wait
+        checkRetry();
     }
 
     private Message.Snapshot findMinMaxSnapshots() {
         NodeSnapshot sMin = null, sMax = null;
         for (Port port: pendingPorts) {
             assert port.receivedSnapshot != null;
-            if (sMin == null ||  port.receivedSnapshot.youngest.compareTo(sMin) < 0) sMin = port.receivedSnapshot.youngest;
-            if (sMax == null || port.receivedSnapshot.oldest.compareTo(sMax) > 0) sMax = port.receivedSnapshot.oldest;
+            if (sMin == null ||  port.receivedSnapshot.youngest.compareTo(sMin) > 0) sMin = port.receivedSnapshot.youngest;
+            if (sMax == null || port.receivedSnapshot.oldest.compareTo(sMax) < 0) sMax = port.receivedSnapshot.oldest;
         }
         return new Message.Snapshot(sMin, sMax);
     }
 
-    protected abstract void handleDone(Port onPort);
 
     protected Port createPort(ActorNode<?> remote) {
         Port port = new Port(this, remote);
@@ -109,11 +134,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
         protected void recordReceive(Message msg) {
             assert state == State.PULLING;
-            if (msg.type() == Message.MessageType.SNAPSHOT) { // TODO
-                throw TypeDBException.of(UNIMPLEMENTED);
-            }
-
-            assert lastRequestedIndex == msg.index();
+            assert msg.type() == Message.MessageType.SNAPSHOT || lastRequestedIndex == msg.index();
             if (msg.type() == Message.MessageType.DONE) {
                 state = State.DONE;
             } else if (msg.type() == Message.MessageType.SNAPSHOT) {
@@ -128,6 +149,10 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         }
 
         public void readNext() {
+            readNext(null);
+        }
+
+        public void readNext(Integer pullerId) {
             assert state == State.READY;
             state = State.PULLING;
             lastRequestedIndex += 1;

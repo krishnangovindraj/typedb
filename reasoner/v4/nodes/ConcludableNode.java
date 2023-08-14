@@ -1,7 +1,6 @@
 package com.vaticle.typedb.core.reasoner.v4.nodes;
 
 import com.vaticle.typedb.common.collection.Pair;
-import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.common.iterator.Iterators;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
@@ -13,8 +12,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 
 public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode> {
     // TODO: See if I can get away without storing answers
@@ -68,22 +65,6 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
         recordAndForwardAnswers(unifierAndRequirements.first()
                 .unUnify(received.conclusionAnswer(), unifierAndRequirements.second()));
         onPort.readNext();
-    }
-
-    @Override
-    protected void handleSnapshot(Port onPort) {
-        throw TypeDBException.of(UNIMPLEMENTED);
-    }
-
-    @Override
-    protected void handleDone(Port onPort) {
-        if (allPortsDone()) {
-            FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-            Message toSend = answerTable.recordDone();
-            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
-        } else if (!anyPortsActive()) {
-            throw TypeDBException.of(UNIMPLEMENTED);
-        }
     }
 
     private void recordAndForwardAnswers(FunctionalIterator<ConceptMap> answers) {
