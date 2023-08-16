@@ -34,7 +34,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
         activePorts = new HashSet<>();
         pendingPorts = new HashSet<>();
         answerTable = new AnswerTable();
-        pullerId = null; THIS LEADS TO DEADLOCKS. WHAT IF YOU PULL FROM A HIGHER NODE OUTSIDE THE CYCLE?
+        pullerId = null; // THIS LEADS TO DEADLOCKS. WHAT IF YOU PULL FROM A HIGHER NODE OUTSIDE THE CYCLE?
     }
 
     protected void initialise() {
@@ -43,15 +43,13 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
 
     // TODO: Since port has the index in it, maybe we don't need index here?
     public void readAnswerAt(ActorNode.Port reader, int index, @Nullable Integer pullerId) {
-        if (pullerId != null && pullerId > nodeId) this.pullerId = pullerId;
-        int effectivePullerId = (pullerId != null) ? pullerId : reader.owner().nodeId;
+        readAnswerAtStrictlyAcyclic(reader, index);
+    }
 
+    public void readAnswerAtStrictlyAcyclic(ActorNode.Port reader, int index) {
         Optional<Message> peekAnswer = answerTable.answerAt(index);
         if (peekAnswer.isPresent()) {
             send(reader.owner(), reader, peekAnswer.get());
-            return;
-        } else if (effectivePullerId >= nodeId) { //  strictly < would let you loop.
-            propagatePull(reader, index); // At the risk of hanging. Change this for the proper implementation
         } else {
             propagatePull(reader, index); // This is now effectively a 'pull'
         }
@@ -71,7 +69,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
             }
             case SNAPSHOT: {
                 activePorts.remove(onPort); pendingPorts.add(onPort);
-                handleSnapshot(onPort);
+                handleSnapshot(onPort, received.asSnapshot());
                 break;
             }
             case DONE: {
@@ -90,7 +88,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
         throw TypeDBException.of(ILLEGAL_STATE);
     }
 
-    protected void handleSnapshot(ActorNode.Port onPort) {
+    protected void handleSnapshot(ActorNode.Port onPort, Message.Snapshot snapshot) {
         throw TypeDBException.of(ILLEGAL_STATE);
     }
 
