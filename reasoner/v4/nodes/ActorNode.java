@@ -11,7 +11,6 @@ import java.util.Optional;
 import java.util.function.Supplier;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 import static com.vaticle.typedb.core.common.iterator.Iterators.iterate;
 
 public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAcyclicNode<NODE> {
@@ -26,17 +25,26 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     }
 
     // TODO: Since port has the index in it, maybe we don't need index here?
+    @Override
     public void readAnswerAt(ActorNode.Port reader, int index, @Nullable Integer pullerId) {
-        int effectivePullerId = (pullerId != null) ? pullerId : reader.owner.nodeId;
+
+        int effectivePullerId;
+        if (pullerId != null) {
+            effectivePullerId = pullerId;
+            if (pullerId > (this.pullerId != null ? this.pullerId : this.nodeId )) this.pullerId = pullerId;
+        } else {
+            effectivePullerId = reader.owner.nodeId;
+        }
 
         Optional<Message> peekAnswer = answerTable.answerAt(index);
         if (peekAnswer.isPresent()) {
             send(reader.owner, reader, peekAnswer.get());
             return;
-        } else if (effectivePullerId >= nodeId) { //  strictly < would let you loop.
-            NodeSnapshot nodeSnapshot = new NodeSnapshot(nodeId, answerTable.size());
+        } else if (NodeSnapshot.youngerOrSameNode_cannotPullThrough(effectivePullerId, nodeId)) {
+            NodeSnapshot nodeSnapshot = currentSnapshot();
             send(reader.owner, reader, new Message.Snapshot(nodeSnapshot, nodeSnapshot));
         } else {
+            // TODO: Is this a problem? If it s already pulling, we have no clean way of handling it
             propagatePull(reader, index); // This is now effectively a 'pull'
         }
     }
@@ -47,7 +55,13 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         throw TypeDBException.of(ILLEGAL_STATE);
     }
 
-    private NodeSnapshot DEBUG__stateWhenLastPulled = null;
+    protected void handleSnapshot(Port onPort, Message.Snapshot snapshot) {
+        if (NodeSnapshot.youngerOrSameButDifferentAnswers(snapshot.youngest, currentSnapshot())) {
+            assert pullerId == null; // This could have happened once, because we subscribe to an existing pull even when pulling with a pullerId.
+            onPort.readNext(nodeId);
+        }
+        checkRetry();
+    }
 
     @Override
     protected void handleDone(Port onPort) {
@@ -58,29 +72,21 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
     protected void checkRetry() {
          // First:
-         if (activePorts.isEmpty() && pullingPorts == 0) { // TODO: Find a way to pull one at a time
-             assert !pendingPorts.isEmpty();
-             Message.Snapshot sMinMax = findMinMaxSnapshots();
-//          NodeSnapshot currentState = new NodeSnapshot(nodeId, answerTable.size());
-             if ( sMinMax.oldest.nodeId >= this.nodeId ) { // older or same
-                 if (sMinMax.youngest.nodeId == this.nodeId && sMinMax.youngest.answerCount == this.answerTable.size()) {
-                     // TERMINATE!
-                     FunctionalIterator<Port> subs = answerTable.clearAndReturnSubscribers(answerTable.size());
-                     Message msg = answerTable.recordDone();
-                     subs.forEachRemaining(sub -> send(sub.owner, sub, msg));
-                 } else {
-                     assert (DEBUG__stateWhenLastPulled == null || DEBUG__stateWhenLastPulled.answerCount < answerTable.size()); // Ah we might just have gotten more answers :/ Can't assert
-                     // RESOLVE! PULL WITH OUR ID EXPLICIT!
-                     this.pullerId = nodeId;
-                     pendingPorts.forEach(port -> port.readNext());
-                     DEBUG__stateWhenLastPulled = new NodeSnapshot(nodeId, answerTable.size());
-                 }
-             } else {
-                 //  FORWARD SO AN ELDER CAN HANDLE
-                 FunctionalIterator<Port> subs = answerTable.clearAndReturnSubscribers(answerTable.size());
-                 subs.forEachRemaining(subPort -> send(subPort.owner(), subPort, sMinMax));
-             }
-         } // else do nothing and wait
+        if (!activePorts.isEmpty() || pullingPorts > 0) return; //
+        NodeSnapshot currentSnapshot = currentSnapshot();
+        Message.Snapshot snapshotAcrossEdges = findYoungestOldestSnapshotsOnPorts();
+
+        assert !pendingPorts.isEmpty();
+        assert !NodeSnapshot.youngerOrSameButDifferentAnswers(snapshotAcrossEdges.youngest, currentSnapshot);
+        if ( NodeSnapshot.same(snapshotAcrossEdges.oldest, currentSnapshot) ) {
+             FunctionalIterator<Port> subs = answerTable.clearAndReturnSubscribers(answerTable.size());
+             Message msg = answerTable.recordDone();
+             subs.forEachRemaining(sub -> send(sub.owner, sub, msg));
+        } else {
+             //  FORWARD SO AN ELDER CAN HANDLE
+             FunctionalIterator<Port> subs = answerTable.clearAndReturnSubscribers(answerTable.size());
+             subs.forEachRemaining(subPort -> send(subPort.owner(), subPort, snapshotAcrossEdges));
+        }
     }
 
     protected boolean checkTermination() {
@@ -93,18 +99,21 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         Message toSend = answerTable.recordDone();
         subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
     }
-    protected void handleSnapshot(Port onPort) {
-        checkRetry();
+
+    private NodeSnapshot currentSnapshot() {
+        return new NodeSnapshot(nodeId, answerTable.size());
     }
 
-    private Message.Snapshot findMinMaxSnapshots() {
-        NodeSnapshot sMin = null, sMax = null;
+    private Message.Snapshot findYoungestOldestSnapshotsOnPorts() {
+        NodeSnapshot youngest = null, oldest = null;
         for (Port port: pendingPorts) {
             assert port.receivedSnapshot != null;
-            if (sMin == null ||  port.receivedSnapshot.youngest.compareTo(sMin) > 0) sMin = port.receivedSnapshot.youngest;
-            if (sMax == null || port.receivedSnapshot.oldest.compareTo(sMax) < 0) sMax = port.receivedSnapshot.oldest;
+            if (youngest == null ||  NodeSnapshot.youngerOrSameButDifferentAnswers(port.receivedSnapshot.youngest, youngest)) {
+                youngest = port.receivedSnapshot.youngest;
+            }
+            if (oldest == null || NodeSnapshot.older(port.receivedSnapshot.oldest, oldest)) oldest = port.receivedSnapshot.oldest;
         }
-        return new Message.Snapshot(sMin, sMax);
+        return new Message.Snapshot(youngest, oldest);
     }
 
 
@@ -149,12 +158,17 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         }
 
         public void readNext() {
+            readNext(null);
+        }
+
+         void readNext(@Nullable Integer pullWithIdOverride) {
             assert state == State.READY;
             state = State.PULLING;
             lastRequestedIndex += 1;
             int readIndex = lastRequestedIndex;
             owner.pullingPorts += 1;
-            remote.driver().execute(nodeActor -> nodeActor.readAnswerAt(Port.this, readIndex, owner.pullerId));
+            Integer pullWithId = pullWithIdOverride != null ? pullWithIdOverride : owner.pullerId;
+            remote.driver().execute(nodeActor -> nodeActor.readAnswerAt(Port.this, readIndex, pullWithId));
         }
 
         public ActorNode<?> owner() {
@@ -185,12 +199,27 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             this.answerCount = answerCount;
         }
 
+        public static boolean youngerOrSameNode_cannotPullThrough(int firstNodeId, int secondNodeId) {
+            return firstNodeId >= secondNodeId;
+        }
+
         @Override
         public int compareTo(NodeSnapshot other) {
             return (this.nodeId == other.nodeId) ?
                         Integer.compare(this.answerCount, other.answerCount) :
-                        Integer.compare(this.nodeId, other.nodeId);
+                        Integer.compare(other.nodeId, this.nodeId); // LowerIds are older
+        }
+
+        public static boolean older(NodeSnapshot first, NodeSnapshot second) {
+            return first.compareTo(second) > 0;
+        }
+
+        public static boolean youngerOrSameButDifferentAnswers(NodeSnapshot first, NodeSnapshot second) {
+            return first.compareTo(second) < 0;
+        }
+
+        public static boolean same(NodeSnapshot first, NodeSnapshot second) {
+            return first.compareTo(second) == 0;
         }
     }
-
 }
