@@ -10,18 +10,17 @@ import java.util.Optional;
 import java.util.function.Supplier;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
+import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 import static com.vaticle.typedb.core.common.iterator.Iterators.iterate;
 
 public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAcyclicNode<NODE> {
 
     static final Logger LOG = LoggerFactory.getLogger(ActorNode.class);
 
-    private int pullingPorts;
     private Message.HitInversion forwardedInversion;
 
     protected ActorNode(NodeRegistry nodeRegistry, Driver<NODE> driver, Supplier<String> debugName) {
         super(nodeRegistry, driver, debugName);
-        pullingPorts = 0;
         forwardedInversion = null;
     }
 
@@ -57,10 +56,12 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     }
 
     protected void checkInversionStatusChange() {
-        Message.HitInversion oldestInversion = findOldestInversionStatus();
-        if (!forwardedInversion.equals(oldestInversion)) {
-            forwardedInversion = oldestInversion;
-            // Send to all subscribers
+        Optional<Message.HitInversion> oldestInversion = findOldestInversionStatus();
+        if (oldestInversion.isEmpty()) return;
+        if (forwardedInversion == null || !forwardedInversion.equals(oldestInversion.get())) {
+            forwardedInversion = oldestInversion.get();
+            // TODO: Send to all subscribers
+            throw TypeDBException.of(UNIMPLEMENTED);
         }
     }
 
@@ -75,12 +76,12 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
     }
 
-    private Message.HitInversion findOldestInversionStatus() {
+    private Optional<Message.HitInversion> findOldestInversionStatus() {
         int oldestNodeId = Integer.MAX_VALUE;
         int oldestCount = 0;
         boolean throughAllPaths = true;
-        for (Port port: pendingPorts) {
-            assert port.receivedInversion != null;
+        for (Port port: activePorts) {
+            if(port.receivedInversion == null) continue;
             if (port.receivedInversion.nodeId < oldestNodeId) {
                 oldestNodeId = port.receivedInversion.nodeId;
                 oldestCount = 0;
@@ -88,7 +89,11 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             oldestCount += 1;
             throughAllPaths = throughAllPaths && port.receivedInversion.throughAllPaths;
         }
-        return new Message.HitInversion(oldestNodeId, pendingPorts.size() == oldestCount && throughAllPaths);
+
+        if (oldestNodeId == Integer.MAX_VALUE) return Optional.empty();
+        else return Optional.of(
+                new Message.HitInversion(oldestNodeId, activePorts.size() == oldestCount && throughAllPaths)
+        );
     }
 
 
@@ -118,30 +123,24 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
         protected void recordReceive(Message msg) {
             assert state == State.PULLING;
-            assert msg.type() == Message.MessageType.SNAPSHOT || lastRequestedIndex == msg.index();
+            assert msg.type() == Message.MessageType.HIT_INVERSION || lastRequestedIndex == msg.index();
             if (msg.type() == Message.MessageType.DONE) {
                 state = State.DONE;
-            } else if (msg.type() == Message.MessageType.SNAPSHOT) {
-                this.receivedInversion = msg.asSnapshot();
-                lastRequestedIndex -= 1; // Is this the right way to do it?
+            } else if (msg.type() == Message.MessageType.HIT_INVERSION) {
+                this.receivedInversion = msg.asHitInversion();
                 state = State.READY;
             } else {
                 state = State.READY;
             }
             assert state != State.PULLING;
-            owner.pullingPorts -= 1;
         }
+
 
         public void readNext() {
-            readNext(null);
-        }
-
-         void readNext() {
             assert state == State.READY;
             state = State.PULLING;
             lastRequestedIndex += 1;
             int readIndex = lastRequestedIndex;
-            owner.pullingPorts += 1;
             remote.driver().execute(nodeActor -> nodeActor.readAnswerAt(Port.this, readIndex));
         }
 
