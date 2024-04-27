@@ -67,9 +67,9 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
                 handleConclusion(onPort, received.asConclusion());
                 break;
             }
-            case SNAPSHOT: {
+            case HIT_INVERSION: {
                 activePorts.remove(onPort); pendingPorts.add(onPort);
-                handleSnapshot(onPort, received.asSnapshot());
+                handleHitInversion(onPort, received.asSnapshot());
                 break;
             }
             case DONE: {
@@ -88,7 +88,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
         throw TypeDBException.of(ILLEGAL_STATE);
     }
 
-    protected void handleSnapshot(ActorNode.Port onPort, Message.Snapshot snapshot) {
+    protected void handleHitInversion(ActorNode.Port onPort, Message.HitInversion hitInversion) {
         throw TypeDBException.of(ILLEGAL_STATE);
     }
 
