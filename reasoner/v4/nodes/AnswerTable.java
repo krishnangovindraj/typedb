@@ -19,13 +19,11 @@ public class AnswerTable {
     private final List<Message> answers;
     private Set<ActorNode.Port> subscribers;
     private boolean complete;
-    private boolean conditionallyDone;
 
     public AnswerTable() {
         this.answers = new ArrayList<>();
         this.subscribers = new HashSet<>();
         this.complete = false;
-        this.conditionallyDone = false;
     }
 
     public int size() {
@@ -34,10 +32,6 @@ public class AnswerTable {
 
     public boolean isComplete() {
         return complete;
-    }
-
-    public boolean isConditionallyDone() {
-        return complete || conditionallyDone;
     }
 
     public Optional<Message> answerAt(int index) {
