@@ -6,6 +6,8 @@ import com.vaticle.typedb.core.reasoner.v4.Message;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -17,11 +19,13 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
     static final Logger LOG = LoggerFactory.getLogger(ActorNode.class);
 
+    private final List<ActorNode.Port> downstreamPorts;
     private Message.HitInversion forwardedInversion;
 
     protected ActorNode(NodeRegistry nodeRegistry, Driver<NODE> driver, Supplier<String> debugName) {
         super(nodeRegistry, driver, debugName);
         forwardedInversion = null;
+        downstreamPorts = new ArrayList<>();
     }
 
     // TODO: Since port has the index in it, maybe we don't need index here?
@@ -60,8 +64,17 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         if (oldestInversion.isEmpty()) return;
         if (forwardedInversion == null || !forwardedInversion.equals(oldestInversion.get())) {
             forwardedInversion = oldestInversion.get();
-            // TODO: Send to all subscribers
-            throw TypeDBException.of(UNIMPLEMENTED);
+            // TODO: Check if it's termination time.
+            if (forwardedInversion.nodeId == this.nodeId) {
+                if (forwardedInversion.throughAllPaths) {
+                    // TODO: Work out whether it's safe to terminate or whether there could be a message in flight.
+                    throw TypeDBException.of(UNIMPLEMENTED);
+                } else {
+                    LOG.debug("Received this.nodeId={} on all ports, but not all true", this.nodeId);  // TODO: Remove if we eventually do terminate
+                }
+            } else {
+                downstreamPorts.forEach(port -> send(port.owner, port, forwardedInversion));
+            }
         }
     }
 
@@ -99,9 +112,14 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
     protected Port createPort(ActorNode<?> remote) {
         Port port = new Port(this, remote);
+        remote.notifyPortCreated(port);
         ports.add(port);
         activePorts.add(port);
         return port;
+    }
+
+    private void notifyPortCreated(Port downstream) {
+        this.downstreamPorts.add(downstream);
     }
 
     public static class Port {
@@ -122,17 +140,17 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         }
 
         protected void recordReceive(Message msg) {
-            assert state == State.PULLING;
+            // assert state == State.PULLING; // Relaxed for HitInversion
             assert msg.type() == Message.MessageType.HIT_INVERSION || lastRequestedIndex == msg.index();
             if (msg.type() == Message.MessageType.DONE) {
                 state = State.DONE;
             } else if (msg.type() == Message.MessageType.HIT_INVERSION) {
                 this.receivedInversion = msg.asHitInversion();
-                state = State.READY;
+                // state = State.READY;
             } else {
                 state = State.READY;
             }
-            assert state != State.PULLING;
+            // assert state != State.PULLING;
         }
 
 
