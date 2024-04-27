@@ -22,7 +22,6 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     protected final Integer nodeId;
     protected List<ActorNode.Port> ports;
     protected final Set<ActorNode.Port> activePorts;
-    protected final Set<ActorNode.Port> pendingPorts;
     protected final AnswerTable answerTable;
     protected Integer pullerId;
 
@@ -32,7 +31,6 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
         nodeId = nodeRegistry.nextNodeAge();
         ports = new ArrayList<>();
         activePorts = new HashSet<>();
-        pendingPorts = new HashSet<>();
         answerTable = new AnswerTable();
         pullerId = null; // THIS LEADS TO DEADLOCKS. WHAT IF YOU PULL FROM A HIGHER NODE OUTSIDE THE CYCLE?
     }
@@ -42,11 +40,11 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     }
 
     // TODO: Since port has the index in it, maybe we don't need index here?
-    public void readAnswerAt(ActorNode.Port reader, int index, @Nullable Integer pullerId) {
+    public void readAnswerAt(ActorNode.Port reader, int index) {
         readAnswerAtStrictlyAcyclic(reader, index);
     }
 
-    public void readAnswerAtStrictlyAcyclic(ActorNode.Port reader, int index) {
+    private void readAnswerAtStrictlyAcyclic(ActorNode.Port reader, int index) {
         Optional<Message> peekAnswer = answerTable.answerAt(index);
         if (peekAnswer.isPresent()) {
             send(reader.owner(), reader, peekAnswer.get());
@@ -68,8 +66,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
                 break;
             }
             case HIT_INVERSION: {
-                activePorts.remove(onPort); pendingPorts.add(onPort);
-                handleHitInversion(onPort, received.asSnapshot());
+                handleHitInversion(onPort, received.asHitInversion());
                 break;
             }
             case DONE: {
@@ -113,17 +110,12 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     }
 
     private void recordDone(ActorNode.Port port) {
-        if (activePorts.contains(port)) activePorts.remove(port);
-        else if (pendingPorts.contains(port)) pendingPorts.remove(port);
-        else throw TypeDBException.of(ILLEGAL_STATE);
+        assert activePorts.contains(port);
+        activePorts.remove(port);
     }
 
-    protected boolean allPortsDone() {
-        return activePorts.isEmpty() && pendingPorts.isEmpty();
-    }
-
-    protected boolean anyPortsActive() {
-        return !activePorts.isEmpty();
+    protected boolean allPortsDone() { // TODO: Cleanup: Just use activePorts.isEmpty() everywhere
+        return activePorts.isEmpty();
     }
 
     @Override

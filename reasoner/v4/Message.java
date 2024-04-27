@@ -8,6 +8,7 @@ import com.vaticle.typedb.core.reasoner.v4.nodes.ActorNode;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 
 import java.util.Map;
+import java.util.Objects;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_CAST;
 
@@ -23,8 +24,8 @@ public abstract class Message {
         throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Conclusion.class);
     }
 
-    public Snapshot asSnapshot() {
-        throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Snapshot.class);
+    public HitInversion asHitInversion() {
+        throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), HitInversion.class);
     }
 
     public enum MessageType {
@@ -115,6 +116,11 @@ public abstract class Message {
 
         public Message.HitInversion asHitInversion() {
             return this;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(this.nodeId, this.throughAllPaths);
         }
 
         @Override
