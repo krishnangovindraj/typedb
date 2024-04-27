@@ -1,5 +1,6 @@
 package com.vaticle.typedb.core.reasoner.v4;
 
+import com.vaticle.typedb.core.common.collection.ByteArray;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.concept.Concept;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
@@ -29,7 +30,7 @@ public abstract class Message {
     public enum MessageType {
         ANSWER,
         CONCLUSION,
-        SNAPSHOT,
+        HIT_INVERSION,
         TERMINATION_PROPOSAL,
         DONE,
     }
@@ -101,18 +102,28 @@ public abstract class Message {
         }
     }
 
-    public static class Snapshot extends Message {
-        public final ActorNode.NodeSnapshot youngest;
-        public final ActorNode.NodeSnapshot oldest;
+    public static class HitInversion extends Message {
+        public final int nodeId;
+        public final boolean throughAllPaths;
 
-        public Snapshot(ActorNode.NodeSnapshot youngest, ActorNode.NodeSnapshot oldest) {
-            super(MessageType.SNAPSHOT, -1);
-            this.youngest = youngest;
-            this.oldest = oldest;
+        public HitInversion(int nodeId, boolean throughAllPaths) {
+            super(MessageType.HIT_INVERSION, -1);
+            this.nodeId = nodeId;
+            this.throughAllPaths = throughAllPaths;
         }
 
-        public Snapshot asSnapshot() {
+
+        public Message.HitInversion asHitInversion() {
             return this;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            HitInversion other = (HitInversion) o;
+            return super.equals(other) &&
+                    nodeId == other.nodeId && throughAllPaths == other.throughAllPaths;
         }
     }
 }

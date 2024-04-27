@@ -59,13 +59,13 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
         if (port.isReady()) port.readNext();
         if (checkTermination()) {
             onTermination();
-        } else checkRetry();
+        } else checkInversionStatusChange();
     }
 
     @Override
-    protected void checkRetry() {
+    protected void checkInversionStatusChange() {
         if (pendingMaterialisations > 0) return;
-        else super.checkRetry();
+        else super.checkInversionStatusChange();
     }
 
     @Override
