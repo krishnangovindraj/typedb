@@ -189,7 +189,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
 
         void readNextAnswer() {
             int nextAnswerIndex = answersReceived.getAndIncrement();
-            rootNode.driver().execute(rootNode -> rootNode.readAnswerAt(null, nextAnswerIndex));
+            rootNode.driver().execute(rootNode -> rootNode.readAnswerAt(null, new Request.ReadAnswer(nextAnswerIndex)));
         }
 
         class RootNode extends ActorNode<RootNode> {
@@ -218,9 +218,9 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
             }
 
             @Override
-            protected void readAnswerAt(ActorNode.Port reader, int index) {
-                assert index == port.lastRequestedIndex() + 1;
-                propagatePull(reader, index);
+            protected void readAnswerAt(ActorNode.Port reader, Request.ReadAnswer readAnswer) {
+                assert readAnswer.index == port.lastRequestedIndex() + 1;
+                propagatePull(reader, readAnswer.index);
             }
 
             @Override

@@ -5,6 +5,7 @@ import com.vaticle.typedb.core.concept.Concept;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 
+import java.util.Comparator;
 import java.util.Map;
 import java.util.Objects;
 
@@ -29,7 +30,7 @@ public abstract class Response {
         ANSWER,
         CONCLUSION,
         CANDIDACY,
-        TERMINATION_PROPOSAL,
+        TREE_VOTE,
         DONE,
     }
 
@@ -113,6 +114,15 @@ public abstract class Response {
     }
 
     public static class Candidacy extends Response {
+        public static java.util.Comparator<? super Candidacy> Comparator = new Comparator<Candidacy>() {
+            @Override
+            public int compare(Candidacy c1, Candidacy c2) {
+                // Lesser is better
+                if (c1.nodeId == c2.nodeId) { // Smaller nodeId is better
+                    return Integer.compare(-c1.tableSize, -c2.tableSize); // Bigger is better
+                } else return Integer.compare(c1.nodeId, c2.nodeId);
+            }
+        };
         public final int nodeId;
         public final int tableSize;
 
@@ -142,7 +152,21 @@ public abstract class Response {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             Candidacy other = (Candidacy) o;
-            return super.equals(other) && nodeId == other.nodeId;
+            return 0 == Comparator.compare(this, other);
+        }
+    }
+
+    public static class TreeVote extends Response {
+
+        public final Response.Candidacy voteFor;
+        public TreeVote(Candidacy voteFor) {
+            super(-1);
+            this.voteFor = voteFor;
+        }
+
+        @Override
+        public ResponseType type() {
+            return ResponseType.TREE_VOTE;
         }
     }
 }

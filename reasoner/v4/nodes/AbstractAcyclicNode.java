@@ -41,17 +41,20 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     public void receiveRequest(ActorNode.Port requester, Request request) {
         switch (request.type()) {
             case READ_ANSWER: {
-                readAnswerAt(requester, request.asReadAnswer().index);
+                readAnswerAt(requester, request.asReadAnswer());
                 break;
             }
             case GROW_TREE: {
-                throw TypeDBException.of(UNIMPLEMENTED);
+                growTree(requester, request.asGrowTree());
+                break;
             }
         }
     }
 
-    protected void readAnswerAt(ActorNode.Port reader, int index) {
-        readAnswerAtStrictlyAcyclic(reader, index);
+    protected abstract void growTree(ActorNode.Port proposer, Request.GrowTree growTreeRequest);
+
+    protected void readAnswerAt(ActorNode.Port reader, Request.ReadAnswer readAnswerRequest) {
+        readAnswerAtStrictlyAcyclic(reader, readAnswerRequest.index);
     }
 
     private void readAnswerAtStrictlyAcyclic(ActorNode.Port reader, int index) {
@@ -79,7 +82,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
                 handleCandidacy(onPort, received.asCandidacy());
                 break;
             }
-            case TERMINATION_PROPOSAL: {
+            case TREE_VOTE: {
                 throw TypeDBException.of(UNIMPLEMENTED);
             }
             case DONE: {
