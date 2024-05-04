@@ -71,7 +71,7 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
         FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
         ConceptMap extendedAnswer = merge(merge(rightPortExtensions.get(onPort), answer), bounds).filter(compoundStreamPlan.outputs());
         Response toSend = answerTable.recordAnswer(extendedAnswer);
-        subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+        subscribers.forEachRemaining(subscriber -> sendResponse(subscriber.owner(), subscriber, toSend));
         onPort.readNext(); // KGFLAG: Strategy
     }
 

@@ -218,7 +218,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
             }
 
             @Override
-            public void readAnswerAt(ActorNode.Port reader, int index) {
+            protected void readAnswerAt(ActorNode.Port reader, int index) {
                 assert index == port.lastRequestedIndex() + 1;
                 propagatePull(reader, index);
             }

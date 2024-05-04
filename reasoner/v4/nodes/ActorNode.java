@@ -2,6 +2,7 @@ package com.vaticle.typedb.core.reasoner.v4.nodes;
 
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
+import com.vaticle.typedb.core.reasoner.v4.Request;
 import com.vaticle.typedb.core.reasoner.v4.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,12 +29,12 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
     // TODO: Since port has the index in it, maybe we don't need index here?
     @Override
-    public void readAnswerAt(ActorNode.Port reader, int index) {
+    protected void readAnswerAt(ActorNode.Port reader, int index) {
         Optional<Response> peekAnswer = answerTable.answerAt(index);
         if (peekAnswer.isPresent()) {
-            send(reader.owner, reader, peekAnswer.get());
+            sendResponse(reader.owner, reader, peekAnswer.get());
         } else if (reader.owner.nodeId >= this.nodeId) {
-            send(reader.owner, reader, new Response.Candidacy(this.nodeId, this.answerTable.size()));
+            sendResponse(reader.owner, reader, new Response.Candidacy(this.nodeId, this.answerTable.size()));
         } else {
             // TODO: Is this a problem? If it s already pulling, we have no clean way of handling it
             propagatePull(reader, index); // This is now effectively a 'pull'
@@ -66,7 +67,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
                 // Establish a tree
                 throw TypeDBException.of(UNIMPLEMENTED); // We need to send the tree message.
             } else {
-                downstreamPorts.forEach(port -> send(port.owner, port, forwardedCandidacy));
+                downstreamPorts.forEach(port -> sendResponse(port.owner, port, forwardedCandidacy));
             }
         }
     }
@@ -79,7 +80,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         assert allPortsDone();
         FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
         Response toSend = answerTable.recordDone();
-        subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+        subscribers.forEachRemaining(subscriber -> sendResponse(subscriber.owner(), subscriber, toSend));
     }
 
     private Optional<Response.Candidacy> findOldestCandidate() {
@@ -136,7 +137,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             state = State.PULLING;
             lastRequestedIndex += 1;
             int readIndex = lastRequestedIndex;
-            remote.driver().execute(nodeActor -> nodeActor.readAnswerAt(Port.this, readIndex));
+            remote.driver().execute(nodeActor -> nodeActor.receiveRequest(Port.this, new Request.ReadAnswer(readIndex)));
         }
 
         public ActorNode<?> owner() {
