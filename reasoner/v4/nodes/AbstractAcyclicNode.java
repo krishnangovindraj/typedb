@@ -4,6 +4,7 @@ import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.common.iterator.Iterators;
 import com.vaticle.typedb.core.concurrent.actor.Actor;
+import com.vaticle.typedb.core.reasoner.v4.Request;
 import com.vaticle.typedb.core.reasoner.v4.Response;
 
 import java.util.ArrayList;
@@ -40,14 +41,26 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     }
 
     // TODO: Since port has the index in it, maybe we don't need index here?
-    public void readAnswerAt(ActorNode.Port reader, int index) {
+    public void receiveRequest(ActorNode.Port requester, Request request) {
+        switch (request.type()) {
+            case READ_ANSWER: {
+                readAnswerAt(requester, request.asReadAnswer().index);
+                break;
+            }
+            case GROW_TREE: {
+                throw TypeDBException.of(UNIMPLEMENTED);
+            }
+        }
+    }
+
+    protected void readAnswerAt(ActorNode.Port reader, int index) {
         readAnswerAtStrictlyAcyclic(reader, index);
     }
 
     private void readAnswerAtStrictlyAcyclic(ActorNode.Port reader, int index) {
         Optional<Response> peekAnswer = answerTable.answerAt(index);
         if (peekAnswer.isPresent()) {
-            send(reader.owner(), reader, peekAnswer.get());
+            sendResponse(reader.owner(), reader, peekAnswer.get());
         } else {
             propagatePull(reader, index); // This is now effectively a 'pull'
         }
@@ -101,12 +114,12 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     }
 
     // TODO: See if i can safely get recipient from port
-    protected void send(ActorNode<?> recipient, ActorNode.Port recipientPort, Response response) {
+    protected void sendResponse(ActorNode<?> recipient, ActorNode.Port recipientPort, Response response) {
         assert recipientPort.remote().equals(this);
-        recipient.driver().execute(actor -> actor.receiveOnPort(recipientPort, response));
+        recipient.driver().execute(actor -> actor.receiveResponseOnPort(recipientPort, response));
     }
 
-    protected void receiveOnPort(ActorNode.Port port, Response response) {
+    protected void receiveResponseOnPort(ActorNode.Port port, Response response) {
         ActorNode.LOG.debug(port.owner() + " received " + response + " from " + port.remote());
         port.recordReceive(response); // Is it strange that I call this implicitly?
         receiveResponse(port, response);

@@ -35,7 +35,7 @@ public class NegatedNode extends ResolvableNode<Negated, NegatedNode> {
         if (!answerTable.isComplete()) {
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Response toSend = answerTable.recordDone();
-            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+            subscribers.forEachRemaining(subscriber -> sendResponse(subscriber.owner(), subscriber, toSend));
             // And we're done. No more pulling.
         }
     }
@@ -50,7 +50,7 @@ public class NegatedNode extends ResolvableNode<Negated, NegatedNode> {
         if (!answerTable.isComplete()) {
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Response toSend = answerTable.recordAnswer(bounds);
-            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+            subscribers.forEachRemaining(subscriber -> sendResponse(subscriber.owner(), subscriber, toSend));
             answerTable.recordDone();
         }
     }
