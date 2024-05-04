@@ -6,9 +6,7 @@ import com.vaticle.typedb.core.reasoner.v4.Message;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.function.Supplier;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
@@ -20,11 +18,11 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     static final Logger LOG = LoggerFactory.getLogger(ActorNode.class);
 
     private final List<ActorNode.Port> downstreamPorts;
-    private Message.HitInversion forwardedInversion;
+    private Message.Candidacy forwardedCandidacy;
 
     protected ActorNode(NodeRegistry nodeRegistry, Driver<NODE> driver, Supplier<String> debugName) {
         super(nodeRegistry, driver, debugName);
-        forwardedInversion = null;
+        forwardedCandidacy = null;
         downstreamPorts = new ArrayList<>();
     }
 
@@ -35,7 +33,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         if (peekAnswer.isPresent()) {
             send(reader.owner, reader, peekAnswer.get());
         } else if (reader.owner.nodeId >= this.nodeId) {
-            send(reader.owner, reader, new Message.HitInversion(this.nodeId, true));
+            send(reader.owner, reader, new Message.Candidacy(this.nodeId, this.answerTable.size()));
         } else {
             // TODO: Is this a problem? If it s already pulling, we have no clean way of handling it
             propagatePull(reader, index); // This is now effectively a 'pull'
@@ -48,32 +46,27 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         throw TypeDBException.of(ILLEGAL_STATE);
     }
 
-    protected void handleHitInversion(Port onPort, Message.HitInversion hitInversion) {
-        checkInversionStatusChange();
+    protected void handleCandidacy(Port onPort, Message.Candidacy candidacy) {
+        checkCandidacyStatusChange();
     }
 
     @Override
     protected void handleDone(Port onPort) {
         if (checkTermination()) {
             onTermination();
-        } else checkInversionStatusChange();
+        } else checkCandidacyStatusChange();
     }
 
-    protected void checkInversionStatusChange() {
-        Optional<Message.HitInversion> oldestInversion = findOldestInversionStatus();
-        if (oldestInversion.isEmpty()) return;
-        if (forwardedInversion == null || !forwardedInversion.equals(oldestInversion.get())) {
-            forwardedInversion = oldestInversion.get();
-            // TODO: Check if it's termination time.
-            if (forwardedInversion.nodeId == this.nodeId) {
-                if (forwardedInversion.throughAllPaths) {
-                    // TODO: Work out whether it's safe to terminate or whether there could be a message in flight.
-                    throw TypeDBException.of(UNIMPLEMENTED);
-                } else {
-                    LOG.debug("Received this.nodeId={} on all ports, but not all true", this.nodeId);  // TODO: Remove if we eventually do terminate
-                }
+    protected void checkCandidacyStatusChange() {
+        Optional<Message.Candidacy> oldestCandidate = findOldestCandidate(); // TODO: This can be a single field that only needs to be re-evaluated in the case of an upstream termination
+        if (oldestCandidate.isEmpty()) return;
+        if (forwardedCandidacy == null || !forwardedCandidacy.equals(oldestCandidate.get())) {
+            forwardedCandidacy = oldestCandidate.get();
+            if (forwardedCandidacy.nodeId == this.nodeId) {
+                // Establish a tree
+                throw TypeDBException.of(UNIMPLEMENTED); // We need to send the tree message.
             } else {
-                downstreamPorts.forEach(port -> send(port.owner, port, forwardedInversion));
+                downstreamPorts.forEach(port -> send(port.owner, port, forwardedCandidacy));
             }
         }
     }
@@ -89,24 +82,9 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
     }
 
-    private Optional<Message.HitInversion> findOldestInversionStatus() {
-        int oldestNodeId = Integer.MAX_VALUE;
-        int oldestCount = 0;
-        boolean throughAllPaths = true;
-        for (Port port: activePorts) {
-            if(port.receivedInversion == null) continue;
-            if (port.receivedInversion.nodeId < oldestNodeId) {
-                oldestNodeId = port.receivedInversion.nodeId;
-                oldestCount = 0;
-            }
-            oldestCount += 1;
-            throughAllPaths = throughAllPaths && port.receivedInversion.throughAllPaths;
-        }
-
-        if (oldestNodeId == Integer.MAX_VALUE) return Optional.empty();
-        else return Optional.of(
-                new Message.HitInversion(oldestNodeId, activePorts.size() == oldestCount && throughAllPaths)
-        );
+    private Optional<Message.Candidacy> findOldestCandidate() {
+        return activePorts.stream().map(port -> port.receivedCandidacy).filter(Objects::nonNull)
+                .min(Comparator.comparingInt(candidacy -> candidacy.nodeId));
     }
 
 
@@ -119,6 +97,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     }
 
     private void notifyPortCreated(Port downstream) {
+        // TODO: Not thread safe! Consider using a HELLO request instead
         this.downstreamPorts.add(downstream);
     }
 
@@ -129,28 +108,26 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         private final ActorNode<?> remote;
         private State state;
         private int lastRequestedIndex;
-        private Message.HitInversion receivedInversion;
+        private Message.Candidacy receivedCandidacy;
 
         protected Port(ActorNode<?> owner, ActorNode<?> remote) {
             this.owner = owner;
             this.remote = remote;
             this.state = State.READY;
             this.lastRequestedIndex = -1;
-            this.receivedInversion = null;
+            this.receivedCandidacy = null;
         }
 
         protected void recordReceive(Message msg) {
-            // assert state == State.PULLING; // Relaxed for HitInversion
-            assert msg.type() == Message.MessageType.HIT_INVERSION || lastRequestedIndex == msg.index();
+            assert msg.type() == Message.MessageType.CANDIDACY || (state == State.PULLING && lastRequestedIndex == msg.index());
             if (msg.type() == Message.MessageType.DONE) {
                 state = State.DONE;
-            } else if (msg.type() == Message.MessageType.HIT_INVERSION) {
-                this.receivedInversion = msg.asHitInversion();
-                // state = State.READY;
+            } else if (msg.type() == Message.MessageType.CANDIDACY) {
+                this.receivedCandidacy = msg.asCandidacy();
+                // Don't stop on pulling on a candidacy
             } else {
                 state = State.READY;
             }
-            // assert state != State.PULLING;
         }
 
 
