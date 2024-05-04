@@ -24,7 +24,6 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     protected List<ActorNode.Port> ports;
     protected final Set<ActorNode.Port> activePorts;
     protected final AnswerTable answerTable;
-    protected Integer pullerId;
 
     protected AbstractAcyclicNode(NodeRegistry nodeRegistry, Driver<NODE> driver, Supplier<String> debugName) {
         super(driver, debugName);
@@ -33,14 +32,12 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
         ports = new ArrayList<>();
         activePorts = new HashSet<>();
         answerTable = new AnswerTable();
-        pullerId = null; // THIS LEADS TO DEADLOCKS. WHAT IF YOU PULL FROM A HIGHER NODE OUTSIDE THE CYCLE?
     }
 
     protected void initialise() {
 
     }
 
-    // TODO: Since port has the index in it, maybe we don't need index here?
     public void receiveRequest(ActorNode.Port requester, Request request) {
         switch (request.type()) {
             case READ_ANSWER: {
