@@ -54,7 +54,7 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
         if (thenConcepts.isPresent()) {
             FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Response toSend = answerTable.recordConclusion(thenConcepts.get().conclusionAnswer());
-            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+            subscribers.forEachRemaining(subscriber -> sendResponse(subscriber.owner(), subscriber, toSend));
         }
         if (port.isReady()) port.readNext();
         if (checkTermination()) {

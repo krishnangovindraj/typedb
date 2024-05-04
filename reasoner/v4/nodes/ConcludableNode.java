@@ -74,7 +74,7 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
             // We can do this multiple times, since subscribers will be empty
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Response toSend = answerTable.recordAnswer(conceptMap);
-            subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
+            subscribers.forEachRemaining(subscriber -> sendResponse(subscriber.owner(), subscriber, toSend));
         });
     }
 
