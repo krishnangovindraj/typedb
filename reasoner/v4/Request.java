@@ -10,6 +10,7 @@ public abstract class Request {
         READ_ANSWER, GROW_TREE,
     }
 
+    private Request() { }
 
     public abstract RequestType type();
 
@@ -22,6 +23,7 @@ public abstract class Request {
         public final int index;
 
         public ReadAnswer(int index) {
+            super();
             this.index = index;
         }
 
@@ -33,6 +35,21 @@ public abstract class Request {
         @Override
         public Request.ReadAnswer asReadAnswer() {
             return this;
+        }
+    }
+
+    public static class GrowTree extends Request {
+        public final int root;
+        public final int ancestor;
+        public GrowTree(int root, int ancestor) {
+            super();
+            this.root = root;
+            this.ancestor = ancestor;
+        }
+
+        @Override
+        public RequestType type() {
+            return RequestType.GROW_TREE;
         }
     }
 }
