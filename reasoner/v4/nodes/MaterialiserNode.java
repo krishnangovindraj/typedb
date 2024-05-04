@@ -3,7 +3,7 @@ package com.vaticle.typedb.core.reasoner.v4.nodes;
 import com.vaticle.typedb.core.concurrent.actor.Actor;
 import com.vaticle.typedb.core.logic.Materialiser;
 import com.vaticle.typedb.core.logic.Rule;
-import com.vaticle.typedb.core.reasoner.v4.Message;
+import com.vaticle.typedb.core.reasoner.v4.Response;
 
 import java.util.Optional;
 
@@ -21,14 +21,14 @@ public class MaterialiserNode extends Actor<MaterialiserNode> {
         nodeRegistry.terminate(e);
     }
 
-    public void materialise(ActorNode<ConclusionNode> sender, ActorNode.Port port, Message.Answer msg, Rule.Conclusion conclusion) {
+    public void materialise(ActorNode<ConclusionNode> sender, ActorNode.Port port, Response.Answer msg, Rule.Conclusion conclusion) {
         assert sender == port.owner();
         Rule.Conclusion.Materialisable materialisable = conclusion.materialisable(msg.answer(), nodeRegistry.conceptManager());
 
-        Optional<Message.Conclusion> response = Materialiser
+        Optional<Response.Conclusion> response = Materialiser
                 .materialise(materialisable, nodeRegistry.traversalEngine(), nodeRegistry.conceptManager())
                 .map(materialisation -> materialisation.bindToConclusion(conclusion, msg.answer()))
-                .map(conclusionAnswer -> new Message.Conclusion(msg.index(), conclusionAnswer));
+                .map(conclusionAnswer -> new Response.Conclusion(msg.index(), conclusionAnswer));
 
         if (response.isPresent()) nodeRegistry.perfCounterFields().materialisations.add(1);
 

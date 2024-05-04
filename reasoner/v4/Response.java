@@ -10,15 +10,14 @@ import java.util.Objects;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_CAST;
 
-public abstract class Message {
-    private final MessageType msgType;
-    private final int index;
+public abstract class Response {
+    private final int index; // TODO: Consider moving down to answer & conclusion
 
-    public Message.Answer asAnswer() {
+    public Response.Answer asAnswer() {
         throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Answer.class);
     }
 
-    public Message.Conclusion asConclusion() {
+    public Response.Conclusion asConclusion() {
         throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Conclusion.class);
     }
 
@@ -26,7 +25,7 @@ public abstract class Message {
         throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Candidacy.class);
     }
 
-    public enum MessageType {
+    public enum ResponseType {
         ANSWER,
         CONCLUSION,
         CANDIDACY,
@@ -34,14 +33,11 @@ public abstract class Message {
         DONE,
     }
 
-    private Message(MessageType msgType, int index) {
-        this.msgType = msgType;
+    private Response(int index) {
         this.index = index;
     }
 
-    public MessageType type() {
-        return msgType;
-    }
+    public abstract ResponseType type();
 
     public int index() {
         return index;
@@ -49,15 +45,15 @@ public abstract class Message {
 
     @Override
     public String toString() {
-        return String.format("Msg:[%d: %s]", index, msgType.name());
+        return String.format("Msg:[%d: %s]", index, type().name());
     }
 
-    public static class Answer extends Message {
+    public static class Answer extends Response {
 
         private final ConceptMap answer;
 
         public Answer(int index, ConceptMap answer) {
-            super(MessageType.ANSWER, index);
+            super(index);
             this.answer = answer;
         }
 
@@ -66,8 +62,13 @@ public abstract class Message {
         }
 
         @Override
-        public Message.Answer asAnswer() {
+        public Response.Answer asAnswer() {
             return this;
+        }
+
+        @Override
+        public ResponseType type() {
+            return ResponseType.ANSWER;
         }
 
         @Override
@@ -76,12 +77,12 @@ public abstract class Message {
         }
     }
 
-    public static class Conclusion extends Message {
+    public static class Conclusion extends Response {
 
         private final Map<Identifier.Variable, Concept> conclusionAnswer;
 
         public Conclusion(int index, Map<Identifier.Variable, Concept> conclusionAnswer) {
-            super(MessageType.CONCLUSION, index);
+            super(index);
             this.conclusionAnswer = conclusionAnswer;
         }
 
@@ -89,24 +90,34 @@ public abstract class Message {
             return conclusionAnswer;
         }
 
-        public Message.Conclusion asConclusion() {
+        public Response.Conclusion asConclusion() {
             return this;
         }
-    }
 
-    public static class Done extends Message {
-
-        public Done(int index) {
-            super(MessageType.DONE, index);
+        @Override
+        public ResponseType type() {
+            return ResponseType.CONCLUSION;
         }
     }
 
-    public static class Candidacy extends Message {
+    public static class Done extends Response {
+
+        public Done(int index) {
+            super(index);
+        }
+
+        @Override
+        public ResponseType type() {
+            return ResponseType.DONE;
+        }
+    }
+
+    public static class Candidacy extends Response {
         public final int nodeId;
         public final int tableSize;
 
         public Candidacy(int nodeId, int tableSize) {
-            super(MessageType.CANDIDACY, -1);
+            super(-1);
             this.nodeId = nodeId;
             this.tableSize = tableSize;
         }
@@ -114,6 +125,11 @@ public abstract class Message {
 
         public Candidacy asCandidacy() {
             return this;
+        }
+
+        @Override
+        public ResponseType type() {
+            return ResponseType.CANDIDACY;
         }
 
         @Override
