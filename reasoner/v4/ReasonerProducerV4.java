@@ -30,7 +30,6 @@ import com.vaticle.typedb.core.traversal.common.Modifiers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -231,7 +230,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
 
 
             @Override
-            protected void handleAnswer(Port onPort, Message.Answer answer) {
+            protected void handleAnswer(Port onPort, Response.Answer answer) {
                 Basic.this.receiveAnswer(answer.answer());
             }
 

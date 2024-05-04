@@ -4,7 +4,7 @@ import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.common.iterator.Iterators;
 import com.vaticle.typedb.core.concept.Concept;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
-import com.vaticle.typedb.core.reasoner.v4.Message;
+import com.vaticle.typedb.core.reasoner.v4.Response;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 
 import java.util.ArrayList;
@@ -16,7 +16,7 @@ import java.util.Set;
 
 public class AnswerTable {
 
-    private final List<Message> answers;
+    private final List<Response> answers;
     private Set<ActorNode.Port> subscribers;
     private boolean complete;
 
@@ -34,7 +34,7 @@ public class AnswerTable {
         return complete;
     }
 
-    public Optional<Message> answerAt(int index) {
+    public Optional<Response> answerAt(int index) {
         assert index < answers.size() || (index == answers.size() && !complete);
         return index < answers.size() ? Optional.of(answers.get(index)) : Optional.empty();
     }
@@ -51,22 +51,22 @@ public class AnswerTable {
         return Iterators.iterate(subs);
     }
 
-    public Message recordAnswer(ConceptMap answer) {
+    public Response recordAnswer(ConceptMap answer) {
         assert !complete;
-        Message msg = new Message.Answer(answers.size(), answer);
+        Response msg = new Response.Answer(answers.size(), answer);
         answers.add(msg);
         return msg;
     }
 
-    public Message recordConclusion(Map<Identifier.Variable, Concept> conclusionAnswer) { // TODO: Generics
-        Message msg = new Message.Conclusion(answers.size(), conclusionAnswer);
+    public Response recordConclusion(Map<Identifier.Variable, Concept> conclusionAnswer) { // TODO: Generics
+        Response msg = new Response.Conclusion(answers.size(), conclusionAnswer);
         answers.add(msg);
         return msg;
     }
 
-    public Message recordDone() {
+    public Response recordDone() {
         assert !complete;
-        Message msg = new Message.Done(answers.size());
+        Response msg = new Response.Done(answers.size());
         answers.add(msg);
         this.complete = true;
         return msg;

@@ -4,7 +4,7 @@ import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.common.iterator.Iterators;
 import com.vaticle.typedb.core.concurrent.actor.Actor;
-import com.vaticle.typedb.core.reasoner.v4.Message;
+import com.vaticle.typedb.core.reasoner.v4.Response;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -45,7 +45,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     }
 
     private void readAnswerAtStrictlyAcyclic(ActorNode.Port reader, int index) {
-        Optional<Message> peekAnswer = answerTable.answerAt(index);
+        Optional<Response> peekAnswer = answerTable.answerAt(index);
         if (peekAnswer.isPresent()) {
             send(reader.owner(), reader, peekAnswer.get());
         } else {
@@ -55,7 +55,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
 
     protected abstract void propagatePull(ActorNode.Port reader, int index);
 
-    public void receive(ActorNode.Port onPort, Message received) {
+    public void receiveResponse(ActorNode.Port onPort, Response received) {
         switch (received.type()) {
             case ANSWER: {
                 handleAnswer(onPort, received.asAnswer());
@@ -82,13 +82,13 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
         }
     }
 
-    protected abstract void handleAnswer(ActorNode.Port onPort, Message.Answer answer);
+    protected abstract void handleAnswer(ActorNode.Port onPort, Response.Answer answer);
 
-    protected void handleConclusion(ActorNode.Port onPort, Message.Conclusion conclusion) {
+    protected void handleConclusion(ActorNode.Port onPort, Response.Conclusion conclusion) {
         throw TypeDBException.of(ILLEGAL_STATE);
     }
 
-    protected void handleCandidacy(ActorNode.Port onPort, Message.Candidacy candidacy) {
+    protected void handleCandidacy(ActorNode.Port onPort, Response.Candidacy candidacy) {
         throw TypeDBException.of(ILLEGAL_STATE);
     }
 
@@ -101,15 +101,15 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     }
 
     // TODO: See if i can safely get recipient from port
-    protected void send(ActorNode<?> recipient, ActorNode.Port recipientPort, Message message) {
+    protected void send(ActorNode<?> recipient, ActorNode.Port recipientPort, Response response) {
         assert recipientPort.remote().equals(this);
-        recipient.driver().execute(actor -> actor.receiveOnPort(recipientPort, message));
+        recipient.driver().execute(actor -> actor.receiveOnPort(recipientPort, response));
     }
 
-    protected void receiveOnPort(ActorNode.Port port, Message message) {
-        ActorNode.LOG.debug(port.owner() + " received " + message + " from " + port.remote());
-        port.recordReceive(message); // Is it strange that I call this implicitly?
-        receive(port, message);
+    protected void receiveOnPort(ActorNode.Port port, Response response) {
+        ActorNode.LOG.debug(port.owner() + " received " + response + " from " + port.remote());
+        port.recordReceive(response); // Is it strange that I call this implicitly?
+        receiveResponse(port, response);
     }
 
     private void recordDone(ActorNode.Port port) {

@@ -3,7 +3,7 @@ package com.vaticle.typedb.core.reasoner.v4.nodes;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.logic.resolvable.Negated;
-import com.vaticle.typedb.core.reasoner.v4.Message;
+import com.vaticle.typedb.core.reasoner.v4.Response;
 
 public class NegatedNode extends ResolvableNode<Negated, NegatedNode> {
 
@@ -31,10 +31,10 @@ public class NegatedNode extends ResolvableNode<Negated, NegatedNode> {
     }
 
     @Override
-    protected void handleAnswer(Port onPort, Message.Answer asAnswer) {
+    protected void handleAnswer(Port onPort, Response.Answer asAnswer) {
         if (!answerTable.isComplete()) {
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-            Message toSend = answerTable.recordDone();
+            Response toSend = answerTable.recordDone();
             subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
             // And we're done. No more pulling.
         }
@@ -49,7 +49,7 @@ public class NegatedNode extends ResolvableNode<Negated, NegatedNode> {
     protected void onTermination() {
         if (!answerTable.isComplete()) {
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-            Message toSend = answerTable.recordAnswer(bounds);
+            Response toSend = answerTable.recordAnswer(bounds);
             subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
             answerTable.recordDone();
         }
