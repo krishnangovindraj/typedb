@@ -6,7 +6,6 @@ import com.vaticle.typedb.core.common.iterator.Iterators;
 import com.vaticle.typedb.core.concurrent.actor.Actor;
 import com.vaticle.typedb.core.reasoner.v4.Message;
 
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -15,6 +14,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
+import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 
 public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>> extends Actor<NODE> {
 
@@ -65,9 +65,12 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
                 handleConclusion(onPort, received.asConclusion());
                 break;
             }
-            case HIT_INVERSION: {
-                handleHitInversion(onPort, received.asHitInversion());
+            case CANDIDACY: {
+                handleCandidacy(onPort, received.asCandidacy());
                 break;
+            }
+            case TERMINATION_PROPOSAL: {
+                throw TypeDBException.of(UNIMPLEMENTED);
             }
             case DONE: {
                 recordDone(onPort);
@@ -85,7 +88,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
         throw TypeDBException.of(ILLEGAL_STATE);
     }
 
-    protected void handleHitInversion(ActorNode.Port onPort, Message.HitInversion hitInversion) {
+    protected void handleCandidacy(ActorNode.Port onPort, Message.Candidacy candidacy) {
         throw TypeDBException.of(ILLEGAL_STATE);
     }
 

@@ -1,10 +1,8 @@
 package com.vaticle.typedb.core.reasoner.v4;
 
-import com.vaticle.typedb.core.common.collection.ByteArray;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.concept.Concept;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
-import com.vaticle.typedb.core.reasoner.v4.nodes.ActorNode;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 
 import java.util.Map;
@@ -24,14 +22,14 @@ public abstract class Message {
         throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Conclusion.class);
     }
 
-    public HitInversion asHitInversion() {
-        throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), HitInversion.class);
+    public Candidacy asCandidacy() {
+        throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Candidacy.class);
     }
 
     public enum MessageType {
         ANSWER,
         CONCLUSION,
-        HIT_INVERSION,
+        CANDIDACY,
         TERMINATION_PROPOSAL,
         DONE,
     }
@@ -103,33 +101,32 @@ public abstract class Message {
         }
     }
 
-    public static class HitInversion extends Message {
+    public static class Candidacy extends Message {
         public final int nodeId;
-        public final boolean throughAllPaths;
+        public final int tableSize;
 
-        public HitInversion(int nodeId, boolean throughAllPaths) {
-            super(MessageType.HIT_INVERSION, -1);
+        public Candidacy(int nodeId, int tableSize) {
+            super(MessageType.CANDIDACY, -1);
             this.nodeId = nodeId;
-            this.throughAllPaths = throughAllPaths;
+            this.tableSize = tableSize;
         }
 
 
-        public Message.HitInversion asHitInversion() {
+        public Candidacy asCandidacy() {
             return this;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(this.nodeId, this.throughAllPaths);
+            return Objects.hash(this.nodeId);
         }
 
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
-            HitInversion other = (HitInversion) o;
-            return super.equals(other) &&
-                    nodeId == other.nodeId && throughAllPaths == other.throughAllPaths;
+            Candidacy other = (Candidacy) o;
+            return super.equals(other) && nodeId == other.nodeId;
         }
     }
 }
