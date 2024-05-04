@@ -6,7 +6,7 @@ import com.vaticle.typedb.core.common.iterator.Iterators;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.logic.resolvable.Concludable;
 import com.vaticle.typedb.core.logic.resolvable.Unifier;
-import com.vaticle.typedb.core.reasoner.v4.Message;
+import com.vaticle.typedb.core.reasoner.v4.Response;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -54,13 +54,13 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
         });
     }
 
-    protected void handleAnswer(Port onPort, Message.Answer received) {
+    protected void handleAnswer(Port onPort, Response.Answer received) {
         assert onPort == lookupPort;
         recordAndForwardAnswers(Iterators.single(received.answer()));
         onPort.readNext();
     }
 
-    protected void handleConclusion(Port onPort, Message.Conclusion received) {
+    protected void handleConclusion(Port onPort, Response.Conclusion received) {
         Pair<Unifier, Unifier.Requirements.Instance> unifierAndRequirements = conclusioNodePorts.get(onPort);
         recordAndForwardAnswers(unifierAndRequirements.first()
                 .unUnify(received.conclusionAnswer(), unifierAndRequirements.second()));
@@ -73,7 +73,7 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
             seenAnswers.add(conceptMap);
             // We can do this multiple times, since subscribers will be empty
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-            Message toSend = answerTable.recordAnswer(conceptMap);
+            Response toSend = answerTable.recordAnswer(conceptMap);
             subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
         });
     }

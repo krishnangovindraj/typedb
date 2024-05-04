@@ -7,7 +7,7 @@ import com.vaticle.typedb.core.logic.resolvable.Resolvable;
 import com.vaticle.typedb.core.logic.resolvable.Retrievable;
 import com.vaticle.typedb.core.pattern.Conjunction;
 import com.vaticle.typedb.core.reasoner.common.Traversal;
-import com.vaticle.typedb.core.reasoner.v4.Message;
+import com.vaticle.typedb.core.reasoner.v4.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,19 +49,19 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
             send(reader.owner(), reader, pullTraversalSynchronous());
         }
 
-        private Message pullTraversalSynchronous() {
+        private Response pullTraversalSynchronous() {
             return traversal.hasNext() ?
                     answerTable.recordAnswer(traversal.next()) :
                     answerTable.recordDone();
         }
 
         @Override
-        public void receive(ActorNode.Port onPort, Message message) {
+        public void receiveResponse(ActorNode.Port onPort, Response response) {
             throw TypeDBException.of(ILLEGAL_STATE);
         }
 
         @Override
-        protected void handleAnswer(Port onPort, Message.Answer answer) {
+        protected void handleAnswer(Port onPort, Response.Answer answer) {
             throw TypeDBException.of(ILLEGAL_STATE);
         }
 
