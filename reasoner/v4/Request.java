@@ -5,7 +5,6 @@ import com.vaticle.typedb.core.common.exception.TypeDBException;
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_CAST;
 
 public abstract class Request {
-
     public enum RequestType {
         READ_ANSWER, GROW_TREE,
     }
@@ -17,6 +16,10 @@ public abstract class Request {
     public Request.ReadAnswer asReadAnswer() {
         throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Request.ReadAnswer.class);
     }
+    public Request.GrowTree asGrowTree() {
+        throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Request.GrowTree.class);
+    }
+
 
     public static class ReadAnswer extends Request {
 
@@ -40,16 +43,19 @@ public abstract class Request {
 
     public static class GrowTree extends Request {
         public final int root;
-        public final int ancestor;
-        public GrowTree(int root, int ancestor) {
+        public GrowTree(int root) {
             super();
             this.root = root;
-            this.ancestor = ancestor;
         }
 
         @Override
         public RequestType type() {
             return RequestType.GROW_TREE;
+        }
+
+        @Override
+        public Request.GrowTree asGrowTree() {
+            return this;
         }
     }
 }
