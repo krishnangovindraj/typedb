@@ -12,7 +12,6 @@ import java.util.function.Supplier;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
-import static com.vaticle.typedb.core.common.iterator.Iterators.iterate;
 
 public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAcyclicNode<NODE> {
 
@@ -20,16 +19,23 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
     private final List<ActorNode.Port> downstreamPorts;
     private Response.Candidacy forwardedCandidacy;
+    private Request.GrowTree treeAncestor;
+    private Response.TreeVote treeVote;
+    private Port treeAncestorPort;
 
     protected ActorNode(NodeRegistry nodeRegistry, Driver<NODE> driver, Supplier<String> debugName) {
         super(nodeRegistry, driver, debugName);
         forwardedCandidacy = null;
         downstreamPorts = new ArrayList<>();
+        treeAncestor = new Request.GrowTree(this.nodeId); // TODO: Restoring when state changes weep ;_;
+        treeVote = null;
+        treeAncestorPort = null;
     }
 
     // TODO: Since port has the index in it, maybe we don't need index here?
     @Override
-    protected void readAnswerAt(ActorNode.Port reader, int index) {
+    protected void readAnswerAt(ActorNode.Port reader, Request.ReadAnswer readAnswerRequest) {
+        int index = readAnswerRequest.index;
         Optional<Response> peekAnswer = answerTable.answerAt(index);
         if (peekAnswer.isPresent()) {
             sendResponse(reader.owner, reader, peekAnswer.get());
@@ -41,6 +47,23 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         }
     }
 
+    protected void growTree(ActorNode.Port requestorPort, Request.GrowTree growTreeRequest) {
+        if (growTreeRequest.root != forwardedCandidacy.nodeId)  return;
+        if (treeAncestor == null || growTreeRequest.root != treeAncestor.root ) {
+            treeAncestor = growTreeRequest; // TODO: FORWARD!
+            treeAncestorPort = requestorPort;
+            sendResponse(requestorPort, new Response.AcceptAncestor(true));
+            activePorts.stream().filter(port -> port.receivedCandidacy != null && port.receivedCandidacy.nodeId == treeAncestor.root)
+                    .forEach(port -> port.sendRequest(growTreeRequest));
+        } else {
+            assert growTreeRequest.root == treeAncestor.root; // We already have an ancestor. WHAT DO? We need a way of telling them not to wait for us.
+            sendResponse(requestorPort, new Response.AcceptAncestor(false));
+        }
+    }
+
+
+    // Response handling
+
     protected abstract void handleAnswer(Port onPort, Response.Answer answer);
 
     protected void handleConclusion(Port onPort, Response.Conclusion conclusion) {
@@ -49,9 +72,9 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
     protected void handleCandidacy(Port onPort, Response.Candidacy candidacy) {
         checkCandidacyStatusChange(); // We may still have to forward a better tableSize to everyone.
-        if (candidacy.nodeId == this.nodeId) {
+        if (candidacy.nodeId == this.treeAncestor.root) {
             // Grow tree on port
-            onPort.sendRequest(new Request.GrowTree(this.nodeId, this.nodeId));
+            onPort.sendRequest(new Request.GrowTree(this.treeAncestor.root));
         }
     }
 
@@ -59,15 +82,44 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     protected void handleDone(Port onPort) {
         if (checkTermination()) {
             onTermination();
-        } else checkCandidacyStatusChange();
+        } else {
+            checkCandidacyStatusChange();
+            checkTreeStatusChange();
+        }
     }
 
     protected void checkCandidacyStatusChange() {
-        Optional<Response.Candidacy> oldestCandidate = findOldestCandidate(); // TODO: This can be a single field that only needs to be re-evaluated in the case of an upstream termination
+        Optional<Response.Candidacy> oldestCandidate = activePorts.stream().map(port -> port.receivedCandidacy).filter(Objects::nonNull)
+                .min(Response.Candidacy.Comparator); // TODO: Maybe these can be a single field that only needs to be re-evaluated in the case of an upstream termination
         if (oldestCandidate.isEmpty()) return;
         if (forwardedCandidacy == null || !forwardedCandidacy.equals(oldestCandidate.get())) {
             forwardedCandidacy = oldestCandidate.get();
             downstreamPorts.forEach(port -> sendResponse(port.owner, port, forwardedCandidacy));
+        }
+    }
+
+    private void checkTreeStatusChange() {
+        if (forwardedCandidacy != null && treeAncestor.root == forwardedCandidacy.nodeId) {
+            if (treeVote != null && forwardedCandidacy == treeVote.voteFor) return; // We've already voted.
+            // We may have to vote.
+            Optional<Response.Candidacy> youngestCandidacy = activePorts.stream().map(port -> port.receivedCandidacy).filter(Objects::nonNull)
+                    .max(Response.Candidacy.Comparator);
+            if (youngestCandidacy.isPresent() &&  youngestCandidacy.get().equals(forwardedCandidacy)) {
+                // TODO: We need all our tree children to have voted too
+                if (!treeChildren.isEmpty()) {
+                    if (!treeChildren.allmatch(treeChild.votedFor.equals(forwardedCandidacy)) ) return;
+
+                }
+                treeVote = new Response.TreeVote(forwardedCandidacy);
+                if (treeVote.voteFor.nodeId == this.nodeId) {
+                    // TODO: This should mean we can terminate.
+                    throw TypeDBException.of(UNIMPLEMENTED);
+                } else {
+                    // Forward the vote to our ancestor port
+                    sendResponse(treeAncestorPort.owner(), treeAncestorPort, treeVote);
+                    throw TypeDBException.of(UNIMPLEMENTED);
+                }
+            }
         }
     }
 
@@ -80,11 +132,6 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
         Response toSend = answerTable.recordDone();
         subscribers.forEachRemaining(subscriber -> sendResponse(subscriber.owner(), subscriber, toSend));
-    }
-
-    private Optional<Response.Candidacy> findOldestCandidate() {
-        return activePorts.stream().map(port -> port.receivedCandidacy).filter(Objects::nonNull)
-                .min(Comparator.comparingInt(candidacy -> candidacy.nodeId));
     }
 
 
@@ -119,7 +166,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         }
 
         protected void recordReceive(Response msg) {
-            assert msg.type() == Response.ResponseType.CANDIDACY || (state == State.PULLING && lastRequestedIndex == msg.index());
+            assert msg.type() == Response.ResponseType.CANDIDACY || msg.type() == Response.ResponseType.TREE_VOTE  || (state == State.PULLING && lastRequestedIndex == msg.index());
             if (msg.type() == Response.ResponseType.DONE) {
                 state = State.DONE;
             } else if (msg.type() == Response.ResponseType.CANDIDACY) {
