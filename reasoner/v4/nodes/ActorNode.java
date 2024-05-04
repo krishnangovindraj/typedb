@@ -48,7 +48,11 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     }
 
     protected void handleCandidacy(Port onPort, Response.Candidacy candidacy) {
-        checkCandidacyStatusChange();
+        checkCandidacyStatusChange(); // We may still have to forward a better tableSize to everyone.
+        if (candidacy.nodeId == this.nodeId) {
+            // Grow tree on port
+            onPort.sendRequest(new Request.GrowTree(this.nodeId, this.nodeId));
+        }
     }
 
     @Override
@@ -63,12 +67,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         if (oldestCandidate.isEmpty()) return;
         if (forwardedCandidacy == null || !forwardedCandidacy.equals(oldestCandidate.get())) {
             forwardedCandidacy = oldestCandidate.get();
-            if (forwardedCandidacy.nodeId == this.nodeId) {
-                // Establish a tree
-                throw TypeDBException.of(UNIMPLEMENTED); // We need to send the tree message.
-            } else {
-                downstreamPorts.forEach(port -> sendResponse(port.owner, port, forwardedCandidacy));
-            }
+            downstreamPorts.forEach(port -> sendResponse(port.owner, port, forwardedCandidacy));
         }
     }
 
@@ -137,7 +136,11 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             state = State.PULLING;
             lastRequestedIndex += 1;
             int readIndex = lastRequestedIndex;
-            remote.driver().execute(nodeActor -> nodeActor.receiveRequest(Port.this, new Request.ReadAnswer(readIndex)));
+            sendRequest(new Request.ReadAnswer(readIndex));
+        }
+
+        private void sendRequest(Request request) {
+            remote.driver().execute(nodeActor -> nodeActor.receiveRequest(this, request));
         }
 
         public ActorNode<?> owner() {
