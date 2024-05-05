@@ -177,8 +177,8 @@ public abstract class Response {
     public static class TreeVote extends Response {
 
         public final Response.Candidacy voteFor;
-        public TreeVote(Candidacy voteFor) {
-            super(-1);
+        public TreeVote(int index, Candidacy voteFor) {
+            super(index);
             this.voteFor = voteFor;
         }
 
