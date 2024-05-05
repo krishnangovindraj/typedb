@@ -56,8 +56,6 @@ public class NodeRegistry {
     private AtomicBoolean terminated;
     private final TraversalEngine traversalEngine;
     private final ConceptManager conceptManager;
-    private Actor.Driver<MaterialiserNode> materialiserNode;
-
     private final AtomicInteger nodeAgeClock;
     private final Set<ConjunctionController.ConjunctionStreamPlan> cyclicConjunctionStreamPlans;
 
@@ -105,9 +103,6 @@ public class NodeRegistry {
         iterate(concludableSubRegistries.keySet())
                 .flatMap(concludable -> iterate(logicManager.applicableRules(concludable).keySet()))
                 .forEachRemaining(this::registerConclusions);
-        materialiserNode = Actor.driver(
-                materialiserNodeDriver -> new MaterialiserNode(this, materialiserNodeDriver),
-                executorService);
     }
 
     private void registerConclusions(Rule rule) {
@@ -192,10 +187,6 @@ public class NodeRegistry {
         ReasonerPlanner.CallMode callMode = new ReasonerPlanner.CallMode(conjunction,
                 iterate(bounds.concepts().keySet()).map(id -> conjunction.pattern().variable(id)).toSet());
         return csPlans.get(callMode);
-    }
-
-    public Actor.Driver<MaterialiserNode> materialiserNode() {
-        return materialiserNode;
     }
 
     // Now that we have conclusions, Top-level conjunction nodes are local too. But the ones after them aren't

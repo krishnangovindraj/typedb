@@ -2,6 +2,7 @@ package com.vaticle.typedb.core.reasoner.v4.nodes;
 
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
+import com.vaticle.typedb.core.logic.Materialiser;
 import com.vaticle.typedb.core.logic.Rule;
 import com.vaticle.typedb.core.reasoner.controller.ConjunctionController;
 import com.vaticle.typedb.core.reasoner.v4.Response;
@@ -11,13 +12,11 @@ import java.util.Optional;
 public class ConclusionNode extends ActorNode<ConclusionNode> {
     private final Rule.Conclusion conclusion;
     private final ConceptMap bounds;
-    private int pendingMaterialisations;
 
     public ConclusionNode(Rule.Conclusion conclusion, ConceptMap bounds, NodeRegistry nodeRegistry, Driver<ConclusionNode> driver) {
         super(nodeRegistry, driver, () -> String.format("Conclusion[%s, %s, %s]", conclusion.rule(), conclusion, bounds));
         this.conclusion = conclusion;
         this.bounds = bounds;
-        this.pendingMaterialisations = 0;
     }
 
     @Override
@@ -39,41 +38,23 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
 
     @Override
     protected void handleAnswer(Port onPort, Response.Answer answer) {
-        requestMaterialisation(onPort, answer);
-        // Do NOT readNext.
-    }
-
-    private void requestMaterialisation(Port onPort, Response.Answer whenConcepts) {
-        pendingMaterialisations += 1;
-        nodeRegistry.materialiserNode()
-                .execute(materialiserNode -> materialiserNode.materialise(this, onPort, whenConcepts, conclusion));
-    }
-
-    public void receiveMaterialisation(Port port, Optional<Response.Conclusion> thenConcepts) {
-        pendingMaterialisations -= 1;
+        Optional<Response.Conclusion> thenConcepts = materialise(this.nodeRegistry, answer, conclusion);
         if (thenConcepts.isPresent()) {
             FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Response toSend = answerTable.recordConclusion(thenConcepts.get().conclusionAnswer());
             subscribers.forEachRemaining(subscriber -> sendResponse(subscriber.owner(), subscriber, toSend));
         }
-        if (port.isReady()) port.readNext();
-        if (checkTermination()) {
-            onTermination();
-        } else checkCandidacyStatusChange();
+        if (onPort.isReady()) onPort.readNext();
     }
 
-    @Override
-    protected void checkCandidacyStatusChange() {
-        if (pendingMaterialisations > 0) return;
-        else super.checkCandidacyStatusChange();
-    }
+    private static synchronized Optional<Response.Conclusion> materialise(NodeRegistry nodeRegistry, Response.Answer msg, Rule.Conclusion conclusion) {
+        Rule.Conclusion.Materialisable materialisable = conclusion.materialisable(msg.answer(), nodeRegistry.conceptManager());
+        Optional<Response.Conclusion> response = Materialiser
+                .materialise(materialisable, nodeRegistry.traversalEngine(), nodeRegistry.conceptManager())
+                .map(materialisation -> materialisation.bindToConclusion(conclusion, msg.answer()))
+                .map(conclusionAnswer -> new Response.Conclusion(msg.index(), conclusionAnswer));
 
-    @Override
-    protected boolean checkTermination() {
-        if (pendingMaterialisations > 0) {
-            return false;
-        } else {
-            return super.checkTermination();
-        }
+        if (response.isPresent()) nodeRegistry.perfCounterFields().materialisations.add(1);
+        return response;
     }
 }
