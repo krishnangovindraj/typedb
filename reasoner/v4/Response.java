@@ -49,9 +49,7 @@ public abstract class Response {
     }
 
     @Override
-    public String toString() {
-        return String.format("Msg:[%d: %s]", index, type().name());
-    }
+    public abstract String toString();
 
     public static class Answer extends Response {
 
@@ -78,7 +76,8 @@ public abstract class Response {
 
         @Override
         public String toString() {
-            return String.format("Msg:[%d: %s | %s]", index(), type().name(), answer);
+            return String.format("Answer[%d]", index());
+//            return String.format("Answer:[%d: %s | %s]", index(), type().name(), answer);
         }
     }
 
@@ -103,6 +102,11 @@ public abstract class Response {
         public ResponseType type() {
             return ResponseType.CONCLUSION;
         }
+
+        @Override
+        public String toString() {
+            return String.format("Conclusion[%d]", index());
+        }
     }
 
     public static class Done extends Response {
@@ -114,6 +118,11 @@ public abstract class Response {
         @Override
         public ResponseType type() {
             return ResponseType.DONE;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("Done[%d]", index());
         }
     }
 
@@ -158,6 +167,11 @@ public abstract class Response {
             Candidacy other = (Candidacy) o;
             return 0 == Comparator.compare(this, other);
         }
+
+        @Override
+        public String toString() {
+            return String.format("Candidacy[(%d, %d)]", nodeId, tableSize);
+        }
     }
 
     public static class TreeVote extends Response {
@@ -178,13 +192,15 @@ public abstract class Response {
             return this;
         }
 
-        public Candidacy votedFor() {
-            return voteFor;
-        }
-
         public boolean supports(Candidacy candidate) {
             return voteFor.nodeId == candidate.nodeId &&
                     (voteFor.tableSize ==  candidate.tableSize || voteFor.tableSize == Integer.MAX_VALUE);
+        }
+
+
+        @Override
+        public String toString() {
+            return String.format("TreeVote[%s]", voteFor);
         }
     }
 }

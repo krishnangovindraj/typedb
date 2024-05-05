@@ -72,12 +72,17 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         throw TypeDBException.of(ILLEGAL_STATE);
     }
 
+    @Override
     protected void handleCandidacy(Port onPort, Response.Candidacy candidacy) {
         checkCandidacyStatusChange(); // We may still have to forward a better tableSize to everyone.
         if (candidacy.nodeId == this.treeAncestor.root) {
             // Grow tree on port
             onPort.sendRequest(new Request.GrowTree(this.treeAncestor.root));
         }
+    }
+
+    protected void handleTreeVote(Port onPort, Response.TreeVote treeVote) {
+        checkTreeStatusChange();
     }
 
     @Override
@@ -109,8 +114,9 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             if (mustVote) { // No outstanding ports
                 treeVote = new Response.TreeVote(forwardedCandidacy);
                 if (treeVote.voteFor.nodeId == this.nodeId) {
-                    // TODO: This should mean we can terminate.
-                    throw TypeDBException.of(UNIMPLEMENTED);
+                    activePorts.forEach(port -> {
+                        recordDone(port); handleDone(port);
+                    });
                 } else {
                     // Forward the vote to our ancestor port
                     sendResponse(treeAncestorPort.owner(), treeAncestorPort, treeVote);

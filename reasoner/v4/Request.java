@@ -20,6 +20,8 @@ public abstract class Request {
         throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Request.GrowTree.class);
     }
 
+    @Override
+    public abstract String toString();
 
     public static class ReadAnswer extends Request {
 
@@ -39,6 +41,11 @@ public abstract class Request {
         public Request.ReadAnswer asReadAnswer() {
             return this;
         }
+
+        @Override
+        public String toString() {
+            return String.format("ReadAnswer[%d]", index);
+        }
     }
 
     public static class GrowTree extends Request {
@@ -56,6 +63,11 @@ public abstract class Request {
         @Override
         public Request.GrowTree asGrowTree() {
             return this;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("GrowTree[%d]", root);
         }
     }
 }

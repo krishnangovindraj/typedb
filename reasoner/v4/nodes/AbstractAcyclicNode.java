@@ -39,6 +39,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     }
 
     public void receiveRequest(ActorNode.Port requester, Request request) {
+        System.err.printf("REQUEST: Node[%d] received response %s from Node[%d]\n", this.nodeId, request, requester.owner().nodeId);
         switch (request.type()) {
             case READ_ANSWER: {
                 readAnswerAt(requester, request.asReadAnswer());
@@ -83,7 +84,8 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
                 break;
             }
             case TREE_VOTE: {
-                throw TypeDBException.of(UNIMPLEMENTED);
+                handleTreeVote(onPort, received.asTreeVote());
+                break;
             }
             case DONE: {
                 recordDone(onPort);
@@ -95,15 +97,15 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
         }
     }
 
+
     protected abstract void handleAnswer(ActorNode.Port onPort, Response.Answer answer);
 
     protected void handleConclusion(ActorNode.Port onPort, Response.Conclusion conclusion) {
         throw TypeDBException.of(ILLEGAL_STATE);
     }
 
-    protected void handleCandidacy(ActorNode.Port onPort, Response.Candidacy candidacy) {
-        throw TypeDBException.of(ILLEGAL_STATE);
-    }
+    protected abstract void handleCandidacy(ActorNode.Port onPort, Response.Candidacy candidacy);
+    protected abstract void handleTreeVote(ActorNode.Port onPort, Response.TreeVote treeVote);
 
     protected abstract void handleDone(ActorNode.Port onPort);
 
@@ -120,12 +122,12 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     }
 
     protected void receiveResponseOnPort(ActorNode.Port port, Response response) {
-        ActorNode.LOG.debug(port.owner() + " received " + response + " from " + port.remote());
+        System.err.printf("RESPONSE: Node[%d] received response %s from Node[%d]\n", port.owner().nodeId, response, port.remote().nodeId);
         port.recordReceive(response); // Is it strange that I call this implicitly?
         receiveResponse(port, response);
     }
 
-    private void recordDone(ActorNode.Port port) {
+    protected void recordDone(ActorNode.Port port) {
         assert activePorts.contains(port);
         activePorts.remove(port);
     }
