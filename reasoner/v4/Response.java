@@ -26,6 +26,10 @@ public abstract class Response {
         throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Candidacy.class);
     }
 
+    public TreeVote asTreeVote() {
+        throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), TreeVote.class);
+    }
+
     public enum ResponseType {
         ANSWER,
         CONCLUSION,
@@ -167,6 +171,20 @@ public abstract class Response {
         @Override
         public ResponseType type() {
             return ResponseType.TREE_VOTE;
+        }
+
+        @Override
+        public TreeVote asTreeVote() {
+            return this;
+        }
+
+        public Candidacy votedFor() {
+            return voteFor;
+        }
+
+        public boolean supports(Candidacy candidate) {
+            return voteFor.nodeId == candidate.nodeId &&
+                    (voteFor.tableSize ==  candidate.tableSize || voteFor.tableSize == Integer.MAX_VALUE);
         }
     }
 }

@@ -52,12 +52,14 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         if (treeAncestor == null || growTreeRequest.root != treeAncestor.root ) {
             treeAncestor = growTreeRequest; // TODO: FORWARD!
             treeAncestorPort = requestorPort;
-            sendResponse(requestorPort, new Response.AcceptAncestor(true));
+//            sendResponse(requestorPort, new Response.AcceptAncestor(true));
             activePorts.stream().filter(port -> port.receivedCandidacy != null && port.receivedCandidacy.nodeId == treeAncestor.root)
                     .forEach(port -> port.sendRequest(growTreeRequest));
         } else {
             assert growTreeRequest.root == treeAncestor.root; // We already have an ancestor. WHAT DO? We need a way of telling them not to wait for us.
-            sendResponse(requestorPort, new Response.AcceptAncestor(false));
+            // sendResponse(requestorPort, new Response.AcceptAncestor(false));
+            // Cheeky, I'm just going to send them a MAXINT for the tableSIze. If we change our vote, the leader will hear of it through our ancestor.
+            sendResponse(requestorPort.owner, requestorPort, new Response.TreeVote(new Response.Candidacy(growTreeRequest.root, Integer.MAX_VALUE)));
         }
     }
 
@@ -89,7 +91,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     }
 
     protected void checkCandidacyStatusChange() {
-        Optional<Response.Candidacy> oldestCandidate = activePorts.stream().map(port -> port.receivedCandidacy).filter(Objects::nonNull)
+        Optional<Response.Candidacy> oldestCandidate = activePorts.stream().map(port -> port.receivedCandidacy).filter(Objects::nonNull) // Ok to filter here, but not for votes.
                 .min(Response.Candidacy.Comparator); // TODO: Maybe these can be a single field that only needs to be re-evaluated in the case of an upstream termination
         if (oldestCandidate.isEmpty()) return;
         if (forwardedCandidacy == null || !forwardedCandidacy.equals(oldestCandidate.get())) {
@@ -100,16 +102,11 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
     private void checkTreeStatusChange() {
         if (forwardedCandidacy != null && treeAncestor.root == forwardedCandidacy.nodeId) {
-            if (treeVote != null && forwardedCandidacy == treeVote.voteFor) return; // We've already voted.
+            if (treeVote != null && forwardedCandidacy == treeVote.voteFor) return; // Our vote is up-to-date.
             // We may have to vote.
-            Optional<Response.Candidacy> youngestCandidacy = activePorts.stream().map(port -> port.receivedCandidacy).filter(Objects::nonNull)
-                    .max(Response.Candidacy.Comparator);
-            if (youngestCandidacy.isPresent() &&  youngestCandidacy.get().equals(forwardedCandidacy)) {
-                // TODO: We need all our tree children to have voted too
-                if (!treeChildren.isEmpty()) {
-                    if (!treeChildren.allmatch(treeChild.votedFor.equals(forwardedCandidacy)) ) return;
-
-                }
+            // For voting, treeChildren is necessarily equal to activePorts. A port that's not in the tree will not have voted for the candidate.
+            boolean mustVote = activePorts.stream().allMatch(treeChild -> treeChild.receivedTreeVote != null && treeChild.receivedTreeVote.supports(forwardedCandidacy));
+            if (mustVote) { // No outstanding ports
                 treeVote = new Response.TreeVote(forwardedCandidacy);
                 if (treeVote.voteFor.nodeId == this.nodeId) {
                     // TODO: This should mean we can terminate.
@@ -117,7 +114,6 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
                 } else {
                     // Forward the vote to our ancestor port
                     sendResponse(treeAncestorPort.owner(), treeAncestorPort, treeVote);
-                    throw TypeDBException.of(UNIMPLEMENTED);
                 }
             }
         }
@@ -156,6 +152,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         private State state;
         private int lastRequestedIndex;
         private Response.Candidacy receivedCandidacy;
+        private Response.TreeVote receivedTreeVote;
 
         protected Port(ActorNode<?> owner, ActorNode<?> remote) {
             this.owner = owner;
@@ -172,6 +169,8 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             } else if (msg.type() == Response.ResponseType.CANDIDACY) {
                 this.receivedCandidacy = msg.asCandidacy();
                 // Don't stop on pulling on a candidacy
+            } else if (msg.type() == Response.ResponseType.TREE_VOTE) {
+                receivedTreeVote = msg.asTreeVote();
             } else {
                 state = State.READY;
             }
