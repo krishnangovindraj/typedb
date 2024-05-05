@@ -59,7 +59,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         } else {
             assert growTreeRequest.root == treeAncestor.root; // We already have an ancestor. WHAT DO? We need a way of telling them not to wait for us.
             // Cheeky, I'm just going to send them a MAXINT for the tableSIze. If we change our vote, the leader will hear of it through our ancestor.
-            sendResponse(requestorPort.owner, requestorPort, new Response.TreeVote(new Response.Candidacy(growTreeRequest.root, Integer.MAX_VALUE)));
+            sendResponse(requestorPort.owner, requestorPort, new Response.TreeVote(this.answerTable.size(), new Response.Candidacy(growTreeRequest.root, Integer.MAX_VALUE)));
         }
     }
 
@@ -117,9 +117,12 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             if (treeVote != null && forwardedCandidacy == treeVote.voteFor) return; // Our vote is up-to-date.
             // We may have to vote.
             // For voting, treeChildren is necessarily equal to activePorts. A port that's not in the tree will not have voted for the candidate.
-            boolean mustVote = activePorts.stream().allMatch(treeChild -> treeChild.receivedTreeVote != null && treeChild.receivedTreeVote.supports(forwardedCandidacy));
+            boolean mustVote = activePorts.stream().allMatch(port -> {
+                return port.receivedTreeVote != null && port.receivedTreeVote.supports(forwardedCandidacy) &&
+                        port.lastRequestedIndex == port.receivedTreeVote.index(); // Else we may have unread answers in the tables
+            });
             if (mustVote) { // No outstanding ports
-                treeVote = new Response.TreeVote(forwardedCandidacy);
+                treeVote = new Response.TreeVote(this.answerTable.size(), forwardedCandidacy);
                 if (forwardedCandidacy.nodeId == this.nodeId) {
                     if (forwardedCandidacy.tableSize == this.answerTable.size()) {
                         // Let's force termination of the SCC, and terminate ourselves
