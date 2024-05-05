@@ -114,7 +114,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     }
 
     // TODO: See if i can safely get recipient from port
-    protected void sendResponse(ActorNode<?> recipient, ActorNode.Port recipientPort, Response response) {
+    protected void sendResponse(ActorNode<?> recipient, ActorNode.Port recipientPort, Response response) { // TODO: Refactor redundant recipient
         assert recipientPort.remote().equals(this);
         recipient.driver().execute(actor -> actor.receiveResponseOnPort(recipientPort, response));
     }
