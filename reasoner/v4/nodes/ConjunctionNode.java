@@ -42,7 +42,7 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
     }
 
     @Override
-    protected void propagatePull(ActorNode.Port reader, int index) {
+    protected void computeNextAnswer(ActorNode.Port reader, int index) {
         answerTable.registerSubscriber(reader, index);
         allPorts().forEachRemaining(port -> {
             if (port.isReady()) port.readNext();

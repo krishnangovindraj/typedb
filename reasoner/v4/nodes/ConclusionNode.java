@@ -28,7 +28,7 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
         });
     }
 
-    protected void propagatePull(ActorNode.Port reader, int index) {
+    protected void computeNextAnswer(ActorNode.Port reader, int index) {
         answerTable.registerSubscriber(reader, index);
 
         // KGFLAG: Strategy

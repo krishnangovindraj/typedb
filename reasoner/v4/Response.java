@@ -35,7 +35,7 @@ public abstract class Response {
         CONCLUSION,
         CANDIDACY,
         TREE_VOTE,
-        DONE,
+        DONE
     }
 
     private Response(int index) {
@@ -127,22 +127,11 @@ public abstract class Response {
     }
 
     public static class Candidacy extends Response {
-        public static java.util.Comparator<? super Candidacy> Comparator = new Comparator<Candidacy>() {
-            @Override
-            public int compare(Candidacy c1, Candidacy c2) {
-                // Lesser is better
-                if (c1.nodeId == c2.nodeId) { // Smaller nodeId is better
-                    return Integer.compare(-c1.tableSize, -c2.tableSize); // Bigger is better
-                } else return Integer.compare(c1.nodeId, c2.nodeId);
-            }
-        };
         public final int nodeId;
-        public final int tableSize;
 
-        public Candidacy(int nodeId, int tableSize) {
+        public Candidacy(int nodeId) {
             super(-1);
             this.nodeId = nodeId;
-            this.tableSize = tableSize;
         }
 
 
@@ -165,21 +154,26 @@ public abstract class Response {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             Candidacy other = (Candidacy) o;
-            return 0 == Comparator.compare(this, other);
+            return this.nodeId == other.nodeId;
         }
 
         @Override
         public String toString() {
-            return String.format("Candidacy[(%d, %d)]", nodeId, tableSize);
+            return String.format("Candidacy[%d]", nodeId);
         }
     }
 
     public static class TreeVote extends Response {
 
-        public final Response.Candidacy voteFor;
-        public TreeVote(int index, Candidacy voteFor) {
-            super(index);
-            this.voteFor = voteFor;
+        public final int target;
+        public final int candidate;
+        public final int subtreeContribution; // 0 if you're not the treeAncestor.
+
+        public TreeVote(int candidate, int target, int subtreeContribution) {
+            super(-1);
+            this.candidate = candidate;
+            this.target = target;
+            this.subtreeContribution = subtreeContribution;
         }
 
         @Override
@@ -192,14 +186,10 @@ public abstract class Response {
             return this;
         }
 
-        public boolean supports(Candidacy candidate) {
-            return voteFor.nodeId == candidate.nodeId &&
-                    (voteFor.tableSize ==  candidate.tableSize || voteFor.tableSize == Integer.MAX_VALUE);
-        }
 
         @Override
         public String toString() {
-            return String.format("TreeVote[%s]", voteFor);
+            return String.format("TreeVote[(%d : %d/%d)]", candidate, subtreeContribution, target);
         }
     }
 }

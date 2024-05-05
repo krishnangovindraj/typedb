@@ -10,25 +10,33 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.function.Supplier;
 
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
+import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 
 public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAcyclicNode<NODE> {
+
+    // TODO: See if we can optimise things a bit.
+    // We need to implement the non-message optimal tree-based termination algorithm
+    // As a small optimisation, we'd like to write the TreeVote message to the answerTable so we force all previous answers to be read by whichever other nodes are in the SCC
+    // We need two TreeVote  messages. One for the non-ancestors and one for the ancestors.
+    //      The one for non-ancestors is written in the grow-tree phase, and has contribution 0.
+    //  The one for ancestors is written in the return phase when we have read such a message from ALL descendants (not just tree descendants) with the actual subtree sum
+    // At the start of an iteration, the SCC leader must write these messages to it's table, and then send a growTree to all it's with the new target (0 for the first iteration).
+    // The target for further iterations is the subtree sum + the size of the (Careful to include/exclude the TreeVote message)
 
     static final Logger LOG = LoggerFactory.getLogger(ActorNode.class);
 
     private final Set<ActorNode.Port> downstreamPorts;
     private Response.Candidacy forwardedCandidacy;
-    private Request.GrowTree treeAncestor;
-    private Response.TreeVote treeVote;
-    private Port treeAncestorPort;
+    private Request.GrowTree receivedGrowTree;
+    private Port receivedGrowTreeAncestor;
+    private Response.TreeVote forwardedTreeVote;
 
     protected ActorNode(NodeRegistry nodeRegistry, Driver<NODE> driver, Supplier<String> debugName) {
         super(nodeRegistry, driver, debugName);
         forwardedCandidacy = null;
         downstreamPorts = new HashSet<>();
-        treeAncestor = new Request.GrowTree(this.nodeId); // TODO: Restoring when state changes weep ;_;
-        treeVote = null;
-        treeAncestorPort = null;
+        receivedGrowTree = new Request.GrowTree(this.nodeId, 0); // TODO: Restoring when state changes weep ;_;
+        forwardedTreeVote = null;
     }
 
     // TODO: Since port has the index in it, maybe we don't need index here?
@@ -41,53 +49,44 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         if (peekAnswer.isPresent()) {
             sendResponse(reader.owner, reader, peekAnswer.get());
         } else if (reader.owner.nodeId >= this.nodeId) {
-            sendResponse(reader.owner, reader, new Response.Candidacy(this.nodeId, this.answerTable.size()));
-            propagatePull(reader, index); // This is now effectively a 'pull'
+            sendResponse(reader.owner, reader, new Response.Candidacy(this.nodeId));
+            computeNextAnswer(reader, index);
         } else {
-            // TODO: Is this a problem? If it s already pulling, we have no clean way of handling it
-            propagatePull(reader, index); // This is now effectively a 'pull'
+            computeNextAnswer(reader, index);
         }
     }
 
     protected void growTree(ActorNode.Port requestorPort, Request.GrowTree growTreeRequest) {
         if (growTreeRequest.root != forwardedCandidacy.nodeId)  return;
-        if (treeAncestor == null || growTreeRequest.root != treeAncestor.root ) {
-            treeAncestor = growTreeRequest; // TODO: FORWARD!
-            treeAncestorPort = requestorPort;
-            activePorts.stream().filter(port -> port.receivedCandidacy != null && port.receivedCandidacy.nodeId == treeAncestor.root)
+        if (receivedGrowTree == null || growTreeRequest.root != receivedGrowTree.root  || growTreeRequest.target > receivedGrowTree.target ) { // Each iteration can have a different root
+            receivedGrowTree = growTreeRequest;
+            receivedGrowTreeAncestor = requestorPort;
+            // Write the first message (recordPreVoteHere) here  if we optimise
+            activePorts.stream().filter(port -> port.receivedCandidacy != null && port.receivedCandidacy.nodeId == receivedGrowTree.root)
                     .forEach(port -> port.sendRequest(growTreeRequest));
         } else {
-            assert growTreeRequest.root == treeAncestor.root; // We already have an ancestor. WHAT DO? We need a way of telling them not to wait for us.
-            // Cheeky, I'm just going to send them a MAXINT for the tableSIze. If we change our vote, the leader will hear of it through our ancestor.
-            sendResponse(requestorPort.owner, requestorPort, new Response.TreeVote(this.answerTable.size(), new Response.Candidacy(growTreeRequest.root, Integer.MAX_VALUE)));
+            sendResponse(requestorPort.owner, requestorPort, new Response.TreeVote(growTreeRequest.root, growTreeRequest.target, 0));
         }
     }
 
     protected void terminateSCC(ActorNode.Port requestorPort, Request.TerminateSCC terminateSCC) {
-        if (requestorPort == treeAncestorPort) {
+        if (requestorPort == receivedGrowTreeAncestor) {
             activePorts.forEach(port -> port.sendRequest(terminateSCC));
             onTermination(); // A negated node can just terminate and let answers stream in later. We do the same.
         }
     }
 
-
     // Response handling
-
-    protected abstract void handleAnswer(Port onPort, Response.Answer answer);
-
-    protected void handleConclusion(Port onPort, Response.Conclusion conclusion) {
-        throw TypeDBException.of(ILLEGAL_STATE);
-    }
-
     @Override
     protected void handleCandidacy(Port onPort, Response.Candidacy candidacy) {
         checkCandidacyStatusChange(); // We may still have to forward a better tableSize to everyone.
-        if (candidacy.nodeId == this.treeAncestor.root) {
+        if (candidacy.nodeId == this.receivedGrowTree.root) {
             // Grow tree on port
-            onPort.sendRequest(new Request.GrowTree(this.treeAncestor.root));
+            onPort.sendRequest(new Request.GrowTree(this.receivedGrowTree.root, this.receivedGrowTree.target));
         }
     }
 
+    @Override
     protected void handleTreeVote(Port onPort, Response.TreeVote treeVote) {
         checkTreeStatusChange();
     }
@@ -104,7 +103,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
     protected void checkCandidacyStatusChange() {
         Optional<Response.Candidacy> oldestCandidate = activePorts.stream().map(port -> port.receivedCandidacy).filter(Objects::nonNull) // Ok to filter here, but not for votes.
-                .min(Response.Candidacy.Comparator); // TODO: Maybe these can be a single field that only needs to be re-evaluated in the case of an upstream termination
+                .min(Comparator.comparing(x -> x.nodeId)); // TODO: Maybe these can be a single field that only needs to be re-evaluated in the case of an upstream termination
         if (oldestCandidate.isEmpty()) return;
         if (forwardedCandidacy == null || !forwardedCandidacy.equals(oldestCandidate.get())) {
             forwardedCandidacy = oldestCandidate.get();
@@ -113,30 +112,32 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     }
 
     private void checkTreeStatusChange() {
-        if (forwardedCandidacy != null && treeAncestor.root == forwardedCandidacy.nodeId) {
-            if (treeVote != null && forwardedCandidacy == treeVote.voteFor) return; // Our vote is up-to-date.
-            // We may have to vote.
-            // For voting, treeChildren is necessarily equal to activePorts. A port that's not in the tree will not have voted for the candidate.
-            boolean mustVote = activePorts.stream().allMatch(port -> {
-                return port.receivedTreeVote != null && port.receivedTreeVote.supports(forwardedCandidacy) &&
-                        port.lastRequestedIndex == port.receivedTreeVote.index(); // Else we may have unread answers in the tables
-            });
-            if (mustVote) { // No outstanding ports
-                treeVote = new Response.TreeVote(this.answerTable.size(), forwardedCandidacy);
-                if (forwardedCandidacy.nodeId == this.nodeId) {
-                    if (forwardedCandidacy.tableSize == this.answerTable.size()) {
-                        // Let's force termination of the SCC, and terminate ourselves
-                        activePorts.forEach(port -> port.sendRequest(new Request.TerminateSCC(forwardedCandidacy)));
-                        onTermination();
-                    } else {
-                        // We've likely just not updated our candidacy since the last answer
-                        forwardedCandidacy = new Response.Candidacy(this.nodeId, this.answerTable.size());
-                        downstreamPorts.forEach(port -> sendResponse(port.owner, port, forwardedCandidacy));
-                    }
+        int highestTarget = 0;
+        int lowestTarget = Integer.MAX_VALUE;
+        int sum = 0;
+        for (Port port: activePorts) {
+            if (port.receivedTreeVote == null) return;
+            assert port.receivedTreeVote.candidate == receivedGrowTree.root;
+            highestTarget = Math.max(highestTarget, port.receivedTreeVote.target);
+            lowestTarget = Math.min(lowestTarget, port.receivedTreeVote.target);
+            sum += port.receivedTreeVote.subtreeContribution;
+        }
+        if (highestTarget == lowestTarget && (forwardedTreeVote == null || highestTarget > forwardedTreeVote.target)) {
+            forwardedTreeVote = new Response.TreeVote(receivedGrowTree.root, highestTarget, sum + answerTable.size());
+            if (forwardedTreeVote.candidate == this.nodeId) {
+                assert forwardedTreeVote.target == receivedGrowTree.target;
+                if (forwardedTreeVote.subtreeContribution == forwardedTreeVote.target) {
+                    // Terminate
+                    activePorts.forEach(port -> port.sendRequest(new Request.TerminateSCC(forwardedTreeVote)));
                 } else {
-                    // Forward the vote to our ancestor port
-                    sendResponse(treeAncestorPort.owner(), treeAncestorPort, treeVote);
+                    // Start another iteration
+                    // If we optimise, write the treePostVote here and below
+                    receivedGrowTree = new Request.GrowTree(this.nodeId, forwardedTreeVote.subtreeContribution);
+                    activePorts.forEach(port -> port.sendRequest(receivedGrowTree));
                 }
+            } else {
+                // If we optimise, write the treePostVote here and above
+                sendResponse(receivedGrowTreeAncestor.owner, receivedGrowTreeAncestor, forwardedTreeVote);
             }
         }
     }
@@ -146,7 +147,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     }
 
     protected void onTermination() {
-        assert allPortsDone() || treeVote != null; // TODO: Bit of a weak assert
+        assert allPortsDone() || forwardedTreeVote != null; // TODO: Bit of a weak assert
         if (!answerTable.isComplete()) {
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Response toSend = answerTable.recordDone();

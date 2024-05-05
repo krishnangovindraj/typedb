@@ -2,6 +2,8 @@ package com.vaticle.typedb.core.reasoner.v4;
 
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 
+import java.util.Objects;
+
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_CAST;
 
 public abstract class Request {
@@ -55,9 +57,11 @@ public abstract class Request {
 
     public static class GrowTree extends Request {
         public final int root;
-        public GrowTree(int root) {
+        public final int target;
+        public GrowTree(int root, int target) {
             super();
             this.root = root;
+            this.target = target;
         }
 
         @Override
@@ -72,16 +76,29 @@ public abstract class Request {
 
         @Override
         public String toString() {
-            return String.format("GrowTree[%d]", root);
+            return String.format("GrowTree[%d: %d]", root, target);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(root, target);
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            GrowTree other = (GrowTree) o;
+            return this.root == other.root && this.target == other.target;
         }
     }
 
     public static class TerminateSCC extends Request {
-        private final Response.Candidacy leaderState; // TODO: We only really need the root.
+        private final Response.TreeVote sccState;
 
-        public TerminateSCC(Response.Candidacy leaderState) {
+        public TerminateSCC(Response.TreeVote sccState) {
             super();
-            this.leaderState = leaderState;
+            this.sccState = sccState;
         }
 
         @Override
@@ -96,7 +113,7 @@ public abstract class Request {
 
         @Override
         public String toString() {
-            return String.format("Terminate[%s]", leaderState);
+            return String.format("Terminate[%s]", sccState);
         }
     }
 }
