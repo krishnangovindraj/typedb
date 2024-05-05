@@ -44,7 +44,7 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
         }
 
         @Override
-        public void propagatePull(ActorNode.Port reader, int index) {
+        public void computeNextAnswer(ActorNode.Port reader, int index) {
             assert answerTable.answerAt(index).isEmpty();
             sendResponse(reader.owner(), reader, pullTraversalSynchronous());
         }

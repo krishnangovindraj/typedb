@@ -45,30 +45,45 @@ public class AnswerTable {
     }
 
     public FunctionalIterator<ActorNode.Port> clearAndReturnSubscribers(int index) {
-        assert index == answers.size() && !complete;
+        assert index == answers.size() && !complete : String.format("%d == %d && !%s", index, answers.size(), complete);
         Set<ActorNode.Port> subs = subscribers;
         subscribers = new HashSet<>();
         return Iterators.iterate(subs);
     }
 
-    public Response recordAnswer(ConceptMap answer) {
+    public Response.Answer recordAnswer(ConceptMap answer) {
         assert !complete;
-        Response msg = new Response.Answer(answers.size(), answer);
+        Response.Answer msg = new Response.Answer(answers.size(), answer);
         answers.add(msg);
         return msg;
     }
 
-    public Response recordConclusion(Map<Identifier.Variable, Concept> conclusionAnswer) { // TODO: Generics
-        Response msg = new Response.Conclusion(answers.size(), conclusionAnswer);
+    public Response.Conclusion recordConclusion(Map<Identifier.Variable, Concept> conclusionAnswer) { // TODO: Generics
+        Response.Conclusion msg = new Response.Conclusion(answers.size(), conclusionAnswer);
         answers.add(msg);
         return msg;
     }
 
-    public Response recordDone() {
+//    public Response.TreeVote recordTreePreVote(int target, int nodeId) {
+//        assert !complete;
+//        Response.TreeVote msg = new Response.TreeVote(answers.size(), target, null, nodeId);
+//        answers.add(msg);
+//        return msg;
+//    }
+//
+//    public Response.TreeVote recordTreePostVote(int target, int subtreeContribution, int nodeId) {
+//        assert !complete;
+//        Response.TreeVote msg = new Response.TreeVote(answers.size(), target, subtreeContribution, nodeId);
+//        answers.add(msg);
+//        return msg;
+//    }
+
+    public Response.Done recordDone() {
         assert !complete;
-        Response msg = new Response.Done(answers.size());
+        Response.Done msg = new Response.Done(answers.size());
         answers.add(msg);
         this.complete = true;
         return msg;
     }
+
 }

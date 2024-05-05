@@ -68,11 +68,11 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
         if (peekAnswer.isPresent()) {
             sendResponse(reader.owner(), reader, peekAnswer.get());
         } else {
-            propagatePull(reader, index); // This is now effectively a 'pull'
+            computeNextAnswer(reader, index); // This is now effectively a 'pull'
         }
     }
 
-    protected abstract void propagatePull(ActorNode.Port reader, int index);
+    protected abstract void computeNextAnswer(ActorNode.Port reader, int index);
 
     public void receiveResponse(ActorNode.Port onPort, Response received) {
         switch (received.type()) {
@@ -101,7 +101,6 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
                 throw TypeDBException.of(ILLEGAL_STATE);
         }
     }
-
 
     protected abstract void handleAnswer(ActorNode.Port onPort, Response.Answer answer);
 

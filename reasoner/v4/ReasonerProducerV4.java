@@ -220,11 +220,11 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
             @Override
             protected void readAnswerAt(ActorNode.Port reader, Request.ReadAnswer readAnswer) {
                 assert readAnswer.index == port.lastRequestedIndex() + 1;
-                propagatePull(reader, readAnswer.index);
+                computeNextAnswer(reader, readAnswer.index);
             }
 
             @Override
-            protected void propagatePull(ActorNode.Port reader, int index) {
+            protected void computeNextAnswer(ActorNode.Port reader, int index) {
                 port.readNext();
             }
 

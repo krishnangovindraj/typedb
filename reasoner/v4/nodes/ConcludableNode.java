@@ -44,7 +44,7 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
 
 
     @Override
-    protected void propagatePull(Port reader, int index) {
+    protected void computeNextAnswer(Port reader, int index) {
         answerTable.registerSubscriber(reader, index);
 
         // KGFLAG: Strategy
