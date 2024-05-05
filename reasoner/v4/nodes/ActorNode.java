@@ -7,11 +7,13 @@ import com.vaticle.typedb.core.reasoner.v4.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 
 public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAcyclicNode<NODE> {
 
@@ -52,14 +54,19 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         if (treeAncestor == null || growTreeRequest.root != treeAncestor.root ) {
             treeAncestor = growTreeRequest; // TODO: FORWARD!
             treeAncestorPort = requestorPort;
-//            sendResponse(requestorPort, new Response.AcceptAncestor(true));
             activePorts.stream().filter(port -> port.receivedCandidacy != null && port.receivedCandidacy.nodeId == treeAncestor.root)
                     .forEach(port -> port.sendRequest(growTreeRequest));
         } else {
             assert growTreeRequest.root == treeAncestor.root; // We already have an ancestor. WHAT DO? We need a way of telling them not to wait for us.
-            // sendResponse(requestorPort, new Response.AcceptAncestor(false));
             // Cheeky, I'm just going to send them a MAXINT for the tableSIze. If we change our vote, the leader will hear of it through our ancestor.
             sendResponse(requestorPort.owner, requestorPort, new Response.TreeVote(new Response.Candidacy(growTreeRequest.root, Integer.MAX_VALUE)));
+        }
+    }
+
+    protected void terminateSCC(ActorNode.Port requestorPort, Request.TerminateSCC terminateSCC) {
+        if (requestorPort == treeAncestorPort) {
+            activePorts.forEach(port -> port.sendRequest(terminateSCC));
+            onTermination(); // A negated node can just terminate and let answers stream in later. We do the same.
         }
     }
 
@@ -113,10 +120,10 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             boolean mustVote = activePorts.stream().allMatch(treeChild -> treeChild.receivedTreeVote != null && treeChild.receivedTreeVote.supports(forwardedCandidacy));
             if (mustVote) { // No outstanding ports
                 treeVote = new Response.TreeVote(forwardedCandidacy);
-                if (treeVote.voteFor.nodeId == this.nodeId) {
-                    activePorts.forEach(port -> {
-                        recordDone(port); handleDone(port);
-                    });
+                if (forwardedCandidacy.nodeId == this.nodeId) {
+                    assert forwardedCandidacy.tableSize == this.answerTable.size(); // If this fails, we can likely fix it by forwarding candidacies before votes.
+                    // Let's force termination of the SCC.
+                    activePorts.forEach(port -> port.sendRequest(new Request.TerminateSCC(forwardedCandidacy)));
                 } else {
                     // Forward the vote to our ancestor port
                     sendResponse(treeAncestorPort.owner(), treeAncestorPort, treeVote);
@@ -130,10 +137,12 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     }
 
     protected void onTermination() {
-        assert allPortsDone();
-        FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
-        Response toSend = answerTable.recordDone();
-        subscribers.forEachRemaining(subscriber -> sendResponse(subscriber.owner(), subscriber, toSend));
+        assert allPortsDone() || treeVote != null; // TODO: Bit of a weak assert
+        if (!answerTable.isComplete()) {
+            FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+            Response toSend = answerTable.recordDone();
+            subscribers.forEachRemaining(subscriber -> sendResponse(subscriber.owner(), subscriber, toSend));
+        }
     }
 
 

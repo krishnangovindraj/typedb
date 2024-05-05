@@ -15,7 +15,6 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 
 public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>> extends Actor<NODE> {
 
@@ -49,14 +48,20 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
                 growTree(requester, request.asGrowTree());
                 break;
             }
+            case TERMINATE_SCC: {
+                terminateSCC(requester, request.asTerminateSCC());
+                break;
+            }
         }
     }
-
-    protected abstract void growTree(ActorNode.Port proposer, Request.GrowTree growTreeRequest);
 
     protected void readAnswerAt(ActorNode.Port reader, Request.ReadAnswer readAnswerRequest) {
         readAnswerAtStrictlyAcyclic(reader, readAnswerRequest.index);
     }
+
+    protected abstract void growTree(ActorNode.Port proposer, Request.GrowTree growTreeRequest);
+
+    protected abstract void terminateSCC(ActorNode.Port requester, Request.TerminateSCC terminateSCC);
 
     private void readAnswerAtStrictlyAcyclic(ActorNode.Port reader, int index) {
         Optional<Response> peekAnswer = answerTable.answerAt(index);
