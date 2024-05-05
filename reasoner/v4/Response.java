@@ -197,7 +197,6 @@ public abstract class Response {
                     (voteFor.tableSize ==  candidate.tableSize || voteFor.tableSize == Integer.MAX_VALUE);
         }
 
-
         @Override
         public String toString() {
             return String.format("TreeVote[%s]", voteFor);
