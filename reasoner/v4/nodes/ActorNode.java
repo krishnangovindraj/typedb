@@ -7,10 +7,7 @@ import com.vaticle.typedb.core.reasoner.v4.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 import java.util.function.Supplier;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
@@ -19,7 +16,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
     static final Logger LOG = LoggerFactory.getLogger(ActorNode.class);
 
-    private final List<ActorNode.Port> downstreamPorts;
+    private final Set<ActorNode.Port> downstreamPorts;
     private Response.Candidacy forwardedCandidacy;
     private Request.GrowTree treeAncestor;
     private Response.TreeVote treeVote;
@@ -28,7 +25,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     protected ActorNode(NodeRegistry nodeRegistry, Driver<NODE> driver, Supplier<String> debugName) {
         super(nodeRegistry, driver, debugName);
         forwardedCandidacy = null;
-        downstreamPorts = new ArrayList<>();
+        downstreamPorts = new HashSet<>();
         treeAncestor = new Request.GrowTree(this.nodeId); // TODO: Restoring when state changes weep ;_;
         treeVote = null;
         treeAncestorPort = null;
@@ -37,6 +34,9 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     // TODO: Since port has the index in it, maybe we don't need index here?
     @Override
     protected void readAnswerAt(ActorNode.Port reader, Request.ReadAnswer readAnswerRequest) {
+        //
+        this.downstreamPorts.add(reader);
+
         int index = readAnswerRequest.index;
         Optional<Response> peekAnswer = answerTable.answerAt(index);
         if (peekAnswer.isPresent()) {
@@ -121,9 +121,15 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             if (mustVote) { // No outstanding ports
                 treeVote = new Response.TreeVote(forwardedCandidacy);
                 if (forwardedCandidacy.nodeId == this.nodeId) {
-                    assert forwardedCandidacy.tableSize == this.answerTable.size(); // If this fails, we can likely fix it by forwarding candidacies before votes.
-                    // Let's force termination of the SCC.
-                    activePorts.forEach(port -> port.sendRequest(new Request.TerminateSCC(forwardedCandidacy)));
+                    if (forwardedCandidacy.tableSize == this.answerTable.size()) {
+                        // Let's force termination of the SCC, and terminate ourselves
+                        activePorts.forEach(port -> port.sendRequest(new Request.TerminateSCC(forwardedCandidacy)));
+                        onTermination();
+                    } else {
+                        // We've likely just not updated our candidacy since the last answer
+                        forwardedCandidacy = new Response.Candidacy(this.nodeId, this.answerTable.size());
+                        downstreamPorts.forEach(port -> sendResponse(port.owner, port, forwardedCandidacy));
+                    }
                 } else {
                     // Forward the vote to our ancestor port
                     sendResponse(treeAncestorPort.owner(), treeAncestorPort, treeVote);
@@ -142,21 +148,17 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Response toSend = answerTable.recordDone();
             subscribers.forEachRemaining(subscriber -> sendResponse(subscriber.owner(), subscriber, toSend));
+            System.err.printf("TERMINATE: Node[%d] has terminated\n", this.nodeId);
         }
     }
 
 
     protected Port createPort(ActorNode<?> remote) {
+        System.err.printf("PORT: Node[%d] opened a port to Node[%d]\n", this.nodeId, remote.nodeId);
         Port port = new Port(this, remote);
-        remote.notifyPortCreated(port);
         ports.add(port);
         activePorts.add(port);
         return port;
-    }
-
-    private void notifyPortCreated(Port downstream) {
-        // TODO: Not thread safe! Consider using a HELLO request instead
-        this.downstreamPorts.add(downstream);
     }
 
     public static class Port {
@@ -201,6 +203,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         }
 
         private void sendRequest(Request request) {
+            System.err.printf("SEND_REQUEST: Node[%d] sent request %s to Node[%d]\n", owner.nodeId, request, remote.nodeId);
             remote.driver().execute(nodeActor -> nodeActor.receiveRequest(this, request));
         }
 

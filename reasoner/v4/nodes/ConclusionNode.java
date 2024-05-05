@@ -21,6 +21,7 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
 
     @Override
     public void initialise() {
+        super.initialise();
         conclusion.rule().condition().disjunction().conjunctions().forEach(conjunction -> {
             ConjunctionController.ConjunctionStreamPlan csPlan = nodeRegistry.conjunctionStreamPlan(conjunction, bounds);
             createPort(nodeRegistry.getRegistry(csPlan).getNode(bounds));
