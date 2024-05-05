@@ -34,8 +34,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     // TODO: Since port has the index in it, maybe we don't need index here?
     @Override
     protected void readAnswerAt(ActorNode.Port reader, Request.ReadAnswer readAnswerRequest) {
-        //
-        this.downstreamPorts.add(reader);
+        this.downstreamPorts.add(reader); // TODO: Maybe a better way of doing this. ConcurrentHashSet and we add on create?
 
         int index = readAnswerRequest.index;
         Optional<Response> peekAnswer = answerTable.answerAt(index);
@@ -43,6 +42,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             sendResponse(reader.owner, reader, peekAnswer.get());
         } else if (reader.owner.nodeId >= this.nodeId) {
             sendResponse(reader.owner, reader, new Response.Candidacy(this.nodeId, this.answerTable.size()));
+            propagatePull(reader, index); // This is now effectively a 'pull'
         } else {
             // TODO: Is this a problem? If it s already pulling, we have no clean way of handling it
             propagatePull(reader, index); // This is now effectively a 'pull'
