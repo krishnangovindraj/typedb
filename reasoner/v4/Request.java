@@ -5,8 +5,9 @@ import com.vaticle.typedb.core.common.exception.TypeDBException;
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_CAST;
 
 public abstract class Request {
+
     public enum RequestType {
-        READ_ANSWER, GROW_TREE,
+        READ_ANSWER, GROW_TREE, TERMINATE_SCC,
     }
 
     private Request() { }
@@ -18,6 +19,10 @@ public abstract class Request {
     }
     public Request.GrowTree asGrowTree() {
         throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Request.GrowTree.class);
+    }
+
+    public TerminateSCC asTerminateSCC() {
+        throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Request.TerminateSCC.class);
     }
 
     @Override
@@ -68,6 +73,30 @@ public abstract class Request {
         @Override
         public String toString() {
             return String.format("GrowTree[%d]", root);
+        }
+    }
+
+    public static class TerminateSCC extends Request {
+        private final Response.Candidacy leaderState; // TODO: We only really need the root.
+
+        public TerminateSCC(Response.Candidacy leaderState) {
+            super();
+            this.leaderState = leaderState;
+        }
+
+        @Override
+        public RequestType type() {
+            return RequestType.TERMINATE_SCC;
+        }
+
+        @Override
+        public TerminateSCC asTerminateSCC() {
+            return this;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("Terminate[%s]", leaderState);
         }
     }
 }
