@@ -12,6 +12,9 @@ import java.util.function.Supplier;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 
+DOING: Refactor all handlers to only do computations outside them, but the major logic within the function
+WERE STRUGGLING ON CANDIDACY STABILITY (A LACK OF IT OR TOO MUCH)
+
 public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAcyclicNode<NODE> {
 
     // TODO: See if we can optimise things a bit.
@@ -42,8 +45,6 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     // TODO: Since port has the index in it, maybe we don't need index here?
     @Override
     protected void readAnswerAt(ActorNode.Port reader, Request.ReadAnswer readAnswerRequest) {
-        this.downstreamPorts.add(reader); // TODO: Maybe a better way of doing this. ConcurrentHashSet and we add on create?
-
         int index = readAnswerRequest.index;
         Optional<Response> peekAnswer = answerTable.answerAt(index);
         if (peekAnswer.isPresent()) {
@@ -53,6 +54,14 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             computeNextAnswer(reader, index);
         } else {
             computeNextAnswer(reader, index);
+        }
+    }
+
+    @Override
+    protected void hello(ActorNode.Port onPort, Request.Hello helloRequest) {
+        this.downstreamPorts.add(onPort); // TODO: Maybe a better way of doing this. ConcurrentHashSet and we add on create?
+        if (forwardedCandidacy != null) {
+            sendResponse(onPort.owner(), onPort, forwardedCandidacy);
         }
     }
 
@@ -79,6 +88,10 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     // Response handling
     @Override
     protected void handleCandidacy(Port onPort, Response.Candidacy candidacy) {
+        if (onPort.receivedCandidacy != null && onPort.receivedCandidacy.nodeId == candidacy.nodeId) return;
+
+        onPort.recordCandidacy(candidacy); // TODO: Revert to just setting it in the port for simplicity?
+        if (candidacy.nodeId > this.nodeId) return;
         checkCandidacyStatusChange(); // We may still have to forward a better tableSize to everyone.
         if (candidacy.nodeId == this.receivedGrowTree.root) {
             // Grow tree on port
@@ -101,15 +114,17 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         }
     }
 
-    protected void checkCandidacyStatusChange() {
-        Optional<Response.Candidacy> oldestCandidate = activePorts.stream().map(port -> port.receivedCandidacy).filter(Objects::nonNull) // Ok to filter here, but not for votes.
-                .min(Comparator.comparing(x -> x.nodeId)); // TODO: Maybe these can be a single field that only needs to be re-evaluated in the case of an upstream termination
-        if (oldestCandidate.isEmpty()) return;
-        if (forwardedCandidacy == null || !forwardedCandidacy.equals(oldestCandidate.get())) {
-            forwardedCandidacy = oldestCandidate.get();
-            downstreamPorts.forEach(port -> sendResponse(port.owner, port, forwardedCandidacy));
-        }
-    }
+// TODO: Replace this with the single efficient tracker
+//    protected void checkCandidacyStatusChange() {
+//        Optional<Response.Candidacy> oldestCandidate = activePorts.stream().map(port -> port.receivedCandidacy).filter(Objects::nonNull) // Ok to filter here, but not for votes.
+//                .min(Comparator.comparing(x -> x.nodeId)); // TODO: Maybe these can be a single field that only needs to be re-evaluated in the case of an upstream termination
+//        if (oldestCandidate.isEmpty()) return;
+////        TODO: Fix the oscillating candidacy. Monotonicity holds until that port terminates.
+//        if (forwardedCandidacy == null || !forwardedCandidacy.equals(oldestCandidate.get())) {
+//            forwardedCandidacy = oldestCandidate.get();
+//            downstreamPorts.forEach(port -> sendResponse(port.owner, port, forwardedCandidacy));
+//        }
+//    }
 
     private void checkTreeStatusChange() {
         int highestTarget = 0;
@@ -117,7 +132,14 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         int sum = 0;
         for (Port port: activePorts) {
             if (port.receivedTreeVote == null) return;
-            assert port.receivedTreeVote.candidate == receivedGrowTree.root;
+            if (port.receivedTreeVote.candidate != receivedGrowTree.root ){
+                System.err.printf("DEBUG: Node[%d] received treeVote for root: %d but expected root: %d \n", this.nodeId, port.receivedTreeVote.candidate, receivedGrowTree.root);
+                return;
+            }
+            if (port.receivedCandidacy.nodeId != receivedGrowTree.root ){
+                System.err.printf("DEBUG: Node[%d] received candidacy for candidate: %d but expected root: %d \n", this.nodeId, port.receivedTreeVote.candidate, receivedGrowTree.root);
+                return;
+            }
             highestTarget = Math.max(highestTarget, port.receivedTreeVote.target);
             lowestTarget = Math.min(lowestTarget, port.receivedTreeVote.target);
             sum += port.receivedTreeVote.subtreeContribution;
@@ -131,8 +153,10 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
                     activePorts.forEach(port -> port.sendRequest(new Request.TerminateSCC(forwardedTreeVote)));
                 } else {
                     // Start another iteration
+                    System.err.printf("ITERATE: Node[%d] updated target from %d to %d\n", this.nodeId, forwardedTreeVote.target, forwardedTreeVote.subtreeContribution);
                     // If we optimise, write the treePostVote here and below
                     receivedGrowTree = new Request.GrowTree(this.nodeId, forwardedTreeVote.subtreeContribution);
+                    assert ports.stream().allMatch(port -> port.receivedCandidacy.nodeId == this.nodeId);
                     activePorts.forEach(port -> port.sendRequest(receivedGrowTree));
                 }
             } else {
@@ -162,6 +186,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         Port port = new Port(this, remote);
         ports.add(port);
         activePorts.add(port);
+        port.sendRequest(new Request.Hello());
         return port;
     }
 
@@ -188,13 +213,16 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             if (msg.type() == Response.ResponseType.DONE) {
                 state = State.DONE;
             } else if (msg.type() == Response.ResponseType.CANDIDACY) {
-                this.receivedCandidacy = msg.asCandidacy();
                 // Don't stop on pulling on a candidacy
             } else if (msg.type() == Response.ResponseType.TREE_VOTE) {
                 receivedTreeVote = msg.asTreeVote();
             } else {
                 state = State.READY;
             }
+        }
+
+        protected void recordCandidacy(Response.Candidacy candidacy) {
+            this.receivedCandidacy = candidacy;
         }
 
 
