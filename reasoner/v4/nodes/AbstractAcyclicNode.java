@@ -40,6 +40,10 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     public void receiveRequest(ActorNode.Port requester, Request request) {
         System.err.printf("RECV_REQUEST: Node[%d] received request %s from Node[%d]\n", this.nodeId, request, requester.owner().nodeId);
         switch (request.type()) {
+            case HELLO : {
+                hello(requester, request.asHello());
+                break;
+            }
             case READ_ANSWER: {
                 readAnswerAt(requester, request.asReadAnswer());
                 break;
@@ -58,6 +62,8 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     protected void readAnswerAt(ActorNode.Port reader, Request.ReadAnswer readAnswerRequest) {
         readAnswerAtStrictlyAcyclic(reader, readAnswerRequest.index);
     }
+
+    protected abstract void hello(ActorNode.Port proposer, Request.Hello helloRequest);
 
     protected abstract void growTree(ActorNode.Port proposer, Request.GrowTree growTreeRequest);
 
