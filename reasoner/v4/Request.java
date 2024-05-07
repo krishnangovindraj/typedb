@@ -9,12 +9,16 @@ import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILL
 public abstract class Request {
 
     public enum RequestType {
-        READ_ANSWER, GROW_TREE, TERMINATE_SCC,
+        READ_ANSWER, GROW_TREE, TERMINATE_SCC, HELLO,
     }
 
     private Request() { }
 
     public abstract RequestType type();
+
+    public Hello asHello() {
+        throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Request.Hello.class);
+    }
 
     public Request.ReadAnswer asReadAnswer() {
         throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), Request.ReadAnswer.class);
@@ -114,6 +118,26 @@ public abstract class Request {
         @Override
         public String toString() {
             return String.format("Terminate[%s]", sccState);
+        }
+    }
+
+    public static class Hello extends Request {
+        public Hello() {
+            super();
+        }
+        @Override
+        public RequestType type() {
+            return RequestType.HELLO;
+        }
+
+        @Override
+        public Hello asHello() {
+            return this;
+        }
+
+        @Override
+        public String toString() {
+            return "Hello";
         }
     }
 }
