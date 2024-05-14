@@ -11,7 +11,7 @@ use storage::snapshot::{iterator::SnapshotIteratorError, SnapshotGetError};
 
 use crate::{
     thing::relation::Relation,
-    type_::{annotation::AnnotationCardinality, role_type::RoleType},
+    type_::{annotation::AnnotationCardinality, role_type::RoleType, validation::SchemaValidationError},
 };
 
 #[derive(Debug)]
@@ -50,10 +50,12 @@ pub enum ConceptWriteError {
     ConceptRead {
         source: ConceptReadError,
     },
+    SchemaValidation {
+        source: SchemaValidationError
+    },
     Encoding {
         source: EncodingError,
     },
-
     ValueTypeMismatch {
         expected: Option<ValueType>,
         provided: ValueType,
@@ -84,6 +86,7 @@ impl Error for ConceptWriteError {
             Self::SnapshotIterate { source, .. } => Some(source),
             Self::ConceptRead { source } => Some(source),
             Self::Encoding { source, .. } => Some(source),
+            Self::SchemaValidation { source, .. } => Some(source),
             Self::ValueTypeMismatch { .. } => None,
             Self::RelationRoleCardinality { .. } => None,
             Self::RootModification { .. } => None,

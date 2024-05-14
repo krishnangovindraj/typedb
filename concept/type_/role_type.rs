@@ -69,9 +69,8 @@ impl<'a> TypeAPI<'a> for RoleType<'a> {
         snapshot: &mut Snapshot,
         type_manager: &TypeManager<Snapshot>,
     ) -> Result<(), ConceptWriteError> {
-        // TODO: validation
-        type_manager.delete_role_type(snapshot, self);
-        Ok(())
+        // TODO: validation (Or better it in type_manager)
+        type_manager.delete_role_type(snapshot, self)
     }
 }
 
@@ -117,8 +116,7 @@ impl<'a> RoleType<'a> {
         type_manager: &TypeManager<Snapshot>,
         supertype: RoleType<'static>,
     ) -> Result<(), ConceptWriteError> {
-        type_manager.storage_set_supertype(snapshot, self.clone().into_owned(), supertype);
-        Ok(())
+        type_manager.set_supertype(snapshot, self.clone().into_owned(), supertype)
     }
 
     pub fn get_supertypes<'m, Snapshot: ReadableSnapshot>(
