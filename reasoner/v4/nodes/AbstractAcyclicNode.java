@@ -134,7 +134,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
 
     protected void receiveResponseOnPort(ActorNode.Port port, Response response) {
         System.err.printf("RECV_RESPONSE: Node[%d] received response %s from Node[%d]\n", port.owner().nodeId, response, port.remote().nodeId);
-        port.recordReceive(response); // Is it strange that I call this implicitly?
+        port.mayUpdateStateOnReceive(response); // Is it strange that I call this implicitly?
         receiveResponse(port, response);
     }
 
