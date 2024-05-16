@@ -212,7 +212,7 @@ impl OwnsCache {
                     owns.clone(),
                     OwnsCache {
                         ordering: TypeReader::get_type_edge_ordering(snapshot, owns.clone()).unwrap(),
-                        overrides: TypeReader::get_owns_override(snapshot, owns.clone()).unwrap(),
+                        overrides: TypeReader::get_implementation_override(snapshot, owns.clone()).unwrap(),
                         annotations_declared: TypeReader::get_type_edge_annotations(snapshot, owns.clone())
                             .unwrap()
                             .into_iter()
@@ -239,7 +239,7 @@ impl PlaysCache {
                 let plays = Plays::new(player, role);
                 (
                     plays.clone(),
-                    PlaysCache { overrides: TypeReader::get_plays_override(snapshot, plays.clone()).unwrap() },
+                    PlaysCache { overrides: TypeReader::get_implementation_override(snapshot, plays.clone()).unwrap() },
                 )
             })
             .unwrap()
@@ -277,10 +277,10 @@ impl OwnerPlayerCache {
         T: KindAPI<'static, SelfStatic = T> + OwnerAPI<'static> + PlayerAPI<'static> + ,
     {
         OwnerPlayerCache {
-            owns_declared: TypeReader::get_owns(snapshot, type_.clone()).unwrap(),
-            owns_transitive: TypeReader::get_owns_transitive(snapshot, type_.clone()).unwrap(),
-            plays_declared: TypeReader::get_plays(snapshot, type_.clone()).unwrap(),
-            plays_transitive: TypeReader::get_plays_transitive(snapshot, type_.clone()).unwrap(),
+            owns_declared: TypeReader::get_implemented_interfaces::<Owns<'static>>(snapshot, type_.clone()).unwrap(),
+            owns_transitive: TypeReader::get_implemented_interfaces_transitive::<Owns<'static>, T>(snapshot, type_.clone()).unwrap(),
+            plays_declared: TypeReader::get_implemented_interfaces::<Plays<'static>>(snapshot, type_.clone()).unwrap(),
+            plays_transitive: TypeReader::get_implemented_interfaces_transitive::<Plays<'static>, T>(snapshot, type_.clone()).unwrap(),
         }
     }
 }
