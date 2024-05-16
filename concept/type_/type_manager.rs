@@ -14,11 +14,7 @@ use std::{
 use bytes::{byte_array::ByteArray, Bytes};
 use encoding::{
     graph::type_::{
-        edge::{
-            build_edge_owns, build_edge_owns_reverse, build_edge_plays, build_edge_plays_reverse, build_edge_relates,
-            build_edge_relates_reverse, build_edge_sub, build_edge_sub_reverse, TypeEdge,
-        },
-        index::LabelToTypeVertexIndex,
+        edge::TypeEdge,
         property::{
             build_property_type_annotation_abstract, build_property_type_annotation_cardinality,
             build_property_type_annotation_distinct, build_property_type_annotation_independent,
@@ -27,7 +23,6 @@ use encoding::{
             build_property_type_edge_ordering, build_property_type_edge_override, build_property_type_label,
             build_property_type_ordering, build_property_type_value_type,
         },
-        vertex::{new_vertex_attribute_type, new_vertex_entity_type, new_vertex_relation_type, new_vertex_role_type},
         vertex_generator::TypeVertexGenerator,
         Kind,
     },
@@ -35,7 +30,6 @@ use encoding::{
     value::{label::Label, value_type::ValueType},
     AsBytes, Keyable,
 };
-use encoding::graph::type_::vertex::TypeVertex;
 use primitive::maybe_owns::MaybeOwns;
 use storage::{
     durability_client::DurabilityClient,
@@ -46,7 +40,6 @@ use storage::{
 use super::annotation::AnnotationRegex;
 use crate::{
     error::{ConceptReadError, ConceptWriteError},
-    thing::ObjectAPI,
     type_::{
         annotation::{Annotation, AnnotationAbstract, AnnotationCardinality},
         attribute_type::{AttributeType, AttributeTypeAnnotation},
