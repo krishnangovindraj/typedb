@@ -48,6 +48,13 @@ impl<'a> ObjectType<'a> {
             }
         })
     }
+
+    pub fn into_owned(self) -> ObjectType<'static> {
+        match self {
+            ObjectType::Entity(entity) => ObjectType::Entity(entity.into_owned()),
+            ObjectType::Relation(relation) => ObjectType::Relation(relation.into_owned()),
+        }
+    }
 }
 
 impl<'a> OwnerAPI<'a> for ObjectType<'a> {
