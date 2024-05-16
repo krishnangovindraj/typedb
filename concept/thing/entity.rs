@@ -38,7 +38,7 @@ use crate::{
     },
     type_::{
         attribute_type::AttributeType, entity_type::EntityType, owns::Owns, type_manager::TypeManager, Ordering,
-        OwnerAPI,
+        OwnerAPI, TypeAPI,
     },
     ByteReference, ConceptAPI, ConceptStatus,
 };
