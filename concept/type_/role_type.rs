@@ -42,6 +42,7 @@ impl<'a> RoleType<'a> { }
 impl<'a> ConceptAPI<'a> for RoleType<'a> {}
 
 impl<'a> TypeAPI<'a> for RoleType<'a> {
+    type SelfStatic = RoleType<'static>;
 
     fn new(vertex: TypeVertex<'a>) -> RoleType<'_> {
         debug_assert_eq!(vertex.prefix(), Prefix::VertexRoleType);
