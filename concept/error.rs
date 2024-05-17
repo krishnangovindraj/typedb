@@ -11,8 +11,9 @@ use storage::snapshot::{iterator::SnapshotIteratorError, SnapshotGetError};
 
 use crate::{
     thing::relation::Relation,
-    type_::{annotation::AnnotationCardinality, role_type::RoleType, validation::SchemaValidationError},
+    type_::{annotation::AnnotationCardinality, role_type::RoleType},
 };
+use crate::type_::type_manager::validation::SchemaValidationError;
 
 #[derive(Debug)]
 pub struct ConceptError {

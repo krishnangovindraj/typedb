@@ -12,27 +12,28 @@ use std::{
     fs::File,
     path::Path,
     rc::Rc,
-    sync::{Arc, OnceLock},
-    time::Duration,
+    sync::{Arc, OnceLock}
+    ,
 };
 
 use concept::{
     thing::{thing_manager::ThingManager, value::Value},
-    type_::{type_cache::TypeCache, type_manager::TypeManager, Ordering, OwnerAPI},
+    type_::{Ordering, OwnerAPI, type_manager::TypeManager},
 };
-use criterion::{criterion_group, criterion_main, profiler::Profiler, Criterion, SamplingMode};
-use durability::{wal::WAL, DurabilityService};
+use criterion::{Criterion, criterion_group, criterion_main, profiler::Profiler, SamplingMode};
+use durability::wal::WAL;
 use encoding::{
+    EncodingKeyspace,
     graph::{thing::vertex_generator::ThingVertexGenerator, type_::vertex_generator::TypeVertexGenerator},
     value::{label::Label, value_type::ValueType},
-    EncodingKeyspace,
 };
 use pprof::ProfilerGuard;
 use rand::distributions::{Alphanumeric, DistString};
+use concept::type_::type_manager::type_cache::TypeCache;
 use storage::{
     durability_client::WALClient,
-    snapshot::{CommittableSnapshot, WriteSnapshot},
     MVCCStorage,
+    snapshot::{CommittableSnapshot, WriteSnapshot},
 };
 use test_utils::{create_tmp_dir, init_logging};
 

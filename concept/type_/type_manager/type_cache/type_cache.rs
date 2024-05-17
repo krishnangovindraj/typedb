@@ -13,29 +13,29 @@ use std::{
 
 use encoding::{
     graph::Typed,
-    value::{label::Label, value_type::ValueType},
-    Prefixed,
+    value::{label::Label, value_type::ValueType}
+    ,
 };
-use storage::{sequence_number::SequenceNumber, snapshot::ReadableSnapshot, MVCCStorage, ReadSnapshotOpenError};
+use storage::{MVCCStorage, ReadSnapshotOpenError, sequence_number::SequenceNumber, snapshot::ReadableSnapshot};
 
 use crate::type_::{
     attribute_type::AttributeType,
     entity_type::EntityType,
+    Ordering,
+    OwnerAPI,
     owns::{Owns, OwnsAnnotation},
+    PlayerAPI,
     plays::Plays,
     relates::Relates,
-    relation_type::RelationType,
-    role_type::RoleType,
-    type_cache::{
-        kind_cache::{
-            AttributeTypeCache, CommonTypeCache, EntityTypeCache, OwnerPlayerCache, OwnsCache, PlaysCache,
-            RelationTypeCache, RoleTypeCache,
-        },
-        selection,
-        selection::{CacheGetter, HasCommonTypeCache, HasOwnerPlayerCache},
+    relation_type::RelationType, role_type::RoleType, type_manager::KindAPI, TypeAPI,
+};
+use crate::type_::type_manager::type_cache::{
+    kind_cache::{
+        AttributeTypeCache, CommonTypeCache, EntityTypeCache, OwnerPlayerCache, OwnsCache, PlaysCache,
+        RelationTypeCache, RoleTypeCache,
     },
-    type_manager::KindAPI,
-    Ordering, OwnerAPI, PlayerAPI, TypeAPI,
+    selection,
+    selection::{CacheGetter, HasCommonTypeCache, HasOwnerPlayerCache},
 };
 
 // TODO: could/should we slab allocate the schema cache?
