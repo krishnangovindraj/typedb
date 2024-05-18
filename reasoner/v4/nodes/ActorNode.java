@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 //WERE STRUGGLING ON CANDIDACY STABILITY (A LACK OF IT OR TOO MUCH)
 
 public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAcyclicNode<NODE> {
@@ -21,7 +22,6 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     // At the start of an iteration, the SCC leader must write these messages to it's table, and then send a growTree to all it's with the new target (0 for the first iteration).
     // The target for further iterations is the subtree sum + the size of the (Careful to include/exclude the TreeVote message)
 
-    private static final Response.Candidacy DEFAULT_CANDIDACY = new Response.Candidacy(Integer.MAX_VALUE);
     static final Logger LOG = LoggerFactory.getLogger(ActorNode.class);
 
     private final Set<ActorNode.Port> downstreamPorts;
@@ -33,7 +33,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     protected ActorNode(NodeRegistry nodeRegistry, Driver<NODE> driver, Supplier<String> debugName) {
         super(nodeRegistry, driver, debugName);
         downstreamPorts = new HashSet<>();
-        forwardedCandidacy = DEFAULT_CANDIDACY;
+        forwardedCandidacy = new Response.Candidacy(this.nodeId);
         forwardedTreeVote = null;
         receivedGrowTree = new Request.GrowTree(this.nodeId, 0);
     }
@@ -46,7 +46,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         if (peekAnswer.isPresent()) {
             sendResponse(reader.owner, reader, peekAnswer.get());
         } else if (reader.owner.nodeId >= this.nodeId) {
-            sendResponse(reader.owner, reader, new Response.Candidacy(this.nodeId));
+            sendResponse(reader.owner, reader, this.forwardedCandidacy);
             computeNextAnswer(reader, index);
         } else {
             computeNextAnswer(reader, index);
@@ -56,9 +56,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     @Override
     protected void hello(ActorNode.Port onPort, Request.Hello helloRequest) {
         this.downstreamPorts.add(onPort); // TODO: Maybe a better way of doing this. ConcurrentHashSet and we add on create?
-        if (forwardedCandidacy != DEFAULT_CANDIDACY) {
-            sendResponse(onPort.owner(), onPort, forwardedCandidacy);
-        }
+        sendResponse(onPort.owner(), onPort, forwardedCandidacy);
     }
 
     protected void growTree(ActorNode.Port requestorPort, Request.GrowTree growTreeRequest) {
@@ -85,7 +83,10 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     // Response handling
     @Override
     protected void handleCandidacy(Port onPort, Response.Candidacy candidacy) {
-        Response.Candidacy existingPortCandidacy = (onPort.receivedCandidacy != null ? onPort.receivedCandidacy : DEFAULT_CANDIDACY);
+        // TODO: Add assert that receivedCandidacy is never null
+        // Response.Candidacy existingPortCandidacy = (onPort.receivedCandidacy != null ? onPort.receivedCandidacy : NULL_CANDIDACY);
+        assert(onPort.receivedCandidacy != null);
+        Response.Candidacy existingPortCandidacy = onPort.receivedCandidacy;
 
         if (existingPortCandidacy.nodeId < candidacy.nodeId) {
             // Happens in the case of termination.
@@ -127,11 +128,10 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     }
 
     private Response.Candidacy recomputeOldestCandidate() {
-        Response.Candidacy oldestOnPorts = activePorts.stream().map(port -> port.receivedCandidacy).filter(Objects::nonNull) // Ok to filter here, but not for votes.
-                .min(Comparator.comparing(x -> x.nodeId)).orElse(DEFAULT_CANDIDACY);
-        if (this.nodeId < oldestOnPorts.nodeId) {
-            return new Response.Candidacy(this.nodeId);
-        } else return oldestOnPorts;
+        return Stream.concat(
+                    Stream.of(new Response.Candidacy(this.nodeId)),
+                        activePorts.stream().map(port -> port.receivedCandidacy).filter(Objects::nonNull)
+                ).min(Comparator.comparing(x -> x.nodeId)).get();
     }
 
 // TODO: Replace this with the single efficient tracker
@@ -211,6 +211,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     }
 
     public static class Port {
+        private static final Response.Candidacy NULL_RECEIVED_CANDIDACY = new Response.Candidacy(Integer.MAX_VALUE);
 
         public enum State {READY, PULLING, DONE}
         private final ActorNode<?> owner;
@@ -225,7 +226,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             this.remote = remote;
             this.state = State.READY;
             this.lastRequestedIndex = -1;
-            this.receivedCandidacy = DEFAULT_CANDIDACY;
+            this.receivedCandidacy = NULL_RECEIVED_CANDIDACY;
         }
 
         protected void mayUpdateStateOnReceive(Response msg) {
