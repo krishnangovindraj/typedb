@@ -189,7 +189,7 @@ public abstract class Response {
 
         @Override
         public String toString() {
-            return String.format("TreeVote[(%d : %d/%d)]", candidate, subtreeContribution, target);
+            return String.format("TreeVote[%d: %d/%d]", candidate, subtreeContribution, target);
         }
     }
 }
