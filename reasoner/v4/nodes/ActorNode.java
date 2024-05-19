@@ -183,8 +183,8 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             sum += port.receivedTreeVote.subtreeContribution;
         }
 
-
-        if (highestTarget == lowestTarget && (forwardedTreeVote == null || highestTarget > forwardedTreeVote.target)) {
+        // This check is insufficient. It could be from a different root
+        if (highestTarget == lowestTarget && (forwardedTreeVote == null || forwardedTreeVote.candidate != receivedGrowTree.root || highestTarget > forwardedTreeVote.target)) {
             forwardedTreeVote = new Response.TreeVote(receivedGrowTree.root, highestTarget, sum + answerTable.size());
             if (forwardedTreeVote.candidate == this.nodeId) {
                 assert forwardedTreeVote.target == receivedGrowTree.target;
