@@ -6,6 +6,7 @@ class Viz:
     PORT_REGEX = re.compile(r"PORT\: Node\[([0-9]+)\] opened a port to Node\[([0-9]+)\]")
     CANDIDACY_REGEX = re.compile(r"SEND_RESPONSE: Node\[([0-9]+)\] sent response Candidacy\[([0-9]+)\] to Node\[([0-9]+)\]")
     DONE_REGEX = re.compile(r"SEND_RESPONSE: Node\[([0-9]+)\] sent response Done\[([0-9]+)\] to Node\[([0-9]+)\]")
+    TERMINATE_REGEX = re.compile(r"TERMINATE: Node\[([0-9]+)\] has terminated")
     
     def __init__(self):
         self.G = {}
@@ -27,6 +28,12 @@ class Viz:
         if done_match is not None:
             u, _ans, _v = tuple(int(g) for g in done_match.groups())
             self.done[u] = True
+        
+        terminate_match = Viz.TERMINATE_REGEX.match(line)
+        if terminate_match is not None:
+            u = tuple(int(g) for g in terminate_match.groups())
+            self.done[u] = True
+        
 
     def add_edge(self, u, v):
         if u not in self.G:
