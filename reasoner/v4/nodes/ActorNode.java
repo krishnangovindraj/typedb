@@ -89,7 +89,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         Response.Candidacy existingPortCandidacy = onPort.receivedCandidacy;
 
         if (existingPortCandidacy.nodeId < candidacy.nodeId) {
-            assert nodeRegistry.isCandidateTerminated(existingPortCandidacy.nodeId);
+            assert nodeRegistry.isCandidateTerminated(existingPortCandidacy.nodeId); // TODO: This still fails.
             // Happens in the case of termination.
             if (existingPortCandidacy.nodeId == forwardedCandidacy.nodeId) {
                 activePorts.forEach(p -> {
