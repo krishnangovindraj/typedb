@@ -50,9 +50,14 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
         }
 
         private Response pullTraversalSynchronous() {
-            return traversal.hasNext() ?
-                    answerTable.recordAnswer(traversal.next()) :
-                    answerTable.recordDone();
+            if (traversal.hasNext()) {
+                return answerTable.recordAnswer(traversal.next());
+            } else {
+                Response done = answerTable.recordDone();
+                nodeRegistry.notiyNodeTermination(this.nodeId);
+                System.out.printf("TERMINATE: Node[%d] has terminated\n", this.nodeId);
+                return done;
+            }
         }
 
         @Override
