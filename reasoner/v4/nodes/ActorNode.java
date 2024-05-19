@@ -89,6 +89,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         Response.Candidacy existingPortCandidacy = onPort.receivedCandidacy;
 
         if (existingPortCandidacy.nodeId < candidacy.nodeId) {
+            assert nodeRegistry.isCandidateTerminated(existingPortCandidacy.nodeId);
             // Happens in the case of termination.
             if (existingPortCandidacy.nodeId == forwardedCandidacy.nodeId) {
                 activePorts.forEach(p -> {
@@ -102,6 +103,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         }
 
         if (candidacy.nodeId < forwardedCandidacy.nodeId) {
+            if (nodeRegistry.isCandidateTerminated(candidacy.nodeId)) return;
             downstreamPorts.forEach(port -> sendResponse(port.owner, port, candidacy));
             forwardedCandidacy = candidacy;
         }
@@ -112,6 +114,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         }
 
         // Update
+//        assert !nodeRegistry.isCandidateTerminated(candidacy.nodeId); // TOO Strong due to concurrency.
         onPort.receivedCandidacy = candidacy;
     }
 
@@ -188,12 +191,16 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
                 if (forwardedTreeVote.subtreeContribution == forwardedTreeVote.target) {
                     // Terminate
                     activePorts.forEach(port -> port.sendRequest(new Request.TerminateSCC(forwardedTreeVote)));
+                    onTermination();
                 } else {
                     // Start another iteration
                     System.out.printf("ITERATE: Node[%d] updated target from %d to %d\n", this.nodeId, forwardedTreeVote.target, forwardedTreeVote.subtreeContribution);
                     // If we optimise, write the treePostVote here and below
                     receivedGrowTree = new Request.GrowTree(this.nodeId, forwardedTreeVote.subtreeContribution);
-                    assert ports.stream().allMatch(port -> port.receivedCandidacy.nodeId == this.nodeId);
+
+                    // This may also be too strong, because an inflight message may add an edge to a much older existing SCC.
+                    // In such a case, we just need to be patient and let the algorithm sort itself out
+                    // assert ports.stream().allMatch(port -> port.receivedCandidacy.nodeId == this.nodeId);
                     activePorts.forEach(port -> port.sendRequest(receivedGrowTree));
                 }
             } else {
@@ -208,6 +215,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         if (!answerTable.isComplete()) {
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Response toSend = answerTable.recordDone();
+            nodeRegistry.notiyNodeTermination(this.nodeId);
             subscribers.forEachRemaining(subscriber -> sendResponse(subscriber.owner(), subscriber, toSend));
             System.out.printf("TERMINATE: Node[%d] has terminated\n", this.nodeId);
         }

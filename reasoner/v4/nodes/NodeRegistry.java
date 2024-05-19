@@ -59,6 +59,10 @@ public class NodeRegistry {
     private final AtomicInteger nodeAgeClock;
     private final Set<ConjunctionController.ConjunctionStreamPlan> cyclicConjunctionStreamPlans;
 
+    // Terminated leaders violate monotonicity of the candidate. We must track & ignore their candidacy to prevent oscillation.
+    // TODO: Consider an ArrayList?
+    private final ConcurrentSet<Integer> terminatedNodes;
+
     public NodeRegistry(ActorExecutorGroup executorService, ReasonerPerfCounters perfCounters,
                         ConceptManager conceptManager, LogicManager logicManager, TraversalEngine traversalEngine,
                         ReasonerPlanner planner) {
@@ -79,6 +83,7 @@ public class NodeRegistry {
         this.roots = new ConcurrentSet<>();
         this.terminated = new AtomicBoolean(false);
         this.nodeAgeClock = new AtomicInteger();
+        this.terminatedNodes = new ConcurrentSet<>();
     }
 
     public Integer nextNodeAge() {
@@ -278,6 +283,13 @@ public class NodeRegistry {
         return perfCountersFields;
     }
 
+    public void notiyNodeTermination(Integer nodeId) {
+        terminatedNodes.add(nodeId);
+    }
+
+    public boolean isCandidateTerminated(Integer nodeId) {
+        return terminatedNodes.contains(nodeId);
+    }
 
     public abstract class SubRegistry<KEY, NODE extends ActorNode<NODE>> {
         protected final KEY key;
@@ -340,11 +352,11 @@ public class NodeRegistry {
         }
     }
 
-    public class SubConjunctionRegistry extends SubRegistry<ConjunctionController.ConjunctionStreamPlan.CompoundStreamPlan, ConjunctionNode> {
+    public class SubConjunctionRegistry extends SubRegistry<CompoundStreamPlan, ConjunctionNode> {
 
         private final ResolvableConjunction conjunction;
 
-        private SubConjunctionRegistry(ResolvableConjunction conjunction, ConjunctionController.ConjunctionStreamPlan.CompoundStreamPlan conjunctionStreamPlan) {
+        private SubConjunctionRegistry(ResolvableConjunction conjunction, CompoundStreamPlan conjunctionStreamPlan) {
             super(conjunctionStreamPlan);
             this.conjunction = conjunction;
         }
