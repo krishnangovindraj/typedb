@@ -177,78 +177,25 @@ Feature: Debugging Space
 
     Then verify answer size is: 3
 
-#
-#  Scenario: SHRUNK - the types of entities in inferred relations can be used to make further inferences
-#    Given reasoning schema
-#      """
-#      define
-#      place sub entity,
-#        owns name,
-#        plays location-hierarchy:subordinate,
-#        plays location-hierarchy:superior,
-#        plays big-location-hierarchy:big-subordinate,
-#        plays big-location-hierarchy:big-superior;
-#
-#      location-hierarchy sub relation,
-#        relates subordinate,
-#        relates superior;
-#
-##      big-place sub place,
-##        plays big-location-hierarchy:big-subordinate,
-##        plays big-location-hierarchy:big-superior;
-#
-#      big-location-hierarchy sub location-hierarchy,
-#        relates big-subordinate as subordinate,
-#        relates big-superior as superior;
-#
-#      rule transitive-location: when {
-#        (subordinate: $x, superior: $y) isa location-hierarchy;
-#        (subordinate: $y, superior: $z) isa location-hierarchy;
-#      } then {
-#        (subordinate: $x, superior: $z) isa location-hierarchy;
-#      };
-#
-#      rule if-a-big-thing-is-in-a-big-place-then-its-a-big-location: when {
-#        (subordinate: $x, superior: $y) isa location-hierarchy;
-#      } then {
-#        (big-subordinate: $x, big-superior: $y) isa big-location-hierarchy;
-#      };
-#      """
-#    Given reasoning data
-#      """
-#      insert
-#      $x isa place, has name "Mount Kilimanjaro";
-#      $y isa place, has name "Tanzania";
-#      (subordinate: $x, superior: $y) isa location-hierarchy;
-#      """
-#    Given verifier is initialised
-#    Given reasoning query
-#      """
-#      match (subordinate: $x, superior: $y) isa big-location-hierarchy;
-#      """
-#    Then verify answer size is: 1234
-##    Then verify answers are sound
-##    Then verify answers are complete
 
-
-
-
-  Scenario: ORIGINAL - the types of entities in inferred relations can be used to make further inferences
+  Scenario: SHRUNK - the types of entities in inferred relations can be used to make further inferences
     Given reasoning schema
       """
       define
       place sub entity,
         owns name,
         plays location-hierarchy:subordinate,
-        plays location-hierarchy:superior;
+        plays location-hierarchy:superior,
+        plays big-location-hierarchy:big-subordinate,
+        plays big-location-hierarchy:big-superior;
 
       location-hierarchy sub relation,
         relates subordinate,
         relates superior;
 
-      big-place sub place,
-        plays big-location-hierarchy:big-subordinate,
-        plays big-location-hierarchy:big-superior;
+#      big-place sub place,
+#        plays big-location-hierarchy:big-subordinate,
+#        plays big-location-hierarchy:big-superior;
 
       big-location-hierarchy sub location-hierarchy,
         relates big-subordinate as subordinate,
@@ -262,8 +209,6 @@ Feature: Debugging Space
       };
 
       rule if-a-big-thing-is-in-a-big-place-then-its-a-big-location: when {
-        $x isa big-place;
-        $y isa big-place;
         (subordinate: $x, superior: $y) isa location-hierarchy;
       } then {
         (big-subordinate: $x, big-superior: $y) isa big-location-hierarchy;
@@ -272,9 +217,9 @@ Feature: Debugging Space
     Given reasoning data
       """
       insert
-      $x isa big-place, has name "Mount Kilimanjaro";
+      $x isa place, has name "Mount Kilimanjaro";
       $y isa place, has name "Tanzania";
-      $z isa big-place, has name "Africa";
+      $z isa place, has name "Africa";
 
       (subordinate: $x, superior: $y) isa location-hierarchy;
       (subordinate: $y, superior: $z) isa location-hierarchy;
@@ -284,7 +229,63 @@ Feature: Debugging Space
       """
       match (subordinate: $x, superior: $y) isa big-location-hierarchy;
       """
-    Then verify answer size is: 1
+    Then verify answer size is: 1234
 #    Then verify answers are sound
 #    Then verify answers are complete
+
 #
+#  Scenario: ORIGINAL - the types of entities in inferred relations can be used to make further inferences
+#    Given reasoning schema
+#      """
+#      define
+#      place sub entity,
+#        owns name,
+#        plays location-hierarchy:subordinate,
+#        plays location-hierarchy:superior;
+#
+#      location-hierarchy sub relation,
+#        relates subordinate,
+#        relates superior;
+#
+#      big-place sub place,
+#        plays big-location-hierarchy:big-subordinate,
+#        plays big-location-hierarchy:big-superior;
+#
+#      big-location-hierarchy sub location-hierarchy,
+#        relates big-subordinate as subordinate,
+#        relates big-superior as superior;
+#
+#      rule transitive-location: when {
+#        (subordinate: $x, superior: $y) isa location-hierarchy;
+#        (subordinate: $y, superior: $z) isa location-hierarchy;
+#      } then {
+#        (subordinate: $x, superior: $z) isa location-hierarchy;
+#      };
+#
+#      rule if-a-big-thing-is-in-a-big-place-then-its-a-big-location: when {
+#        $x isa big-place;
+#        $y isa big-place;
+#        (subordinate: $x, superior: $y) isa location-hierarchy;
+#      } then {
+#        (big-subordinate: $x, big-superior: $y) isa big-location-hierarchy;
+#      };
+#      """
+#    Given reasoning data
+#      """
+#      insert
+#      $x isa big-place, has name "Mount Kilimanjaro";
+#      $y isa place, has name "Tanzania";
+#      $z isa big-place, has name "Africa";
+#
+#      (subordinate: $x, superior: $y) isa location-hierarchy;
+#      (subordinate: $y, superior: $z) isa location-hierarchy;
+#      """
+#    Given verifier is initialised
+#    Given reasoning query
+#      """
+#      match (subordinate: $x, superior: $y) isa big-location-hierarchy;
+#      """
+#    Then verify answer size is: 1
+##    Then verify answers are sound
+##    Then verify answers are complete
+##
