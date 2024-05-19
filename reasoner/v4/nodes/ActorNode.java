@@ -91,7 +91,13 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         if (existingPortCandidacy.nodeId < candidacy.nodeId) {
             // Happens in the case of termination.
             if (existingPortCandidacy.nodeId == forwardedCandidacy.nodeId) {
+                activePorts.forEach(p -> {
+                    if (p.receivedCandidacy.nodeId == existingPortCandidacy.nodeId) {
+                        p.receivedCandidacy = Port.NULL_RECEIVED_CANDIDACY;
+                    }
+                });
                 forwardedCandidacy = recomputeOldestCandidate();
+                downstreamPorts.forEach(port -> sendResponse(port.owner, port, forwardedCandidacy));
             }
         }
 
@@ -121,7 +127,14 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             onTermination();
         } else {
             if (onPort.receivedCandidacy.nodeId == forwardedCandidacy.nodeId) {
+                // TODO: Make this better
+                activePorts.forEach(p -> {
+                    if (p.receivedCandidacy.nodeId == onPort.receivedCandidacy.nodeId) {
+                        p.receivedCandidacy = Port.NULL_RECEIVED_CANDIDACY;
+                    }
+                });
                 forwardedCandidacy = recomputeOldestCandidate();
+                downstreamPorts.forEach(port -> sendResponse(port.owner, port, forwardedCandidacy));
             }
             checkTreeStatusChange();
         }
