@@ -168,11 +168,11 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         for (Port port: activePorts) {
             if (port.receivedTreeVote == null) return;
             if (port.receivedTreeVote.candidate != receivedGrowTree.root ){
-                System.err.printf("DEBUG: Node[%d] received treeVote for root: %d but expected root: %d \n", this.nodeId, port.receivedTreeVote.candidate, receivedGrowTree.root);
+                System.out.printf("DEBUG: Node[%d] received treeVote for root: %d but expected root: %d \n", this.nodeId, port.receivedTreeVote.candidate, receivedGrowTree.root);
                 return;
             }
             if (port.receivedCandidacy.nodeId != receivedGrowTree.root ){
-                System.err.printf("DEBUG: Node[%d] received candidacy for candidate: %d but expected root: %d \n", this.nodeId, port.receivedCandidacy.nodeId, receivedGrowTree.root);
+                System.out.printf("DEBUG: Node[%d] received candidacy for candidate: %d but expected root: %d \n", this.nodeId, port.receivedCandidacy.nodeId, receivedGrowTree.root);
                 return;
             }
             highestTarget = Math.max(highestTarget, port.receivedTreeVote.target);
@@ -190,7 +190,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
                     activePorts.forEach(port -> port.sendRequest(new Request.TerminateSCC(forwardedTreeVote)));
                 } else {
                     // Start another iteration
-                    System.err.printf("ITERATE: Node[%d] updated target from %d to %d\n", this.nodeId, forwardedTreeVote.target, forwardedTreeVote.subtreeContribution);
+                    System.out.printf("ITERATE: Node[%d] updated target from %d to %d\n", this.nodeId, forwardedTreeVote.target, forwardedTreeVote.subtreeContribution);
                     // If we optimise, write the treePostVote here and below
                     receivedGrowTree = new Request.GrowTree(this.nodeId, forwardedTreeVote.subtreeContribution);
                     assert ports.stream().allMatch(port -> port.receivedCandidacy.nodeId == this.nodeId);
@@ -209,13 +209,13 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Response toSend = answerTable.recordDone();
             subscribers.forEachRemaining(subscriber -> sendResponse(subscriber.owner(), subscriber, toSend));
-            System.err.printf("TERMINATE: Node[%d] has terminated\n", this.nodeId);
+            System.out.printf("TERMINATE: Node[%d] has terminated\n", this.nodeId);
         }
     }
 
 
     protected Port createPort(ActorNode<?> remote) {
-        System.err.printf("PORT: Node[%d] opened a port to Node[%d]\n", this.nodeId, remote.nodeId);
+        System.out.printf("PORT: Node[%d] opened a port to Node[%d]\n", this.nodeId, remote.nodeId);
         Port port = new Port(this, remote);
         ports.add(port);
         activePorts.add(port);
@@ -264,7 +264,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         }
 
         private void sendRequest(Request request) {
-            System.err.printf("SEND_REQUEST: Node[%d] sent request %s to Node[%d]\n", owner.nodeId, request, remote.nodeId);
+            System.out.printf("SEND_REQUEST: Node[%d] sent request %s to Node[%d]\n", owner.nodeId, request, remote.nodeId);
             remote.driver().execute(nodeActor -> nodeActor.receiveRequest(this, request));
         }
 
