@@ -168,7 +168,6 @@ build:
         bazel run @vaticle_dependencies//tool/bazelinstall:remote_cache_setup.sh
         bazel run --define version=$(git rev-parse HEAD) //:deploy-apt-x86_64 -- snapshot
         bazel run --define version=$(git rev-parse HEAD) //:deploy-apt-arm64 -- snapshot
-#    deploy-brew-snapshot:
 #      image: vaticle-ubuntu-22.04
 #      filter:
 #        owner: vaticle
