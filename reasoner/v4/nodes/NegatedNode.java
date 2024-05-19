@@ -52,7 +52,7 @@ public class NegatedNode extends ResolvableNode<Negated, NegatedNode> {
             Response toSend = answerTable.recordAnswer(bounds);
             subscribers.forEachRemaining(subscriber -> sendResponse(subscriber.owner(), subscriber, toSend));
             answerTable.recordDone();
-            System.err.printf("TERMINATE: Node[%d] has terminated\n", this.nodeId);
+            System.out.printf("TERMINATE: Node[%d] has terminated\n", this.nodeId);
         }
     }
 }
