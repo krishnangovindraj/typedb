@@ -22,10 +22,16 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
     @Override
     public void initialise() {
         super.initialise();
-        conclusion.rule().condition().disjunction().conjunctions().forEach(conjunction -> {
-            ConjunctionController.ConjunctionStreamPlan csPlan = nodeRegistry.conjunctionStreamPlan(conjunction, bounds);
-            createPort(nodeRegistry.getRegistry(csPlan).getNode(bounds));
-        });
+        if (conclusion.generating().isPresent() && bounds.contains(conclusion.generating().get().id())) {
+            // TODO: We should see if we can avoid spawning the conclusion at all by checking this in the concludable node.
+            // If the generated variable is bound, the lookup node will suffice
+            answerTable.recordDone();
+        } else {
+            conclusion.rule().condition().disjunction().conjunctions().forEach(conjunction -> {
+                ConjunctionController.ConjunctionStreamPlan csPlan = nodeRegistry.conjunctionStreamPlan(conjunction, bounds);
+                createPort(nodeRegistry.getRegistry(csPlan).getNode(bounds));
+            });
+        }
     }
 
     protected void computeNextAnswer(ActorNode.Port reader, int index) {
