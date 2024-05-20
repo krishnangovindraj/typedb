@@ -138,9 +138,9 @@ public class NodeRegistry {
                     planner.triggeredCalls(resolvable.asConcludable(), concludableBounds, null)
                             .forEach(triggeredMode -> cacheConjunctionStreamPlans(triggeredMode, conclusionVars.get(triggeredMode.conjunction)));
                 } else if (resolvable.isNegated()) {
-                    Set<Variable> negatedBounds = Collections.intersection(runningBounds, resolvable.variables());
-                    Set<Identifier.Variable.Retrievable> negatedBoundIds = iterate(negatedBounds).map(v -> v.id().asRetrievable()).toSet();
                     resolvable.asNegated().disjunction().conjunctions().forEach(nestedConj -> {
+                        Set<Variable> negatedBounds = Collections.intersection(runningBounds, nestedConj.pattern().variables());
+                        Set<Identifier.Variable.Retrievable> negatedBoundIds = iterate(negatedBounds).map(v -> v.id().asRetrievable()).toSet();
                         cacheConjunctionStreamPlans(new ReasonerPlanner.CallMode(nestedConj, negatedBounds), negatedBoundIds);
                     });
                 }
