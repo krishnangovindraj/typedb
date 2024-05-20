@@ -17,6 +17,7 @@
 
 package com.vaticle.typedb.core.reasoner.v4;
 
+import com.vaticle.typedb.core.common.exception.ErrorMessage;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.parameters.Options;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
@@ -34,6 +35,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.vaticle.typedb.core.common.exception.ErrorMessage.Reasoner.REASONING_TERMINATED_WITH_CAUSE;
 import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducerV4.State.EXCEPTION;
 import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducerV4.State.FINISHED;
 import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducerV4.State.INIT;
@@ -142,7 +144,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
                 queue.done(e.getCause());
             }
         }
-        throw TypeDBException.of(e);
+        throw TypeDBException.of(REASONING_TERMINATED_WITH_CAUSE, e);
     }
 
     @Override
@@ -174,7 +176,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
 
         @Override
         protected void prepare() {
-            nodeRegistry.prepare(conjunction, new ConceptMap(), filter);
+            nodeRegistry.prepare(conjunction, ConceptMap.EMPTY, filter);
         }
 
         @Override
@@ -199,14 +201,14 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
 
             protected RootNode(NodeRegistry nodeRegistry, Driver<RootNode> driver) {
                 super(nodeRegistry, driver, () -> "RootNode: " + conjunction.pattern());
-                ConjunctionController.ConjunctionStreamPlan csPlan = nodeRegistry.conjunctionStreamPlan(conjunction, new ConceptMap());
+                ConjunctionController.ConjunctionStreamPlan csPlan = nodeRegistry.conjunctionStreamPlan(conjunction, ConceptMap.EMPTY);
                 this.subRegistry = nodeRegistry.getRegistry(csPlan);
                 this.port = null;
             }
 
             @Override
             public void initialise() {
-                port = createPort(subRegistry.getNode(new ConceptMap()));
+                port = createPort(subRegistry.getNode(ConceptMap.EMPTY));
                 nodeRegistry.perfCounters().startPeriodicPrinting();
             }
 
