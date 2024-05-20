@@ -186,7 +186,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
 
         @Override
         protected ConceptMap transformAnswer(ConceptMap answer) {
-            return answer;
+            return answer.filter(filter);
         }
 
         void readNextAnswer() {
