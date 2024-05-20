@@ -4,7 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use bytes::Bytes;
 use encoding::{
@@ -31,13 +31,30 @@ use crate::{
     },
     ConceptAPI,
 };
+use crate::type_::object_type::ObjectType;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct RoleType<'a> {
     vertex: TypeVertex<'a>,
 }
 
-impl<'a> RoleType<'a> { }
+impl<'a> RoleType<'a> {
+    pub fn get_players<'m, Snapshot: ReadableSnapshot>(
+        &self,
+        snapshot: &Snapshot,
+        type_manager: &'m TypeManager<Snapshot>,
+    ) -> Result<MaybeOwns<'m, HashSet<Plays<'static>>>, ConceptReadError> {
+        type_manager.get_plays_for_role_type(snapshot, self.clone().into_owned())
+    }
+
+    pub fn get_players_transitive<'m, Snapshot: ReadableSnapshot>(
+        &self,
+        snapshot: &Snapshot,
+        type_manager: &'m TypeManager<Snapshot>,
+    ) -> Result<MaybeOwns<'m, HashMap<Plays<'static>, Vec<ObjectType<'static>>>>, ConceptReadError> {
+        type_manager.get_plays_for_role_type_transitive(snapshot, self.clone().into_owned())
+    }
+}
 
 impl<'a> ConceptAPI<'a> for RoleType<'a> {}
 

@@ -121,7 +121,7 @@ fn entity_usage() {
             None => assert!(false, "child should inherit ownership of height"),
             Some(child_owns_height) => {
                 assert_eq!(height_type, child_owns_height.attribute());
-                assert_eq!(ObjectType::Entity(person_type.clone()), child_owns_height.player());
+                assert_eq!(ObjectType::Entity(person_type.clone()), child_owns_height.owner());
             }
         }
     }
@@ -194,7 +194,7 @@ fn entity_usage() {
             None => assert!(false, "child should inherit ownership of height"),
             Some(child_owns_height) => {
                 assert_eq!(height_type, child_owns_height.attribute());
-                assert_eq!(ObjectType::Entity(person_type.clone()), child_owns_height.player());
+                assert_eq!(ObjectType::Entity(person_type.clone()), child_owns_height.owner());
             }
         }
     }

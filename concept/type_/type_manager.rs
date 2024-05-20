@@ -383,7 +383,7 @@ impl<Snapshot: ReadableSnapshot> TypeManager<Snapshot> {
         if let Some(cache) = &self.type_cache {
             Ok(MaybeOwns::Borrowed(cache.get_owns_for_attribute_type(attribute_type.clone())))
         } else {
-            let plays = TypeReader::get_owns_for_attribute_type(snapshot, attribute_type.clone())?;
+            let plays = TypeReader::get_implementations_for_interface::<Owns<'static>>(snapshot, attribute_type.clone())?;
             Ok(MaybeOwns::Owned(plays))
         }
     }
@@ -396,8 +396,8 @@ impl<Snapshot: ReadableSnapshot> TypeManager<Snapshot> {
         if let Some(cache) = &self.type_cache {
             Ok(MaybeOwns::Borrowed(cache.get_owns_for_attribute_type_transitive(attribute_type.clone())))
         } else {
-            let plays = TypeReader::get_owns_for_attribute_type_transitive(snapshot, attribute_type.clone())?;
-            Ok(MaybeOwns::Owned(plays))
+            let owns = TypeReader::get_implementations_for_interface_transitive::<Owns<'static>>(snapshot, attribute_type.clone())?;
+            Ok(MaybeOwns::Owned(owns))
         }
     }
 
@@ -435,7 +435,7 @@ impl<Snapshot: ReadableSnapshot> TypeManager<Snapshot> {
         if let Some(cache) = &self.type_cache {
             Ok(MaybeOwns::Borrowed(cache.get_plays_for_role_type(role_type.clone())))
         } else {
-            let plays = TypeReader::get_plays_for_role_type(snapshot, role_type.clone())?;
+            let plays = TypeReader::get_implementations_for_interface::<Plays<'static>>(snapshot, role_type.clone())?;
             Ok(MaybeOwns::Owned(plays))
         }
     }
@@ -448,7 +448,7 @@ impl<Snapshot: ReadableSnapshot> TypeManager<Snapshot> {
         if let Some(cache) = &self.type_cache {
             Ok(MaybeOwns::Borrowed(cache.get_plays_for_role_type_transitive(role_type.clone())))
         } else {
-            let plays = TypeReader::get_plays_for_role_type_transitive(snapshot, role_type.clone())?;
+            let plays = TypeReader::get_implementations_for_interface_transitive::<Plays<'static>>(snapshot, role_type.clone())?;
             Ok(MaybeOwns::Owned(plays))
         }
     }
@@ -898,7 +898,7 @@ impl<Snapshot: WritableSnapshot> TypeManager<Snapshot> {
         overridden: Owns<'static>,
     ) -> Result<(), ConceptWriteError> {
         // TODO: More validation - instances exist.
-        OperationTimeValidation::validate_owns_is_inherited(snapshot, owns.player(), overridden.attribute())
+        OperationTimeValidation::validate_owns_is_inherited(snapshot, owns.owner(), overridden.attribute())
             .map_err(|source| ConceptWriteError::SchemaValidation {source})?;
         OperationTimeValidation::validate_overridden_is_supertype(snapshot, owns.attribute(), overridden.attribute())
             .map_err(|source| ConceptWriteError::SchemaValidation {source})?;
