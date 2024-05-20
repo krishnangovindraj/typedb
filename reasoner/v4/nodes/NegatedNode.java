@@ -16,7 +16,8 @@ public class NegatedNode extends ResolvableNode<Negated, NegatedNode> {
     public void initialise() {
         super.initialise();
         resolvable.disjunction().conjunctions().forEach(conjunction -> {
-            createPort(nodeRegistry.getRegistry(nodeRegistry.conjunctionStreamPlan(conjunction, bounds)).getNode(bounds));
+            ConceptMap conjBounds = bounds.filter(conjunction.pattern().retrieves());
+            createPort(nodeRegistry.getRegistry(nodeRegistry.conjunctionStreamPlan(conjunction, conjBounds)).getNode(conjBounds));
         });
     }
 
