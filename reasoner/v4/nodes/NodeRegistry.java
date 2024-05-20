@@ -92,7 +92,7 @@ public class NodeRegistry {
 
     public void prepare(ResolvableConjunction rootConjunction, ConceptMap rootBounds, Modifiers.Filter rootFilter) {
         Set<Variable> boundVars = iterate(rootBounds.concepts().keySet()).map(id -> rootConjunction.pattern().variable(id)).toSet();
-        planner.plan(rootConjunction, boundVars);
+        planner.planRoot(rootConjunction);
         cacheConjunctionStreamPlans(new ReasonerPlanner.CallMode(rootConjunction, boundVars), rootFilter.variables());
 //        csPlans.forEach((callMode, csPlan) -> {
 //            cacheIsCyclicConjunctionStreamPlans(planner.conjunctionGraph().conjunctionNode(callMode.conjunction), csPlan);
