@@ -40,6 +40,10 @@ log:
       filter: com.vaticle.typedb.core.database
       level: info # on 'debug' the server will periodically log database storage properties
       output: [ stdout, file ]
+    reasoner:
+      filter: com.vaticle.typedb.core.reasoner.planner
+      level: debug
+      output: [ stdout, file ]
   debugger:
     reasoner-tracer:
       enable: false

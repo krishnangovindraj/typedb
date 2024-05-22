@@ -63,6 +63,11 @@ public class OrderingCoster {
             Set<Variable> restrictedResolvableVars = Collections.intersection(resolvableVars, restrictedVars);
 
             double resolvableCost = scaledAcyclicCost(conjunctionNode, estimator, resolvable, restrictedResolvableVars, resolvableMode);
+            if (resolvable.isConcludable() && resolvable.asConcludable().isRelation() &&
+                    restrictedResolvableVars.contains(resolvable.asConcludable().asRelation().generatingVariable())
+            ) {
+                resolvableCost = 0;
+            }
 
             if (resolvable.isConcludable() && conjunctionNode.cyclicConcludables().contains(resolvable.asConcludable())) {
                 // Question: Do we project onto all the restrictedVars, or only those not in the mode?

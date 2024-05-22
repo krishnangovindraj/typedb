@@ -697,7 +697,7 @@ public class AnswerCountEstimator {
                 }
             }
 
-            return inferredEstimate;
+            return Math.max(1, inferredEstimate);
         }
 
         private long attributesCreatedByHasWithIsa(Concludable concludable) {
