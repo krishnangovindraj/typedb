@@ -3,7 +3,6 @@ package com.vaticle.typedb.core.reasoner.v4.nodes;
 import com.vaticle.typedb.common.collection.Either;
 import com.vaticle.typedb.common.collection.Pair;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
-import com.vaticle.typedb.core.common.perfcounter.PerfCounters;
 import com.vaticle.typedb.core.reasoner.v4.Request;
 import com.vaticle.typedb.core.reasoner.v4.Response;
 import org.slf4j.Logger;
@@ -180,6 +179,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         private final ActorNode<?> remote;
         private State state;
         private int lastRequestedIndex;
+        public int __DBG__doneIndex;
         private Response.Candidacy receivedCandidacy;
         private Response.TreeVote receivedTreeVote;
 
@@ -188,6 +188,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             this.remote = remote;
             this.state = State.READY;
             this.lastRequestedIndex = -1;
+            this.__DBG__doneIndex = -1;
             this.receivedCandidacy = NULL_RECEIVED_CANDIDACY;
         }
 
