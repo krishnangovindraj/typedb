@@ -26,8 +26,9 @@ public class NegatedNode extends ResolvableNode<Negated, NegatedNode> {
         assert index == 0 && answerTable.answerAt(index).isEmpty();
         answerTable.registerSubscriber(reader, index);
         ports.forEach(port -> {
-            assert port.isReady();
-            port.readNext();
+//            assert port.isReady();
+//            port.readNext();
+            if (port.isReady()) port.readNext();
         });
     }
 

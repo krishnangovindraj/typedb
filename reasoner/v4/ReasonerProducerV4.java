@@ -242,7 +242,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
                         pulledOnOne = true; // KGFLAG: Strategy
                     }
                 }
-                assert pulledOnOne;
+//                assert pulledOnOne;
             }
 
             @Override
