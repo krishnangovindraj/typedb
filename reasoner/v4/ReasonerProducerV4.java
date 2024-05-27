@@ -21,7 +21,7 @@ import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.parameters.Options;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.concurrent.producer.Producer;
-import com.vaticle.typedb.core.logic.resolvable.ResolvableConjunction;
+import com.vaticle.typedb.core.logic.resolvable.ResolvableDisjunction;
 import com.vaticle.typedb.core.reasoner.ExplainablesManager;
 import com.vaticle.typedb.core.reasoner.controller.ConjunctionController;
 import com.vaticle.typedb.core.reasoner.v4.nodes.ActorNode;
@@ -31,7 +31,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -173,20 +175,20 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
 
     public static class Basic extends ReasonerProducerV4<Basic.RootNode, ConceptMap> {
 
-        private final ResolvableConjunction conjunction;
+        private final ResolvableDisjunction disjunction;
         private final Modifiers.Filter filter;
         private AtomicInteger answersReceived;
 
-        public Basic(ResolvableConjunction conjunction, Modifiers.Filter filter, Options.Query options, NodeRegistry nodeRegistry, ExplainablesManager explainablesManager) {
+        public Basic(ResolvableDisjunction disjunction, Modifiers.Filter filter, Options.Query options, NodeRegistry nodeRegistry, ExplainablesManager explainablesManager) {
             super(options, nodeRegistry, explainablesManager);
-            this.conjunction = conjunction;
+            this.disjunction = disjunction;
             this.filter = filter;
             this.answersReceived = new AtomicInteger(0);
         }
 
         @Override
         protected void prepare() {
-            nodeRegistry.prepare(conjunction, ConceptMap.EMPTY, filter);
+            nodeRegistry.prepare(disjunction, ConceptMap.EMPTY, filter);
         }
 
         @Override
@@ -206,19 +208,19 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
 
         class RootNode extends ActorNode<RootNode> {
 
-            private final NodeRegistry.SubRegistry<?,?> subRegistry;
-            private Port port;
-
             protected RootNode(NodeRegistry nodeRegistry, Driver<RootNode> driver) {
-                super(nodeRegistry, driver, () -> "RootNode: " + conjunction.pattern());
-                ConjunctionController.ConjunctionStreamPlan csPlan = nodeRegistry.conjunctionStreamPlan(conjunction, ConceptMap.EMPTY);
-                this.subRegistry = nodeRegistry.getRegistry(csPlan);
-                this.port = null;
+                super(nodeRegistry, driver, () -> "RootNode: " + disjunction.pattern());
             }
 
             @Override
             public void initialise() {
-                port = createPort(subRegistry.getNode(ConceptMap.EMPTY));
+                disjunction.conjunctions().forEach(conjunction -> {
+                    ConjunctionController.ConjunctionStreamPlan csPlan = nodeRegistry.conjunctionStreamPlan(conjunction, ConceptMap.EMPTY);
+                    NodeRegistry.SubRegistry<?, ?> subRegistry = nodeRegistry.getRegistry(csPlan);
+                    Port port = createPort(subRegistry.getNode(ConceptMap.EMPTY));
+                    ports.add(port);
+                    activePorts.add(port);
+                });
                 nodeRegistry.perfCounters().startPeriodicPrinting();
             }
 
@@ -230,14 +232,23 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
             }
 
             @Override
-            protected void readAnswerAt(Port reader, Request.ReadAnswer readAnswer) {
-                assert readAnswer.index == port.lastRequestedIndex() + 1;
-                computeNextAnswer(reader, readAnswer.index);
+            protected void readAnswerAt(Port _ignored, Request.ReadAnswer readAnswer) {
+//                assert readAnswer.index == ???;
+//                computeNextAnswer(port, readAnswer.index);
+                boolean pulledOnOne = false;
+                for (Port port: ports) {
+                    if (port.isReady()) {
+                        port.readNext();
+                        pulledOnOne = true; // KGFLAG: Strategy
+                    }
+                }
+                assert pulledOnOne;
             }
 
             @Override
             protected void computeNextAnswer(Port reader, int index) {
-                port.readNext();
+                // port.readNext();
+                assert false;
             }
 
 
@@ -248,8 +259,11 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
 
             @Override
             protected void handleDone(Port onPort) {
-                Basic.this.finish();
-                nodeRegistry.perfCounters().stopPrinting();
+                activePorts.remove(onPort);
+                if (activePorts.isEmpty()) {
+                    Basic.this.finish();
+                    nodeRegistry.perfCounters().stopPrinting();
+                }
             }
         }
     }

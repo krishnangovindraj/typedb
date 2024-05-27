@@ -24,6 +24,7 @@ import com.vaticle.typedb.core.concurrent.producer.Producers;
 import com.vaticle.typedb.core.logic.LogicManager;
 import com.vaticle.typedb.core.logic.resolvable.Concludable;
 import com.vaticle.typedb.core.logic.resolvable.ResolvableConjunction;
+import com.vaticle.typedb.core.logic.resolvable.ResolvableDisjunction;
 import com.vaticle.typedb.core.pattern.Conjunction;
 import com.vaticle.typedb.core.pattern.Disjunction;
 import com.vaticle.typedb.core.pattern.Negation;
@@ -224,12 +225,7 @@ public class Reasoner {
 
     public FunctionalIterator<ConceptMap> executeReasoner(Disjunction disjunction, Filter filter, Context.Query context) {
         ReasonerProducerV4.Basic producer;
-        if (disjunction.conjunctions().size() == 1) {
-            producer = new ReasonerProducerV4.Basic(ResolvableConjunction.of(disjunction.conjunctions().get(0)), filter, context.options(), nodeRegistry, explainablesManager);
-        } else throw TypeDBException.of(UNIMPLEMENTED);
-//        ReasonerProducer.Match producer = disjunction.conjunctions().size() == 1
-//                ? new ReasonerProducer.Match.Conjunction(disjunction.conjunctions().get(0), filter, context.options(), controllerRegistry, explainablesManager)
-//                : new ReasonerProducer.Match.Disjunction(disjunction, filter, context.options(), controllerRegistry, explainablesManager);
+        producer = new ReasonerProducerV4.Basic(ResolvableDisjunction.of(disjunction), filter, context.options(), nodeRegistry, explainablesManager);
         return produce(producer, context.producer(), async1());
     }
 
