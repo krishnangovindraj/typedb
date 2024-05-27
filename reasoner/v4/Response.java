@@ -191,5 +191,18 @@ public abstract class Response {
         public String toString() {
             return String.format("TreeVote[%d: %d/%d]", candidate, subtreeContribution, target);
         }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(candidate, target, subtreeContribution);
+        }
+
+        @Override
+        public boolean equals(Object object) { // TODO: Remove so we can optimise # messages
+            if (this == object) return true;
+            if (object == null || getClass() != object.getClass()) return false;
+            TreeVote other = (TreeVote) object;
+            return candidate == other.candidate && target == other.target && subtreeContribution == other.subtreeContribution;
+        }
     }
 }
