@@ -3,6 +3,7 @@ package com.vaticle.typedb.core.reasoner.v4.nodes;
 import com.vaticle.typedb.common.collection.Either;
 import com.vaticle.typedb.common.collection.Pair;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
+import com.vaticle.typedb.core.common.perfcounter.PerfCounters;
 import com.vaticle.typedb.core.reasoner.v4.Request;
 import com.vaticle.typedb.core.reasoner.v4.Response;
 import org.slf4j.Logger;
@@ -26,19 +27,19 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
     static final Logger LOG = LoggerFactory.getLogger(ActorNode.class);
 
-    private final Set<ActorNode.Port> downstreamPorts;
+    private final Set<Port> downstreamPorts;
 
     TerminationTracker terminationTracker;
 
     protected ActorNode(NodeRegistry nodeRegistry, Driver<NODE> driver, Supplier<String> debugName) {
         super(nodeRegistry, driver, debugName);
         downstreamPorts = new HashSet<>();
-        terminationTracker = new TerminationTracker(this.nodeId);
+        terminationTracker = new TerminationTracker(this);
     }
 
     // TODO: Since port has the index in it, maybe we don't need index here?
     @Override
-    protected void readAnswerAt(ActorNode.Port reader, Request.ReadAnswer readAnswerRequest) {
+    protected void readAnswerAt(Port reader, Request.ReadAnswer readAnswerRequest) {
         int index = readAnswerRequest.index;
         Optional<Response> peekAnswer = answerTable.answerAt(index);
         if (peekAnswer.isPresent()) {
@@ -52,12 +53,12 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     }
 
     @Override
-    protected void hello(ActorNode.Port onPort, Request.Hello helloRequest) {
+    protected void hello(Port onPort, Request.Hello helloRequest) {
         this.downstreamPorts.add(onPort); // TODO: Maybe a better way of doing this. ConcurrentHashSet and we add on create?
         sendResponse(onPort.owner(), onPort, terminationTracker.currentCandidate);
     }
 
-    protected void growTree(ActorNode.Port requestorPort, Request.GrowTree growTreeRequest) {
+    protected void growTree(Port requestorPort, Request.GrowTree growTreeRequest) {
         if (terminationTracker.mustIgnoreGrowTreeRequest(growTreeRequest))  return;
         if (terminationTracker.trySetGrowTreeAncestor(requestorPort, growTreeRequest)) {
             // Write the first message (recordPreVoteHere) here  if we optimise
@@ -67,9 +68,16 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         } else if (terminationTracker.mustRespondWithEmptyTreeVote(requestorPort, growTreeRequest)) {
             sendResponse(requestorPort.owner, requestorPort, new Response.TreeVote(growTreeRequest.root, growTreeRequest.target, 0));
         }
+        // I think this can be inside an else
+        checkTreeStatusChange();
+
     }
 
-    protected void terminateSCC(ActorNode.Port requestorPort, Request.TerminateSCC terminateSCC) {
+    protected void terminateSCC(Port requestorPort, Request.TerminateSCC terminateSCC) {
+        // TOD: We're sending TreeVotes multiple times & hence receiving duplicated TerminateSCC for some reason.
+        assert terminationTracker.__DBG__terminateSCC == null || terminationTracker.__DBG__terminateSCC.sccState().equals(terminateSCC.sccState());
+        terminationTracker.__DBG__terminateSCC = terminateSCC;
+
         if (terminationTracker.isTerminateSCCFromAncestor(requestorPort, terminateSCC) ) { // Else we wait for ancestor
             activePorts.forEach(port -> port.sendRequest(terminateSCC));
         } else {
@@ -81,7 +89,6 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     @Override
     protected void handleCandidacy(Port onPort, Response.Candidacy candidacy) {
         // TODO: Add assert that receivedCandidacy is never null
-        // Response.Candidacy existingPortCandidacy = (onPort.receivedCandidacy != null ? onPort.receivedCandidacy : NULL_CANDIDACY);
         assert(onPort.receivedCandidacy != null);
         Response.Candidacy existingPortCandidacy = onPort.receivedCandidacy;
         onPort.receivedCandidacy = candidacy;
@@ -89,7 +96,8 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         // TODO: Add explicit efficient handling of an increase in candidate on a port
         Optional<Response.Candidacy> updatedCandidate = terminationTracker.mayUpdateCurrentCandidate(existingPortCandidacy, candidacy, activePorts);
         if (updatedCandidate.isPresent()) {
-            downstreamPorts.forEach(port -> sendResponse(port.owner, port, candidacy));
+            assert(updatedCandidate.get().nodeId <= this.nodeId);
+            downstreamPorts.forEach(port -> sendResponse(port.owner, port, updatedCandidate.get()));
         }
 
         if (candidacy.nodeId == terminationTracker.currentGrowTreeRequest.first().root) {
@@ -131,10 +139,14 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             onTermination();
         } else {
             if (onPort.receivedCandidacy.nodeId == terminationTracker.currentCandidate.nodeId) {
-                assert nodeRegistry.isCandidateTerminated(onPort.receivedCandidacy.nodeId);
-                Optional<Response.Candidacy> updatedCandidacy = terminationTracker.mayUpdateCurrentCandidate(onPort.receivedCandidacy, new Response.Candidacy(this.nodeId), activePorts); // I really should stop doing hacks like this passing this as the new candidate
-                assert updatedCandidacy.isPresent();
-                downstreamPorts.forEach(port -> sendResponse(port.owner, port, updatedCandidacy.get()));
+                // If so, It's guaranteed this node's id is greater than onPort.receivedCandidacy
+                Optional<Response.Candidacy> updatedCandidacy =   terminationTracker.mayUpdateCurrentCandidate(onPort.receivedCandidacy, new Response.Candidacy(this.nodeId), activePorts); // I really should stop doing hacks like this passing this as the new candidate
+                if (updatedCandidacy.isPresent()) {
+                    assert(updatedCandidacy.get().nodeId <= this.nodeId);
+                    downstreamPorts.forEach(port -> sendResponse(port.owner, port, updatedCandidacy.get()));
+                } else {
+                    assert onPort.receivedCandidacy.nodeId == this.nodeId;
+                }
             }
             checkTreeStatusChange();
         }
@@ -145,7 +157,6 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         if (!answerTable.isComplete()) {
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Response toSend = answerTable.recordDone();
-            nodeRegistry.notiyNodeTermination(this.nodeId);
             subscribers.forEachRemaining(subscriber -> sendResponse(subscriber.owner(), subscriber, toSend));
             System.out.printf("TERMINATE: Node[%d] has terminated\n", this.nodeId);
         }
@@ -189,6 +200,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             } else if (msg.type() == Response.ResponseType.TREE_VOTE) {
                 receivedTreeVote = msg.asTreeVote();
             } else {
+                assert msg.type() == Response.ResponseType.ANSWER || msg.type() == Response.ResponseType.CONCLUSION;
                 state = State.READY;
             }
         }
@@ -225,16 +237,21 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         public boolean isReady() { return state == State.READY; }
     }
 
-    private class TerminationTracker {
-        Response.Candidacy currentCandidate;
-        Pair<Request.GrowTree, Port> currentGrowTreeRequest; // We can't use nodeId for ancestor because we could have multiple ports
+    private static class TerminationTracker {
+        private final ActorNode<?> thisActorNode;
+        private Request.TerminateSCC __DBG__terminateSCC;
+        private Response.Candidacy currentCandidate;
+        private Pair<Request.GrowTree, Port> currentGrowTreeRequest; // We can't use nodeId for ancestor because we could have multiple ports
 
-        Response.TreeVote __DBG__lastTreeVote;
+        private Response.TreeVote __DBG__lastTreeVote;
+        private final Set<Integer> terminatedCandidates;
 
-        public TerminationTracker(Integer thisNodeId) {
-            currentCandidate = new Response.Candidacy(thisNodeId);
-            currentGrowTreeRequest = new Pair<>(new Request.GrowTree(thisNodeId, 0), null);
+        public TerminationTracker(ActorNode<?> actorNode) {
+            this.thisActorNode = actorNode;
+            currentCandidate = new Response.Candidacy(actorNode.nodeId);
+            currentGrowTreeRequest = new Pair<>(new Request.GrowTree(actorNode.nodeId, 0), null);
             __DBG__lastTreeVote = null;
+            terminatedCandidates = new HashSet<>();
         }
 
 
@@ -243,7 +260,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         }
 
         public boolean mustIgnoreGrowTreeRequest(Request.GrowTree newGrowTreeRequest) {
-            return newGrowTreeRequest.root != terminationTracker.currentCandidate.nodeId;
+            return newGrowTreeRequest.root != currentCandidate.nodeId;
         }
 
         public boolean trySetGrowTreeAncestor(Port requestorPort, Request.GrowTree newGrowTreeRequest) {
@@ -257,14 +274,14 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         }
 
         public boolean mustRespondWithEmptyTreeVote(Port requestorPort, Request.GrowTree newGrowTreeRequest) {
-            assert requestorPort != currentGrowTreeRequest.second();
+            //  assert requestorPort != currentGrowTreeRequest.second(); // We get a second growTreeRequest on the same port
             return requestorPort != currentGrowTreeRequest.second() &&
                     newGrowTreeRequest.root == currentGrowTreeRequest.first().root &&
                     newGrowTreeRequest.target == currentGrowTreeRequest.first().target;
         }
 
         public boolean isTerminateSCCFromAncestor(Port requestorPort, Request.TerminateSCC terminateSCC) {
-            assert terminateSCC.sccState().candidate == currentCandidate.nodeId || currentCandidate.nodeId == ActorNode.this.nodeId; // Race condition resets candidate to this node.
+            assert terminateSCC.sccState().candidate == currentCandidate.nodeId || currentCandidate.nodeId == thisActorNode.nodeId; // Race condition resets candidate to this node.
             assert terminateSCC.sccState().candidate == currentGrowTreeRequest.first().root &&
                     terminateSCC.sccState().target == currentGrowTreeRequest.first().target;
             return requestorPort == currentGrowTreeRequest.second();
@@ -272,15 +289,15 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
         public Optional<Response.Candidacy> mayUpdateCurrentCandidate(Response.Candidacy existingPortCandidacy, Response.Candidacy candidacy, Set<Port> activePorts) {
             if (existingPortCandidacy.nodeId < candidacy.nodeId) {
-                assert nodeRegistry.isCandidateTerminated(existingPortCandidacy.nodeId);
+                // Can only happen in case of termination
+                terminatedCandidates.add(existingPortCandidacy.nodeId);
                 if (existingPortCandidacy.nodeId == currentCandidate.nodeId) {
                     currentCandidate = selectReplacementCandidate(activePorts);
                     return Optional.of(currentCandidate);
                 }
             }
 
-            if (candidacy.nodeId < currentCandidate.nodeId) {
-                // Simple replacement
+            if (candidacy.nodeId < currentCandidate.nodeId && !terminatedCandidates.contains(candidacy.nodeId)) {
                 currentCandidate = candidacy;
                 return Optional.of(candidacy);
             } else {
@@ -291,16 +308,18 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         private Response.Candidacy selectReplacementCandidate(Set<Port>  activePorts) {
             // TODO: Optimise so we can avoid the isCandidateTerminated check.
             Stream<Response.Candidacy> activePortCandidateStream = activePorts.stream().map(port -> port.receivedCandidacy)
-                    .filter(portCandidacy -> portCandidacy != null && !nodeRegistry.isCandidateTerminated(portCandidacy.nodeId));
+                    .filter(portCandidacy -> portCandidacy != null && !terminatedCandidates.contains(portCandidacy.nodeId));
             return Stream.concat(
-                    Stream.of(new Response.Candidacy(ActorNode.this.nodeId)),
+                    Stream.of(new Response.Candidacy(thisActorNode.nodeId)),
                     activePortCandidateStream
             ).min(Comparator.comparing(x -> x.nodeId)).get();
         }
 
         public Optional<Response.TreeVote> mayVote(Set<Port> activePorts) {
             if (currentGrowTreeRequest.first().root != this.currentCandidate.nodeId) return Optional.empty();
-            int subtreeSum = answerTable.size();
+            if (this.__DBG__lastTreeVote != null &&  this.__DBG__lastTreeVote.target == currentGrowTreeRequest.first().target) return Optional.empty(); // Already voted;
+
+            int subtreeSum = thisActorNode.answerTable.size();
             for (Port port: activePorts) {
                 if (port.receivedTreeVote == null ||
                         port.receivedTreeVote.candidate != this.currentGrowTreeRequest.first().root ||
@@ -317,11 +336,13 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         }
 
         public Either<Request.TerminateSCC, Request.GrowTree> terminateOrIterate(Response.TreeVote ourVote) {
-            assert ourVote.candidate == ActorNode.this.nodeId;
-            if (ourVote.target == this.currentGrowTreeRequest.first().target) {
+            assert ourVote.candidate == thisActorNode.nodeId;
+
+            if (ourVote.target == ourVote.subtreeContribution) {
+                assert ourVote.target == currentGrowTreeRequest.first().target;
                 return Either.first(new Request.TerminateSCC(ourVote));
             } else {
-                currentGrowTreeRequest = new Pair<>(new Request.GrowTree(ActorNode.this.nodeId, ourVote.subtreeContribution), null);
+                currentGrowTreeRequest = new Pair<>(new Request.GrowTree(thisActorNode.nodeId, ourVote.subtreeContribution), null);
                 return Either.second(currentGrowTreeRequest.first());
             }
         }

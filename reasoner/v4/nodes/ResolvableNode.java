@@ -54,7 +54,6 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
                 return answerTable.recordAnswer(traversal.next());
             } else {
                 Response done = answerTable.recordDone();
-                nodeRegistry.notiyNodeTermination(this.nodeId);
                 System.out.printf("TERMINATE: Node[%d] has terminated\n", this.nodeId);
                 return done;
             }
