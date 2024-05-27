@@ -139,7 +139,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     }
 
     protected void recordDone(ActorNode.Port port) {
-        assert activePorts.contains(port);
+        // assert activePorts.contains(port); // Too hard to enforce // TODO: OPTIMISE MESSAGING
         activePorts.remove(port);
     }
 

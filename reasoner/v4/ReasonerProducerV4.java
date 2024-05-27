@@ -17,7 +17,6 @@
 
 package com.vaticle.typedb.core.reasoner.v4;
 
-import com.vaticle.typedb.core.common.exception.ErrorMessage;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.parameters.Options;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
@@ -32,6 +31,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -57,6 +58,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
     Queue<ANSWER> queue;
     State state;
     protected ROOTNODE rootNode; // TODO: Make final, init in constructor, change return type of initialiseRoot
+    private final Set<ANSWER> seenAnswers;
 
     enum State {
         INIT,
@@ -75,6 +77,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
         this.queue = null;
         this.requiredAnswers = new AtomicInteger();
         this.state = INIT;
+        seenAnswers = new HashSet<>();
     }
 
     NodeRegistry nodeRegistry() {
@@ -150,8 +153,15 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
     @Override
     public synchronized void receiveAnswer(ConceptMap answer) {
         state = READY;
-        queue.put(transformAnswer(answer));
-        if (requiredAnswers.decrementAndGet() > 0) pull();
+        ANSWER transformedAnswer = transformAnswer(answer);
+        if (!seenAnswers.contains(transformedAnswer)) {
+            seenAnswers.add(transformedAnswer);
+            queue.put(transformedAnswer);
+            if (requiredAnswers.decrementAndGet() > 0) pull();
+        } else {
+            if (requiredAnswers.get() > 0) pull();
+        }
+
     }
 
     protected abstract ANSWER transformAnswer(ConceptMap answer);
@@ -197,7 +207,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
         class RootNode extends ActorNode<RootNode> {
 
             private final NodeRegistry.SubRegistry<?,?> subRegistry;
-            private ActorNode.Port port;
+            private Port port;
 
             protected RootNode(NodeRegistry nodeRegistry, Driver<RootNode> driver) {
                 super(nodeRegistry, driver, () -> "RootNode: " + conjunction.pattern());
@@ -220,13 +230,13 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
             }
 
             @Override
-            protected void readAnswerAt(ActorNode.Port reader, Request.ReadAnswer readAnswer) {
+            protected void readAnswerAt(Port reader, Request.ReadAnswer readAnswer) {
                 assert readAnswer.index == port.lastRequestedIndex() + 1;
                 computeNextAnswer(reader, readAnswer.index);
             }
 
             @Override
-            protected void computeNextAnswer(ActorNode.Port reader, int index) {
+            protected void computeNextAnswer(Port reader, int index) {
                 port.readNext();
             }
 
