@@ -292,6 +292,11 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
                 // Can only happen in case of termination
                 terminatedCandidates.add(existingPortCandidacy.nodeId);
                 if (existingPortCandidacy.nodeId == currentCandidate.nodeId) {
+                    //////////////////////////////////////
+                    ////    WE STILL HAVE A PROBLEM   ///
+                    ////////////////////////////////////
+                    // The exact candidate from the port gets added to the terminated list, but race conditions can keep other candidates which are terminated in flight.
+
                     currentCandidate = selectReplacementCandidate(activePorts);
                     return Optional.of(currentCandidate);
                 }
