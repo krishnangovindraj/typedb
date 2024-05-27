@@ -10,11 +10,7 @@ import com.vaticle.typedb.core.concurrent.actor.Actor;
 import com.vaticle.typedb.core.concurrent.actor.ActorExecutorGroup;
 import com.vaticle.typedb.core.logic.LogicManager;
 import com.vaticle.typedb.core.logic.Rule;
-import com.vaticle.typedb.core.logic.resolvable.Concludable;
-import com.vaticle.typedb.core.logic.resolvable.Negated;
-import com.vaticle.typedb.core.logic.resolvable.Resolvable;
-import com.vaticle.typedb.core.logic.resolvable.ResolvableConjunction;
-import com.vaticle.typedb.core.logic.resolvable.Retrievable;
+import com.vaticle.typedb.core.logic.resolvable.*;
 import com.vaticle.typedb.core.pattern.variable.Variable;
 import com.vaticle.typedb.core.reasoner.common.ReasonerPerfCounters;
 import com.vaticle.typedb.core.reasoner.controller.ConjunctionController;
@@ -90,13 +86,12 @@ public class NodeRegistry {
         return nodeAgeClock.getAndIncrement();
     }
 
-    public void prepare(ResolvableConjunction rootConjunction, ConceptMap rootBounds, Modifiers.Filter rootFilter) {
-        Set<Variable> boundVars = iterate(rootBounds.concepts().keySet()).map(id -> rootConjunction.pattern().variable(id)).toSet();
-        planner.planRoot(rootConjunction);
-        cacheConjunctionStreamPlans(new ReasonerPlanner.CallMode(rootConjunction, boundVars), rootFilter.variables());
-//        csPlans.forEach((callMode, csPlan) -> {
-//            cacheIsCyclicConjunctionStreamPlans(planner.conjunctionGraph().conjunctionNode(callMode.conjunction), csPlan);
-//        });
+    public void prepare(ResolvableDisjunction rootDisjunction, ConceptMap rootBounds, Modifiers.Filter rootFilter) {
+        planner.planRoot(rootDisjunction);
+        rootDisjunction.conjunctions().forEach(conjunction -> {
+            Set<Variable> boundVars = iterate(rootBounds.concepts().keySet()).map(id -> conjunction.pattern().variable(id)).toSet();
+            cacheConjunctionStreamPlans(new ReasonerPlanner.CallMode(conjunction, boundVars), rootFilter.variables());
+        });
         csPlans.forEach((callMode, csPlan) -> {
             if (csPlan.isCompoundStreamPlan()) {
                 populateConjunctionRegistries(callMode.conjunction, csPlan.asCompoundStreamPlan());
