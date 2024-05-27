@@ -86,4 +86,8 @@ public class AnswerTable {
         return msg;
     }
 
+    public Response.Done getDoneMessageForNonParent(ActorNode.Port port) {
+        subscribers.remove(port);
+        return new Response.Done( complete ? answers.size() - 1 : answers.size());
+    }
 }

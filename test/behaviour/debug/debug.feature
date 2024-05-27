@@ -78,6 +78,7 @@ Feature: Debugging Space
     """
     match
     $p isa person, has name $n;
+    get;
     """
 
     Then verify answer size is: 2
@@ -88,6 +89,7 @@ Feature: Debugging Space
     """
     match
       (person: $p, name: $n) isa naming;
+    get;
     """
 
     Then verify answer size is: 2
@@ -98,6 +100,7 @@ Feature: Debugging Space
     """
     match
       (person: $p, name: $n) isa cartesian;
+    get;
     """
 
     Then verify answer size is: 4
@@ -108,6 +111,7 @@ Feature: Debugging Space
     """
     match
       (person: $p, name: $n) isa lookup;
+    get;
     """
 
     Then verify answer size is: 1
@@ -119,6 +123,7 @@ Feature: Debugging Space
     """
     match
       (person: $p, name: $n) isa lookup-complement;
+    get;
     """
 
     Then verify answer size is: 3
@@ -159,6 +164,7 @@ Feature: Debugging Space
     """
     match
       (from: $x, to: $y) isa edge;
+    get;
     """
 
     Then verify answer size is: 3
@@ -269,7 +275,7 @@ Feature: Debugging Space
     Given verifier is initialised
     Given reasoning query
       """
-      match (subordinate: $x, superior: $y) isa big-location-hierarchy;
+      match (subordinate: $x, superior: $y) isa big-location-hierarchy; get;
       """
     Then verify answer size is: 1
 #    Then verify answers are sound

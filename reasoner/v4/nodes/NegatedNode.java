@@ -35,6 +35,7 @@ public class NegatedNode extends ResolvableNode<Negated, NegatedNode> {
     protected void handleAnswer(Port onPort, Response.Answer asAnswer) {
         if (!answerTable.isComplete()) {
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+            nodeRegistry.notiyNodeTermination(this.nodeId);
             Response toSend = answerTable.recordDone();
             subscribers.forEachRemaining(subscriber -> sendResponse(subscriber.owner(), subscriber, toSend));
             // And we're done. No more pulling.

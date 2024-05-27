@@ -115,6 +115,10 @@ public abstract class Request {
             return this;
         }
 
+        public Response.TreeVote sccState() {
+            return sccState;
+        }
+
         @Override
         public String toString() {
             return String.format("Terminate[%s]", sccState);

@@ -144,7 +144,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     }
 
     protected boolean allPortsDone() { // TODO: Cleanup: Just use activePorts.isEmpty() everywhere
-        return activePorts.isEmpty();
+        return activePorts.isEmpty(); // || activePorts.stream().allMatch(port -> port.state() == ActorNode.Port.State.TERMINATING);
     }
 
     @Override

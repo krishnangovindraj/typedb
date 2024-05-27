@@ -1,5 +1,7 @@
 package com.vaticle.typedb.core.reasoner.v4.nodes;
 
+import com.vaticle.typedb.common.collection.Either;
+import com.vaticle.typedb.common.collection.Pair;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.reasoner.v4.Request;
 import com.vaticle.typedb.core.reasoner.v4.Response;
@@ -25,17 +27,13 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     static final Logger LOG = LoggerFactory.getLogger(ActorNode.class);
 
     private final Set<ActorNode.Port> downstreamPorts;
-    private Response.Candidacy forwardedCandidacy;
-    private Request.GrowTree receivedGrowTree;
-    private Port receivedGrowTreeAncestor;
-    private Response.TreeVote forwardedTreeVote;
+
+    TerminationTracker terminationTracker;
 
     protected ActorNode(NodeRegistry nodeRegistry, Driver<NODE> driver, Supplier<String> debugName) {
         super(nodeRegistry, driver, debugName);
         downstreamPorts = new HashSet<>();
-        forwardedCandidacy = new Response.Candidacy(this.nodeId);
-        forwardedTreeVote = null;
-        receivedGrowTree = new Request.GrowTree(this.nodeId, 0);
+        terminationTracker = new TerminationTracker(this.nodeId);
     }
 
     // TODO: Since port has the index in it, maybe we don't need index here?
@@ -46,7 +44,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         if (peekAnswer.isPresent()) {
             sendResponse(reader.owner, reader, peekAnswer.get());
         } else if (reader.owner.nodeId >= this.nodeId) {
-            sendResponse(reader.owner, reader, this.forwardedCandidacy);
+            sendResponse(reader.owner, reader, terminationTracker.currentCandidate);
             computeNextAnswer(reader, index);
         } else {
             computeNextAnswer(reader, index);
@@ -56,27 +54,26 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     @Override
     protected void hello(ActorNode.Port onPort, Request.Hello helloRequest) {
         this.downstreamPorts.add(onPort); // TODO: Maybe a better way of doing this. ConcurrentHashSet and we add on create?
-        sendResponse(onPort.owner(), onPort, forwardedCandidacy);
+        sendResponse(onPort.owner(), onPort, terminationTracker.currentCandidate);
     }
 
     protected void growTree(ActorNode.Port requestorPort, Request.GrowTree growTreeRequest) {
-        assert receivedGrowTree != null;
-        if (growTreeRequest.root != forwardedCandidacy.nodeId)  return;
-        if (growTreeRequest.root != receivedGrowTree.root  || growTreeRequest.target > receivedGrowTree.target ) { // Each iteration can have a different root
-            receivedGrowTree = growTreeRequest;
-            receivedGrowTreeAncestor = requestorPort;
+        if (terminationTracker.mustIgnoreGrowTreeRequest(growTreeRequest))  return;
+        if (terminationTracker.trySetGrowTreeAncestor(requestorPort, growTreeRequest)) {
             // Write the first message (recordPreVoteHere) here  if we optimise
-            activePorts.stream().filter(port -> port.receivedCandidacy != null && port.receivedCandidacy.nodeId == receivedGrowTree.root)
+            activePorts.stream()
+                    .filter(port -> port.receivedCandidacy != null && port.receivedCandidacy.nodeId == terminationTracker.currentGrowTreeRequest.first().root)
                     .forEach(port -> port.sendRequest(growTreeRequest));
-        } else {
+        } else if (terminationTracker.mustRespondWithEmptyTreeVote(requestorPort, growTreeRequest)) {
             sendResponse(requestorPort.owner, requestorPort, new Response.TreeVote(growTreeRequest.root, growTreeRequest.target, 0));
         }
     }
 
     protected void terminateSCC(ActorNode.Port requestorPort, Request.TerminateSCC terminateSCC) {
-        if (requestorPort == receivedGrowTreeAncestor) {
+        if (terminationTracker.isTerminateSCCFromAncestor(requestorPort, terminateSCC) ) { // Else we wait for ancestor
             activePorts.forEach(port -> port.sendRequest(terminateSCC));
-            onTermination(); // A negated node can just terminate and let answers stream in later. We do the same.
+        } else {
+            sendResponse(requestorPort.owner, requestorPort, answerTable.getDoneMessageForNonParent(requestorPort));
         }
     }
 
@@ -87,41 +84,45 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         // Response.Candidacy existingPortCandidacy = (onPort.receivedCandidacy != null ? onPort.receivedCandidacy : NULL_CANDIDACY);
         assert(onPort.receivedCandidacy != null);
         Response.Candidacy existingPortCandidacy = onPort.receivedCandidacy;
-
-        if (existingPortCandidacy.nodeId < candidacy.nodeId) {
-            assert nodeRegistry.isCandidateTerminated(existingPortCandidacy.nodeId); // TODO: This still fails.
-            // Happens in the case of termination.
-            if (existingPortCandidacy.nodeId == forwardedCandidacy.nodeId) {
-                activePorts.forEach(p -> {
-                    if (p.receivedCandidacy.nodeId == existingPortCandidacy.nodeId) {
-                        p.receivedCandidacy = Port.NULL_RECEIVED_CANDIDACY;
-                    }
-                });
-                forwardedCandidacy = recomputeOldestCandidate();
-                downstreamPorts.forEach(port -> sendResponse(port.owner, port, forwardedCandidacy));
-            }
-        }
-
-        if (candidacy.nodeId < forwardedCandidacy.nodeId) {
-            if (nodeRegistry.isCandidateTerminated(candidacy.nodeId)) return;
-            downstreamPorts.forEach(port -> sendResponse(port.owner, port, candidacy));
-            forwardedCandidacy = candidacy;
-        }
-
-        if (candidacy.nodeId == receivedGrowTree.root) {
-            // TODO: If (receivedGrowTree.root != forwardedCandidacy.nodeId), we can avoid this message.
-            onPort.sendRequest(new Request.GrowTree(this.receivedGrowTree.root, this.receivedGrowTree.target));
-        }
-
-        // Update
-//        assert !nodeRegistry.isCandidateTerminated(candidacy.nodeId); // TOO Strong due to concurrency.
         onPort.receivedCandidacy = candidacy;
+
+        // TODO: Add explicit efficient handling of an increase in candidate on a port
+        Optional<Response.Candidacy> updatedCandidate = terminationTracker.mayUpdateCurrentCandidate(existingPortCandidacy, candidacy, activePorts);
+        if (updatedCandidate.isPresent()) {
+            downstreamPorts.forEach(port -> sendResponse(port.owner, port, candidacy));
+        }
+
+        if (candidacy.nodeId == terminationTracker.currentGrowTreeRequest.first().root) {
+            // TODO: If (receivedGrowTree.root != forwardedCandidacy.nodeId), we can avoid this message.
+            onPort.sendRequest(terminationTracker.currentGrowTreeRequest.first());
+        }
     }
 
 
     @Override
     protected void handleTreeVote(Port onPort, Response.TreeVote treeVote) {
+        onPort.receivedTreeVote = treeVote;
         checkTreeStatusChange();
+    }
+
+    private void checkTreeStatusChange() {
+        Optional<Response.TreeVote> ourVoteOpt = terminationTracker.mayVote(activePorts);
+        if (ourVoteOpt.isEmpty()) return;
+        Response.TreeVote ourVote = ourVoteOpt.get();
+        if (ourVote.candidate == this.nodeId) {
+            // We must either terminate or iterate
+            Either<Request.TerminateSCC, Request.GrowTree> terminateOrIterate = terminationTracker.terminateOrIterate(ourVote);
+            if (terminateOrIterate.isFirst()) {
+                Request.TerminateSCC terminateRequest = terminateOrIterate.first();
+                activePorts.forEach(port -> port.sendRequest(terminateRequest));
+            } else {
+                Request.GrowTree iterateRequest = terminateOrIterate.second();
+                activePorts.forEach(port -> port.sendRequest(iterateRequest));
+            }
+        } else {
+            // We must forward the vote to our ancestor
+            sendResponse(terminationTracker.growTreeAncestor().owner, terminationTracker.growTreeAncestor(), ourVote);
+        }
     }
 
     @Override
@@ -129,89 +130,18 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         if (allPortsDone()) {
             onTermination();
         } else {
-            if (onPort.receivedCandidacy.nodeId == forwardedCandidacy.nodeId) {
-                // TODO: Make this better
-                activePorts.forEach(p -> {
-                    if (p.receivedCandidacy.nodeId == onPort.receivedCandidacy.nodeId) {
-                        p.receivedCandidacy = Port.NULL_RECEIVED_CANDIDACY;
-                    }
-                });
-                forwardedCandidacy = recomputeOldestCandidate();
-                downstreamPorts.forEach(port -> sendResponse(port.owner, port, forwardedCandidacy));
+            if (onPort.receivedCandidacy.nodeId == terminationTracker.currentCandidate.nodeId) {
+                assert nodeRegistry.isCandidateTerminated(onPort.receivedCandidacy.nodeId);
+                Optional<Response.Candidacy> updatedCandidacy = terminationTracker.mayUpdateCurrentCandidate(onPort.receivedCandidacy, new Response.Candidacy(this.nodeId), activePorts); // I really should stop doing hacks like this passing this as the new candidate
+                assert updatedCandidacy.isPresent();
+                downstreamPorts.forEach(port -> sendResponse(port.owner, port, updatedCandidacy.get()));
             }
             checkTreeStatusChange();
         }
     }
 
-    private Response.Candidacy recomputeOldestCandidate() {
-        return Stream.concat(
-                    Stream.of(new Response.Candidacy(this.nodeId)),
-                        activePorts.stream().map(port -> port.receivedCandidacy).filter(Objects::nonNull)
-                ).min(Comparator.comparing(x -> x.nodeId)).get();
-    }
-
-// TODO: Replace this with the single efficient tracker
-//    protected void checkCandidacyStatusChange() {
-//        Optional<Response.Candidacy> oldestCandidate = activePorts.stream().map(port -> port.receivedCandidacy).filter(Objects::nonNull) // Ok to filter here, but not for votes.
-//                .min(Comparator.comparing(x -> x.nodeId)); // TODO: Maybe these can be a single field that only needs to be re-evaluated in the case of an upstream termination
-//        if (oldestCandidate.isEmpty()) return;
-////        TODO: Fix the oscillating candidacy. Monotonicity holds until that port terminates.
-//        if (forwardedCandidacy == null || !forwardedCandidacy.equals(oldestCandidate.get())) {
-//            forwardedCandidacy = oldestCandidate.get();
-//            downstreamPorts.forEach(port -> sendResponse(port.owner, port, forwardedCandidacy));
-//        }
-//    }
-
-    private void checkTreeStatusChange() {
-        // if (receivedGrowTree.target == forwardedTreeVote.target) return; // already voted. // TODO: Reenable
-
-        int highestTarget = 0;
-        int lowestTarget = Integer.MAX_VALUE;
-        int sum = 0;
-        for (Port port: activePorts) {
-            if (port.receivedTreeVote == null) return;
-            if (port.receivedTreeVote.candidate != receivedGrowTree.root ){
-                System.out.printf("DEBUG: Node[%d] received treeVote for root: %d but expected root: %d \n", this.nodeId, port.receivedTreeVote.candidate, receivedGrowTree.root);
-                return;
-            }
-            if (port.receivedCandidacy.nodeId != receivedGrowTree.root ){
-                System.out.printf("DEBUG: Node[%d] received candidacy for candidate: %d but expected root: %d \n", this.nodeId, port.receivedCandidacy.nodeId, receivedGrowTree.root);
-                return;
-            }
-            highestTarget = Math.max(highestTarget, port.receivedTreeVote.target);
-            lowestTarget = Math.min(lowestTarget, port.receivedTreeVote.target);
-            sum += port.receivedTreeVote.subtreeContribution;
-        }
-
-        // This check is insufficient. It could be from a different root
-        if (highestTarget == lowestTarget && (forwardedTreeVote == null || forwardedTreeVote.candidate != receivedGrowTree.root || highestTarget > forwardedTreeVote.target)) {
-            forwardedTreeVote = new Response.TreeVote(receivedGrowTree.root, highestTarget, sum + answerTable.size());
-            if (forwardedTreeVote.candidate == this.nodeId) {
-                assert forwardedTreeVote.target == receivedGrowTree.target;
-                if (forwardedTreeVote.subtreeContribution == forwardedTreeVote.target) {
-                    // Terminate
-                    activePorts.forEach(port -> port.sendRequest(new Request.TerminateSCC(forwardedTreeVote)));
-                    onTermination();
-                } else {
-                    // Start another iteration
-                    System.out.printf("ITERATE: Node[%d] updated target from %d to %d\n", this.nodeId, forwardedTreeVote.target, forwardedTreeVote.subtreeContribution);
-                    // If we optimise, write the treePostVote here and below
-                    receivedGrowTree = new Request.GrowTree(this.nodeId, forwardedTreeVote.subtreeContribution);
-
-                    // This may also be too strong, because an inflight message may add an edge to a much older existing SCC.
-                    // In such a case, we just need to be patient and let the algorithm sort itself out
-                    // assert ports.stream().allMatch(port -> port.receivedCandidacy.nodeId == this.nodeId);
-                    activePorts.forEach(port -> port.sendRequest(receivedGrowTree));
-                }
-            } else {
-                // If we optimise, write the treePostVote here and above
-                sendResponse(receivedGrowTreeAncestor.owner, receivedGrowTreeAncestor, forwardedTreeVote);
-            }
-        }
-    }
-
     protected void onTermination() {
-        assert allPortsDone() || forwardedTreeVote != null; // TODO: Bit of a weak assert
+        assert allPortsDone(); // TODO: Bit of a weak assert. // Why? this.getClass().equals(NegatedNode.class) ?
         if (!answerTable.isComplete()) {
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Response toSend = answerTable.recordDone();
@@ -234,7 +164,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     public static class Port {
         private static final Response.Candidacy NULL_RECEIVED_CANDIDACY = new Response.Candidacy(Integer.MAX_VALUE);
 
-        public enum State {READY, PULLING, DONE}
+        public enum State {READY, PULLING, DONE} // TODO: Do we want a terminating state?
         private final ActorNode<?> owner;
         private final ActorNode<?> remote;
         private State state;
@@ -251,7 +181,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         }
 
         protected void mayUpdateStateOnReceive(Response msg) {
-            assert msg.type() == Response.ResponseType.CANDIDACY || msg.type() == Response.ResponseType.TREE_VOTE  || (state == State.PULLING && lastRequestedIndex == msg.index());
+            assert msg.type() == Response.ResponseType.CANDIDACY || msg.type() == Response.ResponseType.TREE_VOTE  || ( (state == State.PULLING || state == State.DONE) && lastRequestedIndex == msg.index());
             if (msg.type() == Response.ResponseType.DONE) {
                 state = State.DONE;
             } else if (msg.type() == Response.ResponseType.CANDIDACY) {
@@ -293,5 +223,107 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         }
 
         public boolean isReady() { return state == State.READY; }
+    }
+
+    private class TerminationTracker {
+        Response.Candidacy currentCandidate;
+        Pair<Request.GrowTree, Port> currentGrowTreeRequest; // We can't use nodeId for ancestor because we could have multiple ports
+
+        Response.TreeVote __DBG__lastTreeVote;
+
+        public TerminationTracker(Integer thisNodeId) {
+            currentCandidate = new Response.Candidacy(thisNodeId);
+            currentGrowTreeRequest = new Pair<>(new Request.GrowTree(thisNodeId, 0), null);
+            __DBG__lastTreeVote = null;
+        }
+
+
+        public Port growTreeAncestor() {
+            return currentGrowTreeRequest.second();
+        }
+
+        public boolean mustIgnoreGrowTreeRequest(Request.GrowTree newGrowTreeRequest) {
+            return newGrowTreeRequest.root != terminationTracker.currentCandidate.nodeId;
+        }
+
+        public boolean trySetGrowTreeAncestor(Port requestorPort, Request.GrowTree newGrowTreeRequest) {
+            assert newGrowTreeRequest.root == currentCandidate.nodeId;
+            if (currentGrowTreeRequest.first().root != newGrowTreeRequest.root || newGrowTreeRequest.target > currentGrowTreeRequest.first().target) {
+                currentGrowTreeRequest = new Pair<>(newGrowTreeRequest, requestorPort);
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        public boolean mustRespondWithEmptyTreeVote(Port requestorPort, Request.GrowTree newGrowTreeRequest) {
+            assert requestorPort != currentGrowTreeRequest.second();
+            return requestorPort != currentGrowTreeRequest.second() &&
+                    newGrowTreeRequest.root == currentGrowTreeRequest.first().root &&
+                    newGrowTreeRequest.target == currentGrowTreeRequest.first().target;
+        }
+
+        public boolean isTerminateSCCFromAncestor(Port requestorPort, Request.TerminateSCC terminateSCC) {
+            assert terminateSCC.sccState().candidate == currentCandidate.nodeId || currentCandidate.nodeId == ActorNode.this.nodeId; // Race condition resets candidate to this node.
+            assert terminateSCC.sccState().candidate == currentGrowTreeRequest.first().root &&
+                    terminateSCC.sccState().target == currentGrowTreeRequest.first().target;
+            return requestorPort == currentGrowTreeRequest.second();
+        }
+
+        public Optional<Response.Candidacy> mayUpdateCurrentCandidate(Response.Candidacy existingPortCandidacy, Response.Candidacy candidacy, Set<Port> activePorts) {
+            if (existingPortCandidacy.nodeId < candidacy.nodeId) {
+                assert nodeRegistry.isCandidateTerminated(existingPortCandidacy.nodeId);
+                if (existingPortCandidacy.nodeId == currentCandidate.nodeId) {
+                    currentCandidate = selectReplacementCandidate(activePorts);
+                    return Optional.of(currentCandidate);
+                }
+            }
+
+            if (candidacy.nodeId < currentCandidate.nodeId) {
+                // Simple replacement
+                currentCandidate = candidacy;
+                return Optional.of(candidacy);
+            } else {
+                return Optional.empty();
+            }
+        }
+
+        private Response.Candidacy selectReplacementCandidate(Set<Port>  activePorts) {
+            // TODO: Optimise so we can avoid the isCandidateTerminated check.
+            Stream<Response.Candidacy> activePortCandidateStream = activePorts.stream().map(port -> port.receivedCandidacy)
+                    .filter(portCandidacy -> portCandidacy != null && !nodeRegistry.isCandidateTerminated(portCandidacy.nodeId));
+            return Stream.concat(
+                    Stream.of(new Response.Candidacy(ActorNode.this.nodeId)),
+                    activePortCandidateStream
+            ).min(Comparator.comparing(x -> x.nodeId)).get();
+        }
+
+        public Optional<Response.TreeVote> mayVote(Set<Port> activePorts) {
+            if (currentGrowTreeRequest.first().root != this.currentCandidate.nodeId) return Optional.empty();
+            int subtreeSum = answerTable.size();
+            for (Port port: activePorts) {
+                if (port.receivedTreeVote == null ||
+                        port.receivedTreeVote.candidate != this.currentGrowTreeRequest.first().root ||
+                        port.receivedTreeVote.target != this.currentGrowTreeRequest.first().target // Can this happen if new nodes are spawned between iterations due to inflight messages?
+                ) {
+                    return Optional.empty();
+                } else {
+                    subtreeSum += port.receivedTreeVote.subtreeContribution;
+                }
+            }
+            Response.TreeVote vote = new Response.TreeVote(this.currentGrowTreeRequest.first().root, this.currentGrowTreeRequest.first().target, subtreeSum);
+            __DBG__lastTreeVote = vote;
+            return Optional.of(vote);
+        }
+
+        public Either<Request.TerminateSCC, Request.GrowTree> terminateOrIterate(Response.TreeVote ourVote) {
+            assert ourVote.candidate == ActorNode.this.nodeId;
+            if (ourVote.target == this.currentGrowTreeRequest.first().target) {
+                return Either.first(new Request.TerminateSCC(ourVote));
+            } else {
+                currentGrowTreeRequest = new Pair<>(new Request.GrowTree(ActorNode.this.nodeId, ourVote.subtreeContribution), null);
+                return Either.second(currentGrowTreeRequest.first());
+            }
+        }
     }
 }
