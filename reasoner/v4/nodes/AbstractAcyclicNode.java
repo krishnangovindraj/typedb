@@ -99,7 +99,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
                 break;
             }
             case DONE: {
-                recordDone(onPort);
+                recordDone(onPort, received.index());
                 handleDone(onPort);
                 break;
             }
@@ -138,9 +138,13 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
         receiveResponse(port, response);
     }
 
-    protected void recordDone(ActorNode.Port port) {
-        // assert activePorts.contains(port); // Too hard to enforce // TODO: OPTIMISE MESSAGING
-        activePorts.remove(port);
+    protected void recordDone(ActorNode.Port port, int doneIndex) {
+        if (activePorts.contains(port)) {
+            activePorts.remove(port);
+            port.__DBG__doneIndex = doneIndex;
+        } else {
+            assert port.__DBG__doneIndex == doneIndex;
+        }
     }
 
     protected boolean allPortsDone() { // TODO: Cleanup: Just use activePorts.isEmpty() everywhere
