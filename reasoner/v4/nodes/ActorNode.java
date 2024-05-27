@@ -281,7 +281,6 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         }
 
         public boolean isTerminateSCCFromAncestor(Port requestorPort, Request.TerminateSCC terminateSCC) {
-            assert terminateSCC.sccState().candidate == currentCandidate.nodeId || currentCandidate.nodeId == thisActorNode.nodeId; // Race condition resets candidate to this node.
             assert terminateSCC.sccState().candidate == currentGrowTreeRequest.first().root &&
                     terminateSCC.sccState().target == currentGrowTreeRequest.first().target;
             return requestorPort == currentGrowTreeRequest.second();
@@ -317,7 +316,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
         public Optional<Response.TreeVote> mayVote(Set<Port> activePorts) {
             if (currentGrowTreeRequest.first().root != this.currentCandidate.nodeId) return Optional.empty();
-            if (this.__DBG__lastTreeVote != null &&  this.__DBG__lastTreeVote.target == currentGrowTreeRequest.first().target) return Optional.empty(); // Already voted;
+            if (this.__DBG__lastTreeVote != null && this.__DBG__lastTreeVote.candidate == currentGrowTreeRequest.first().root && this.__DBG__lastTreeVote.target == currentGrowTreeRequest.first().target) return Optional.empty(); // Already voted;
 
             int subtreeSum = thisActorNode.answerTable.size();
             for (Port port: activePorts) {
