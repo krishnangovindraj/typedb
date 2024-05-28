@@ -31,6 +31,7 @@ use encoding::{
     layout::prefix::Prefix, value::{label::Label, value_type::ValueType},
 };
 use encoding::graph::type_::edge::EncodableParametrisedTypeEdge;
+use encoding::graph::type_::property::EncodableTypeEdgeProperty;
 use encoding::graph::type_::vertex::{EncodableTypeVertex, PrefixedEncodableTypeVertex};
 use primitive::maybe_owns::MaybeOwns;
 use storage::{
@@ -53,14 +54,13 @@ use crate::{
         plays::Plays,
         relates::Relates, relation_type::{RelationType, RelationTypeAnnotation},
         role_type::{RoleType, RoleTypeAnnotation},
-        serialise_annotation_cardinality,
-        serialise_ordering, type_manager::type_reader::TypeReader, TypeAPI,
+        type_manager::type_reader::TypeReader, TypeAPI,
     },
 };
 use crate::type_::object_type::ObjectType;
 use type_writer::TypeWriter;
 use validation::validation::OperationTimeValidation;
-use crate::type_::{OwnerAPI, PlayerAPI, WrappedTypeForError};
+use crate::type_::{InterfaceImplementation, OwnerAPI, PlayerAPI, WrappedTypeForError};
 use crate::type_::type_manager::validation::SchemaValidationError;
 
 pub mod validation;
@@ -612,7 +612,7 @@ impl<Snapshot: ReadableSnapshot> TypeManager<Snapshot> {
         if let Some(cache) = &self.type_cache {
             Ok(cache.get_owns_ordering(owns))
         } else {
-            TypeReader::get_type_edge_ordering(snapshot, owns)
+            Ok(TypeReader::get_type_edge_property::<Ordering>(snapshot, owns)?.unwrap())
         }
     }
 
@@ -896,7 +896,7 @@ impl<Snapshot: WritableSnapshot> TypeManager<Snapshot> {
         // TODO: Validation
 
         let owns = Owns::new(ObjectType::new(owner.clone().into_vertex()), attribute.clone());
-        TypeWriter::storage_delete_owns_ordering(snapshot, owns.clone().to_canonical_type_edge());
+        TypeWriter::storage_delete_type_edge_property::<Owns<'static>, Ordering>(snapshot, owns.clone());
         TypeWriter::storage_delete_interface_impl(snapshot, owns.clone());
     }
 
@@ -977,11 +977,11 @@ impl<Snapshot: WritableSnapshot> TypeManager<Snapshot> {
     fn storage_set_role_ordering(&self, snapshot: &mut Snapshot, role: RoleType<'_>, ordering: Ordering) {
         snapshot.put_val(
             build_property_type_ordering(role.into_vertex()).into_storage_key().into_owned_array(),
-            ByteArray::boxed(serialise_ordering(ordering)),
+            ordering.build_value().unwrap().into_array(),
         )
     }
 
-    pub(crate) fn storage_set_annotation_abstract(&self, snapshot: &mut Snapshot, type_: impl TypeAPI<'static>) {
+    pub(crate) fn set_annotation_abstract(&self, snapshot: &mut Snapshot, type_: impl TypeAPI<'static>) {
         let annotation_property = build_property_type_annotation_abstract(type_.into_vertex());
         snapshot.put(annotation_property.into_storage_key().into_owned_array());
     }
@@ -1000,15 +1000,6 @@ impl<Snapshot: WritableSnapshot> TypeManager<Snapshot> {
         let annotation_property = build_property_type_annotation_distinct(type_.into_vertex());
         snapshot.delete(annotation_property.into_storage_key().into_owned_array());
     }
-
-    // pub(crate) fn set_edge_annotation<'b, IMPL: EncodableParametrisedTypeEdge<'b>>(
-    //     &self,
-    //     snapshot: &mut Snapshot,
-    //     edge: IMPL,
-    //     annotation: IMPL::AnnotationType
-    // ) -> Result<(), ConceptWriteError> {
-    //     todo!()
-    // }
 
     pub(crate) fn storage_set_edge_annotation_distinct<'b>(
         &self,
@@ -1064,7 +1055,7 @@ impl<Snapshot: WritableSnapshot> TypeManager<Snapshot> {
     ) {
         snapshot.put_val(
             build_property_type_annotation_cardinality(type_.into_vertex()).into_storage_key().into_owned_array(),
-            ByteArray::boxed(serialise_annotation_cardinality(annotation)),
+            annotation.build_value().unwrap().into_array(),
         );
     }
 
@@ -1083,7 +1074,7 @@ impl<Snapshot: WritableSnapshot> TypeManager<Snapshot> {
             build_property_type_edge_annotation_cardinality(edge.to_canonical_type_edge())
                 .into_storage_key()
                 .into_owned_array(),
-            ByteArray::boxed(serialise_annotation_cardinality(annotation)),
+            annotation.build_value().unwrap().into_array(),
         );
     }
 
