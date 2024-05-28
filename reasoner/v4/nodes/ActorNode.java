@@ -296,6 +296,8 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
                     ////    WE STILL HAVE A PROBLEM   ///
                     ////////////////////////////////////
                     // The exact candidate from the port gets added to the terminated list, but race conditions can keep other candidates which are terminated in flight.
+                    // Just reverting the termination tracker to global might do the trick efficiently.
+                    // The alternative is using a stack to track candidates from ports, but that seems overkill.
 
                     currentCandidate = selectReplacementCandidate(activePorts);
                     return Optional.of(currentCandidate);
