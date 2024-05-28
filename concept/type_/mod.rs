@@ -13,6 +13,8 @@ use primitive::maybe_owns::MaybeOwns;
 use serde::{Deserialize, Serialize};
 use bytes::byte_array::ByteArray;
 use bytes::Bytes;
+use encoding::graph::type_::edge::EncodableParametrisedTypeEdge;
+use encoding::graph::type_::vertex::EncodableTypeVertex;
 use resource::constants::snapshot::BUFFER_VALUE_INLINE;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 
@@ -27,11 +29,11 @@ use crate::{
         type_manager::TypeManager,
     },
 };
-use crate::type_::type_manager::encoding_helper::EdgeEncoder;
 use crate::type_::type_manager::KindAPI;
 use resource::constants::snapshot::BUFFER_KEY_INLINE;
 use storage::key_value::StorageKey;
 use crate::type_::annotation::Annotation;
+use crate::type_::object_type::ObjectType;
 
 pub mod annotation;
 pub mod attribute_type;
@@ -44,7 +46,7 @@ pub mod relation_type;
 pub mod role_type;
 pub mod type_manager;
 
-pub trait TypeAPI<'a>: ConceptAPI<'a> + Sized + Clone + Hash + Eq {
+pub trait TypeAPI<'a>: ConceptAPI<'a> + EncodableTypeVertex<'a> + Sized + Clone + Hash + Eq {
     type SelfStatic: KindAPI<'static> + 'static;
     fn new(vertex : TypeVertex<'a>) -> Self ;
 
@@ -53,8 +55,6 @@ pub trait TypeAPI<'a>: ConceptAPI<'a> + Sized + Clone + Hash + Eq {
     }
 
     fn vertex(&self) -> TypeVertex<'_>;
-
-    fn into_vertex(self) -> TypeVertex<'a>;
 
     fn is_abstract<Snapshot: ReadableSnapshot>(
         &self,
@@ -215,14 +215,11 @@ pub(crate) trait IntoCanonicalTypeEdge<'a> {
 //
 // }
 
-pub(crate) trait InterfaceImplementation<'a> : IntoCanonicalTypeEdge<'a> + Sized + Clone
+pub(crate) trait InterfaceImplementation<'a> : IntoCanonicalTypeEdge<'a>+ Sized + Clone  + EncodableParametrisedTypeEdge<'a, From=Self::ObjectType, To=Self::InterfaceType>
 {
     type AnnotationType;
     type ObjectType: TypeAPI<'a>;
     type InterfaceType: KindAPI<'a>;
-    type Encoder: EdgeEncoder<'a, Self>;
-
-    fn new(implementor: Self::ObjectType, interface: Self::InterfaceType) -> Self;
 
     fn object(&self) -> Self::ObjectType;
 

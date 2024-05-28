@@ -27,6 +27,7 @@ use encoding::{
 };
 use itertools::Itertools;
 use regex::Regex;
+use encoding::graph::type_::vertex::EncodableTypeVertex;
 use resource::constants::snapshot::BUFFER_KEY_INLINE;
 use storage::{
     key_range::KeyRange,

@@ -7,6 +7,7 @@
 use std::collections::{HashMap, HashSet};
 
 use encoding::{graph::type_::vertex::TypeVertex, layout::prefix::Prefix, Prefixed};
+use encoding::graph::type_::vertex::EncodableTypeVertex;
 use primitive::maybe_owns::MaybeOwns;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 
@@ -45,6 +46,23 @@ impl<'a> ObjectType<'a> {
         match self {
             ObjectType::Entity(entity) => ObjectType::Entity(entity.into_owned()),
             ObjectType::Relation(relation) => ObjectType::Relation(relation.into_owned()),
+        }
+    }
+}
+
+impl<'a> EncodableTypeVertex<'a> for ObjectType<'a> {
+    fn from_vertex(vertex: TypeVertex<'a>) -> Self {
+        match vertex.prefix() {
+            Prefix::VertexEntityType => ObjectType::Entity(EntityType::new(vertex)),
+            Prefix::VertexRelationType => ObjectType::Relation(RelationType::new(vertex)),
+            _ => unreachable!("Object type creation requires either entity type or relation type vertex."),
+        }
+    }
+
+    fn into_vertex(self) -> TypeVertex<'a> {
+        match self {
+            ObjectType::Entity(entity) => entity.into_vertex(),
+            ObjectType::Relation(relation) => relation.into_vertex(),
         }
     }
 }
@@ -117,11 +135,7 @@ impl<'a> TypeAPI<'a> for ObjectType<'a> {
     type SelfStatic = RelationType<'static>;
 
     fn new(vertex: TypeVertex<'a>) -> Self {
-        match vertex.prefix() {
-            Prefix::VertexEntityType => ObjectType::Entity(EntityType::new(vertex)),
-            Prefix::VertexRelationType => ObjectType::Relation(RelationType::new(vertex)),
-            _ => unreachable!("Object type creation requires either entity type or relation type vertex."),
-        }
+        Self::from_vertex(vertex)
     }
 
     fn vertex<'this>(&'this self) -> TypeVertex<'this> {
@@ -131,12 +145,6 @@ impl<'a> TypeAPI<'a> for ObjectType<'a> {
         }
     }
 
-    fn into_vertex(self) -> TypeVertex<'a> {
-        match self {
-            ObjectType::Entity(entity) => entity.into_vertex(),
-            ObjectType::Relation(relation) => relation.into_vertex(),
-        }
-    }
 
     fn is_abstract<Snapshot: ReadableSnapshot>(
         &self,
