@@ -19,12 +19,7 @@ use encoding::graph::{
         vertex_attribute::AttributeVertex,
         vertex_object::ObjectVertex,
     },
-    type_::vertex::{
-        build_vertex_attribute_type, build_vertex_entity_type, build_vertex_relation_type, build_vertex_role_type,
-        is_vertex_attribute_type, is_vertex_entity_type, is_vertex_relation_type, is_vertex_role_type,
-        new_vertex_attribute_type, new_vertex_entity_type, new_vertex_relation_type, new_vertex_role_type, TypeID,
-        TypeIDUInt,
-    },
+    type_::vertex::{TypeID,TypeIDUInt},
     Typed,
 };
 use resource::constants::snapshot::BUFFER_KEY_INLINE;
@@ -33,6 +28,7 @@ use serde::{
     ser::SerializeStruct,
     Deserialize, Deserializer, Serialize, Serializer,
 };
+use encoding::graph::type_::vertex::{EncodableTypeVertex, PrefixedEncodableTypeVertex};
 use storage::{
     durability_client::{DurabilityRecord, UnsequencedDurabilityRecord},
     iterator::MVCCReadError,
@@ -155,7 +151,7 @@ impl Statistics {
                 self.update_has(Object::new(edge.from()).type_(), Attribute::new(edge.to()).type_(), delta)
             } else if ThingEdgeRolePlayer::is_role_player(key_reference) {
                 let edge = ThingEdgeRolePlayer::new(Bytes::Reference(key_reference.byte_ref()));
-                let role_type = RoleType::new(build_vertex_role_type(edge.role_id()));
+                let role_type = RoleType::from_type_id(edge.role_id());
                 self.update_role_player(
                     Object::new(edge.from()).type_(),
                     role_type,
@@ -165,27 +161,25 @@ impl Statistics {
             } else if ThingEdgeRelationIndex::is_index(key_reference) {
                 let edge = ThingEdgeRelationIndex::new(Bytes::Reference(key_reference.byte_ref()));
                 self.update_indexed_player(Object::new(edge.from()).type_(), Object::new(edge.to()).type_(), delta)
-            } else if is_vertex_entity_type(key_reference) {
+            } else if EntityType::is_of_kind(key_reference) {
                 let type_ =
-                    EntityType::new(new_vertex_entity_type(Bytes::Reference(key_reference.byte_ref()).into_owned()));
+                    EntityType::decode(Bytes::Reference(key_reference.byte_ref()).into_owned());
                 if matches!(write, Write::Delete) {
                     self.entity_counts.remove(&type_);
                     self.clear_object_type(ObjectType::Entity(type_));
                 }
-            } else if is_vertex_relation_type(key_reference) {
-                let type_ = RelationType::new(new_vertex_relation_type(
-                    Bytes::Reference(key_reference.byte_ref()).into_owned(),
-                ));
+            } else if RelationType::is_of_kind(key_reference) {
+                let type_ = RelationType::decode(Bytes::Reference(key_reference.byte_ref()).into_owned());
                 if matches!(write, Write::Delete) {
                     self.relation_counts.remove(&type_);
                     self.relation_role_counts.remove(&type_);
                     let as_object_type = ObjectType::Relation(type_);
                     self.clear_object_type(as_object_type.clone());
                 }
-            } else if is_vertex_attribute_type(key_reference) {
-                let type_ = AttributeType::new(new_vertex_attribute_type(
-                    Bytes::Reference(key_reference.byte_ref()).into_owned(),
-                ));
+            } else if AttributeType::is_of_kind(key_reference) {
+                let type_ = AttributeType::decode(
+                    Bytes::Reference(key_reference.byte_ref()).into_owned()
+                );
                 if matches!(write, Write::Delete) {
                     self.attribute_counts.remove(&type_);
                     self.attribute_owner_counts.remove(&type_);
@@ -194,9 +188,9 @@ impl Statistics {
                     });
                     self.has_attribute_counts.retain(|_, map| !map.is_empty());
                 }
-            } else if is_vertex_role_type(key_reference) {
+            } else if RoleType::is_of_kind(key_reference) {
                 let type_ =
-                    RoleType::new(new_vertex_role_type(Bytes::Reference(key_reference.byte_ref()).into_owned()));
+                    RoleType::decode(Bytes::Reference(key_reference.byte_ref()).into_owned());
                 if matches!(write, Write::Delete) {
                     self.role_counts.remove(&type_);
                     self.role_player_counts.iter_mut().for_each(|(_, map)| {
@@ -395,23 +389,23 @@ impl SerialisableType {
 
     pub(crate) fn into_entity_type(self) -> EntityType<'static> {
         match self {
-            Self::Entity(id) => EntityType::new(build_vertex_entity_type(TypeID::build(id))),
+            Self::Entity(id) => EntityType::from_type_id(TypeID::build(id)),
             _ => panic!("Incompatible conversion."),
         }
     }
 
     pub(crate) fn into_relation_type(self) -> RelationType<'static> {
         match self {
-            Self::Relation(id) => RelationType::new(build_vertex_relation_type(TypeID::build(id))),
+            Self::Relation(id) => RelationType::from_type_id(TypeID::build(id)),
             _ => panic!("Incompatible conversion."),
         }
     }
 
     pub(crate) fn into_object_type(self) -> ObjectType<'static> {
         match self {
-            Self::Entity(id) => ObjectType::Entity(EntityType::new(build_vertex_entity_type(TypeID::build(id)))),
+            Self::Entity(id) => ObjectType::Entity(EntityType::from_type_id(TypeID::build(id))),
             Self::Relation(id) => {
-                ObjectType::Relation(RelationType::new(build_vertex_relation_type(TypeID::build(id))))
+                ObjectType::Relation(RelationType::from_type_id(TypeID::build(id)))
             }
             _ => panic!("Incompatible conversion."),
         }
@@ -419,14 +413,14 @@ impl SerialisableType {
 
     pub(crate) fn into_attribute_type(self) -> AttributeType<'static> {
         match self {
-            Self::Attribute(id) => AttributeType::new(build_vertex_attribute_type(TypeID::build(id))),
+            Self::Attribute(id) => AttributeType::from_type_id(TypeID::build(id)),
             _ => panic!("Incompatible conversion."),
         }
     }
 
     pub(crate) fn into_role_type(self) -> RoleType<'static> {
         match self {
-            Self::Role(id) => RoleType::new(build_vertex_role_type(TypeID::build(id))),
+            Self::Role(id) => RoleType::from_type_id(TypeID::build(id)),
             _ => panic!("Incompatible conversion."),
         }
     }

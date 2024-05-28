@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 
 use bytes::Bytes;
 use encoding::{
-    graph::type_::vertex::{new_vertex_entity_type, TypeVertex},
+    graph::type_::vertex::TypeVertex,
     layout::prefix::Prefix,
     value::label::Label,
     Prefixed,
@@ -335,7 +335,7 @@ impl From<Annotation> for EntityTypeAnnotation {
 
 // TODO: can we inline this into the macro invocation?
 fn storage_key_ref_to_entity_type(storage_key_ref: StorageKeyReference<'_>) -> EntityType<'_> {
-    EntityType::new(new_vertex_entity_type(Bytes::Reference(storage_key_ref.byte_ref())))
+    EntityType::decode(Bytes::Reference(storage_key_ref.byte_ref()))
 }
 
 concept_iterator!(EntityTypeIterator, EntityType, storage_key_ref_to_entity_type);

@@ -13,13 +13,13 @@ use encoding::{
             edge::{ThingEdgeHas, ThingEdgeRelationIndex, ThingEdgeRolePlayer},
             vertex_object::ObjectVertex,
         },
-        type_::vertex::{build_vertex_relation_type, build_vertex_role_type},
         Typed,
     },
     layout::prefix::Prefix,
     value::decode_value_u64,
     AsBytes, Keyable, Prefixed,
 };
+use encoding::graph::type_::vertex::PrefixedEncodableTypeVertex;
 use iterator::Collector;
 use storage::{
     key_value::StorageKeyReference,
@@ -65,7 +65,7 @@ impl<'a> Relation<'a> {
     }
 
     pub fn type_(&self) -> RelationType<'static> {
-        RelationType::new(build_vertex_relation_type(self.vertex.type_id_()))
+        RelationType::from_type_id(self.vertex.type_id_())
     }
 
     pub fn iid(&self) -> ByteReference<'_> {
@@ -446,8 +446,8 @@ fn storage_key_to_role_player<'a>(
     value: ByteReference<'a>,
 ) -> (RolePlayer<'a>, u64) {
     let edge = ThingEdgeRolePlayer::new(Bytes::Reference(storage_key_ref.byte_ref()));
-    let role_type = build_vertex_role_type(edge.role_id());
-    (RolePlayer { player: Object::new(edge.into_to()), role_type: RoleType::new(role_type) }, decode_value_u64(value))
+    let role_type = RoleType::from_type_id(edge.role_id());
+    (RolePlayer { player: Object::new(edge.into_to()), role_type: role_type }, decode_value_u64(value))
 }
 
 edge_iterator!(
@@ -461,8 +461,8 @@ fn storage_key_to_relation_role<'a>(
     value: ByteReference<'a>,
 ) -> (Relation<'a>, RoleType<'static>, u64) {
     let edge = ThingEdgeRolePlayer::new(Bytes::Reference(storage_key_ref.byte_ref()));
-    let role_type = build_vertex_role_type(edge.role_id());
-    (Relation::new(edge.into_to()), RoleType::new(role_type), decode_value_u64(value))
+    let role_type = RoleType::from_type_id(edge.role_id());
+    (Relation::new(edge.into_to()), role_type, decode_value_u64(value))
 }
 
 edge_iterator!(
@@ -477,15 +477,15 @@ fn storage_key_to_indexed_players<'a>(
 ) -> (RolePlayer<'a>, RolePlayer<'a>, Relation<'a>, u64) {
     let from_role_player = RolePlayer {
         player: Object::new(ThingEdgeRelationIndex::read_from(storage_key_ref.byte_ref())),
-        role_type: RoleType::new(build_vertex_role_type(ThingEdgeRelationIndex::read_from_role_id(
+        role_type: RoleType::from_type_id(ThingEdgeRelationIndex::read_from_role_id(
             storage_key_ref.byte_ref(),
-        ))),
+        )),
     };
     let to_role_player = RolePlayer {
         player: Object::new(ThingEdgeRelationIndex::read_to(storage_key_ref.byte_ref())),
-        role_type: RoleType::new(build_vertex_role_type(ThingEdgeRelationIndex::read_to_role_id(
+        role_type: RoleType::from_type_id(ThingEdgeRelationIndex::read_to_role_id(
             storage_key_ref.byte_ref(),
-        ))),
+        )),
     };
     (
         from_role_player,
