@@ -20,9 +20,7 @@ use encoding::{
         property::{
             build_property_type_annotation_abstract, build_property_type_annotation_cardinality,
             build_property_type_annotation_distinct, build_property_type_annotation_independent,
-            build_property_type_annotation_regex, build_property_type_edge_annotation_cardinality,
-            build_property_type_edge_annotation_distinct, build_property_type_edge_annotation_key
-            ,
+            build_property_type_annotation_regex,
             build_property_type_ordering,
         },
         vertex_generator::TypeVertexGenerator,
@@ -41,7 +39,7 @@ use storage::{
 };
 use type_cache::TypeCache;
 
-use super::annotation::AnnotationRegex;
+use super::annotation::{AnnotationDistinct, AnnotationKey, AnnotationRegex};
 use crate::{
     error::{ConceptReadError, ConceptWriteError},
     type_::{
@@ -884,7 +882,7 @@ impl<Snapshot: WritableSnapshot> TypeManager<Snapshot> {
 
         let owns = Owns::new(ObjectType::new(owner.clone().into_vertex()), attribute.clone());
         TypeWriter::storage_put_interface_impl(snapshot, owns.clone());
-        TypeWriter::storage_set_owns_ordering(snapshot, owns.to_canonical_type_edge(), ordering);
+        TypeWriter::storage_put_type_edge_property(snapshot, owns, Some(ordering));
     }
 
     pub(crate) fn delete_owns(
@@ -896,7 +894,7 @@ impl<Snapshot: WritableSnapshot> TypeManager<Snapshot> {
         // TODO: Validation
 
         let owns = Owns::new(ObjectType::new(owner.clone().into_vertex()), attribute.clone());
-        TypeWriter::storage_delete_type_edge_property::<Owns<'static>, Ordering>(snapshot, owns.clone());
+        TypeWriter::storage_delete_type_edge_property::<Ordering>(snapshot, owns.clone());
         TypeWriter::storage_delete_interface_impl(snapshot, owns.clone());
     }
 
@@ -913,6 +911,16 @@ impl<Snapshot: WritableSnapshot> TypeManager<Snapshot> {
             .map_err(|source| ConceptWriteError::SchemaValidation {source})?;
 
         TypeWriter::storage_set_type_edge_overridden(snapshot, owns.clone(), overridden.clone()); // .attribute().clone());
+        Ok(())
+    }
+
+    pub(crate) fn delete_owns_overridden(
+        &self,
+        snapshot: &mut Snapshot,
+        owns: Owns<'static>,
+    ) -> Result<(), ConceptWriteError> {
+        // TODO: validation
+        TypeWriter::storage_delete_type_edge_overridden(snapshot, owns.clone()); // .attribute().clone());
         Ok(())
     }
 
@@ -959,19 +967,28 @@ impl<Snapshot: WritableSnapshot> TypeManager<Snapshot> {
         Ok(())
     }
 
+    pub(crate) fn delete_plays_overridden(
+        &self,
+        snapshot: &mut Snapshot,
+        plays: Plays<'static>
+    ) -> Result<(), ConceptWriteError> {
+        // TODO: Validation
+        TypeWriter::storage_delete_type_edge_overridden(snapshot, plays);
+        Ok(())
+    }
+
+
     pub(crate) fn set_owns_ordering(
         &self,
         snapshot: &mut Snapshot,
-        owns_edge: TypeEdge<'_>,
+        owns: Owns<'_>,
         ordering: Ordering,
     ) {
-        debug_assert_eq!(owns_edge.prefix(), Prefix::EdgeOwns);
-        TypeWriter::storage_set_owns_ordering(snapshot, owns_edge, ordering)
+        TypeWriter::storage_set_owns_ordering(snapshot, owns, ordering)
     }
 
-    pub(crate) fn delete_owns_ordering(&self, snapshot: &mut Snapshot, owns_edge: TypeEdge<'_>) {
-        debug_assert_eq!(owns_edge.prefix(), Prefix::EdgeOwns);
-        TypeWriter::storage_delete_owns_ordering(snapshot, owns_edge)
+    pub(crate) fn delete_owns_ordering(&self, snapshot: &mut Snapshot, owns: Owns<'_>) {
+        TypeWriter::storage_delete_owns_ordering(snapshot, owns)
     }
 
     fn storage_set_role_ordering(&self, snapshot: &mut Snapshot, role: RoleType<'_>, ordering: Ordering) {
@@ -1006,8 +1023,8 @@ impl<Snapshot: WritableSnapshot> TypeManager<Snapshot> {
         snapshot: &mut Snapshot,
         edge: impl EncodableParametrisedTypeEdge<'b>,
     ) {
-        let annotation_property = build_property_type_edge_annotation_distinct(edge.to_canonical_type_edge());
-        snapshot.put(annotation_property.into_storage_key().into_owned_array());
+        // TODO: Validation
+        TypeWriter::storage_put_type_edge_property::<AnnotationDistinct>(snapshot, edge, None)
     }
 
     pub(crate) fn storage_delete_edge_annotation_distinct<'b>(
@@ -1015,8 +1032,8 @@ impl<Snapshot: WritableSnapshot> TypeManager<Snapshot> {
         snapshot: &mut Snapshot,
         edge: impl EncodableParametrisedTypeEdge<'b>,
     ) {
-        let annotation_property = build_property_type_edge_annotation_distinct(edge.to_canonical_type_edge());
-        snapshot.delete(annotation_property.into_storage_key().into_owned_array());
+        // TODO: Validation
+        TypeWriter::storage_delete_type_edge_property::<AnnotationDistinct>(snapshot, edge)
     }
 
     pub(crate) fn storage_set_edge_annotation_key<'b>(
@@ -1024,8 +1041,7 @@ impl<Snapshot: WritableSnapshot> TypeManager<Snapshot> {
         snapshot: &mut Snapshot,
         edge: impl EncodableParametrisedTypeEdge<'b>,
     ) {
-        let annotation_property = build_property_type_edge_annotation_key(edge.to_canonical_type_edge());
-        snapshot.put(annotation_property.into_storage_key().into_owned_array());
+        TypeWriter::storage_put_type_edge_property::<AnnotationKey>(snapshot, edge, None)
     }
 
     pub(crate) fn storage_delete_edge_annotation_key<'b>(
@@ -1033,8 +1049,7 @@ impl<Snapshot: WritableSnapshot> TypeManager<Snapshot> {
         snapshot: &mut Snapshot,
         edge: impl EncodableParametrisedTypeEdge<'b>,
     ) {
-        let annotation_property = build_property_type_edge_annotation_key(edge.to_canonical_type_edge());
-        snapshot.delete(annotation_property.into_storage_key().into_owned_array());
+        TypeWriter::storage_delete_type_edge_property::<AnnotationKey>(snapshot, edge)
     }
 
     pub(crate) fn storage_set_annotation_independent(&self, snapshot: &mut Snapshot, type_: impl TypeAPI<'static>) {
@@ -1070,12 +1085,7 @@ impl<Snapshot: WritableSnapshot> TypeManager<Snapshot> {
         edge: impl EncodableParametrisedTypeEdge<'b>,
         annotation: AnnotationCardinality,
     ) {
-        snapshot.put_val(
-            build_property_type_edge_annotation_cardinality(edge.to_canonical_type_edge())
-                .into_storage_key()
-                .into_owned_array(),
-            annotation.build_value().unwrap().into_array(),
-        );
+        TypeWriter::storage_put_type_edge_property::<AnnotationCardinality>(snapshot, edge, Some(annotation))
     }
 
     pub(crate) fn storage_delete_edge_annotation_cardinality<'b>(
@@ -1083,8 +1093,7 @@ impl<Snapshot: WritableSnapshot> TypeManager<Snapshot> {
         snapshot: &mut Snapshot,
         edge: impl EncodableParametrisedTypeEdge<'b>,
     ) {
-        let annotation_property = build_property_type_edge_annotation_cardinality(edge.to_canonical_type_edge());
-        snapshot.delete(annotation_property.into_storage_key().into_owned_array());
+        TypeWriter::storage_delete_type_edge_property::<AnnotationCardinality>(snapshot, edge)
     }
 
     pub(crate) fn storage_set_annotation_regex(
