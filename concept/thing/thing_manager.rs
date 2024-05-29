@@ -523,7 +523,7 @@ impl<'txn, Snapshot: WritableSnapshot> ThingManager<Snapshot> {
             let entity = Entity::new(ObjectVertex::new(Bytes::reference(key.bytes())));
             let entity_type = entity.type_();
             for owns in &entity_type.get_owns(snapshot, self.type_manager())? {
-                if owns.get_annotations(snapshot, self.type_manager())?.contains(&OwnsAnnotation::Key(AnnotationKey))
+                if owns.get_effective_annotations(snapshot, self.type_manager())?.contains_key(&OwnsAnnotation::Key(AnnotationKey))
                     && entity.get_has_type(snapshot, self, owns.attribute())?.next().is_none()
                 {
                     errors.push(ConceptWriteError::EntityKeyMissing {})

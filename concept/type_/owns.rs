@@ -6,7 +6,7 @@
 
 use encoding::graph::type_::edge::EncodableParametrisedTypeEdge;
 use encoding::layout::prefix::Prefix;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 
 use primitive::maybe_owns::MaybeOwns;
@@ -51,8 +51,8 @@ impl<'a> Owns<'a> {
     ) -> Result<bool, ConceptReadError> {
         let is_ordered = false; // TODO
         if is_ordered {
-            let annotations = self.get_annotations(snapshot, type_manager)?;
-            Ok(annotations.contains(&OwnsAnnotation::Distinct(AnnotationDistinct)))
+            let annotations = self.get_effective_annotations(snapshot, type_manager)?;
+            Ok(annotations.contains_key(&OwnsAnnotation::Distinct(AnnotationDistinct)))
         } else {
             Ok(true)
         }
@@ -77,12 +77,12 @@ impl<'a> Owns<'a> {
         type_manager.set_owns_overridden(snapshot, self.clone().into_owned(), overridden)
     }
 
-    pub(crate) fn get_annotations<'this, Snapshot: ReadableSnapshot>(
+    pub fn get_effective_annotations<'this, Snapshot: ReadableSnapshot>(
         &'this self,
         snapshot: &Snapshot,
         type_manager: &'this TypeManager<Snapshot>,
-    ) -> Result<MaybeOwns<'this, HashSet<OwnsAnnotation>>, ConceptReadError> {
-        type_manager.get_owns_annotations(snapshot, self.clone())
+    ) -> Result<MaybeOwns<'this, HashMap<OwnsAnnotation, Owns<'static>>>, ConceptReadError> {
+        type_manager.get_owns_effective_annotations(snapshot, self.clone().into_owned())
     }
 
     pub fn set_annotation<Snapshot: WritableSnapshot>(

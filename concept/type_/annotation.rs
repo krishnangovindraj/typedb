@@ -159,3 +159,16 @@ impl<'a> EncodableTypeEdgeProperty<'a> for AnnotationCardinality {
         Some(Bytes::copy(bincode::serialize(&self).unwrap().as_slice()))
     }
 }
+
+impl Annotation {
+    pub(crate) fn infix(&self) -> Infix {
+        match self {
+            Annotation::Abstract(_) => AnnotationAbstract::INFIX,
+            Annotation::Distinct(_) => <AnnotationDistinct as EncodableTypeVertexProperty>::INFIX,
+            Annotation::Independent(_) => AnnotationIndependent::INFIX,
+            Annotation::Key(_) => AnnotationKey::INFIX,
+            Annotation::Cardinality(_) => <AnnotationCardinality as EncodableTypeEdgeProperty>::INFIX,
+            Annotation::Regex(_) => AnnotationRegex::INFIX,
+        }
+    }
+}
