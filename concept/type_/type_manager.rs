@@ -15,7 +15,6 @@ use bytes::byte_array::ByteArray;
 use encoding::{
     AsBytes,
     graph::type_::{
-        edge::TypeEdge,
         Kind,
         property::{
             build_property_type_annotation_abstract, build_property_type_annotation_cardinality,
@@ -26,7 +25,7 @@ use encoding::{
         vertex_generator::TypeVertexGenerator,
     },
     Keyable,
-    layout::prefix::Prefix, value::{label::Label, value_type::ValueType},
+    value::{label::Label, value_type::ValueType},
 };
 use encoding::graph::type_::edge::EncodableParametrisedTypeEdge;
 use encoding::graph::type_::property::EncodableTypeEdgeProperty;
@@ -1112,8 +1111,7 @@ impl<Snapshot: WritableSnapshot> TypeManager<Snapshot> {
     pub(crate) fn storage_delete_annotation_regex(
         &self,
         snapshot: &mut Snapshot,
-        type_: impl TypeAPI<'static>,
-        regex: AnnotationRegex,
+        type_: impl TypeAPI<'static>
     ) {
         // TODO debug assert that stored regex matches
         let annotation_property = build_property_type_annotation_regex(type_.into_vertex());
