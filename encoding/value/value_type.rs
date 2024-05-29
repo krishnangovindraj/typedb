@@ -4,7 +4,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use crate::layout::infix::InfixID;
+use bytes::byte_array::ByteArray;
+use bytes::byte_reference::ByteReference;
+use bytes::Bytes;
+use resource::constants::snapshot::BUFFER_VALUE_INLINE;
+use crate::graph::type_::property::EncodableTypeVertexProperty;
+use crate::layout::infix::{Infix, InfixID};
 
 // A tiny struct will always be more efficient owning its own data and being Copy
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -71,4 +76,16 @@ impl ValueType {
         String => [3],
         DateTime => [4],
     );
+}
+
+impl EncodableTypeVertexProperty<'static> for ValueType {
+    const INFIX: Infix = Infix::PropertyValueType;
+
+    fn decode_value<'b>(value: ByteReference<'b>) -> Self {
+        ValueType::from_value_type_id(ValueTypeID::new(value.bytes().try_into().unwrap()))
+    }
+
+    fn build_value(self) -> Option<Bytes<'static, BUFFER_VALUE_INLINE>> {
+        Some(Bytes::Array(ByteArray::copy(&self.value_type_id().bytes())))
+    }
 }
