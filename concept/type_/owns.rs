@@ -93,10 +93,10 @@ impl<'a> Owns<'a> {
     ) -> Result<(), ConceptWriteError> {
         // type_manager.set_edge_annotation(snapshot, self.clone(), annotation)
         match annotation {
-            OwnsAnnotation::Distinct(_) => type_manager.storage_set_edge_annotation_distinct(snapshot, self.clone()),
-            OwnsAnnotation::Key(_) => type_manager.storage_set_edge_annotation_key(snapshot, self.clone()),
+            OwnsAnnotation::Distinct(_) => type_manager.set_edge_annotation_distinct(snapshot, self.clone()),
+            OwnsAnnotation::Key(_) => type_manager.set_edge_annotation_key(snapshot, self.clone()),
             OwnsAnnotation::Cardinality(cardinality) => {
-                type_manager.storage_set_edge_annotation_cardinality(snapshot, self.clone(), cardinality)
+                type_manager.set_edge_annotation_cardinality(snapshot, self.clone(), cardinality)
             }
         }
         Ok(()) // TODO
@@ -109,10 +109,10 @@ impl<'a> Owns<'a> {
         annotation: OwnsAnnotation,
     ) {
         match annotation {
-            OwnsAnnotation::Distinct(_) => type_manager.storage_delete_edge_annotation_distinct(snapshot, self.clone()),
-            OwnsAnnotation::Key(_) => type_manager.storage_delete_edge_annotation_key(snapshot, self.clone()),
+            OwnsAnnotation::Distinct(_) => type_manager.delete_edge_annotation_distinct(snapshot, self.clone()),
+            OwnsAnnotation::Key(_) => type_manager.delete_edge_annotation_key(snapshot, self.clone()),
             OwnsAnnotation::Cardinality(_) => {
-                type_manager.storage_delete_edge_annotation_cardinality(snapshot, self.clone())
+                type_manager.delete_edge_annotation_cardinality(snapshot, self.clone())
             }
         }
     }
