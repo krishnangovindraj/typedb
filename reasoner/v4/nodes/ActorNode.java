@@ -120,6 +120,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             // We must either terminate or iterate
             Either<Request.TerminateSCC, Request.GrowTree> terminateOrIterate = terminationTracker.terminateOrIterate(ourVote);
             if (terminateOrIterate.isFirst()) {
+                nodeRegistry.notifyNodeTermination(nodeId); // We need to do this for proper termination tracking.
                 Request.TerminateSCC terminateRequest = terminateOrIterate.first();
                 activePorts.forEach(port -> port.sendRequest(terminateRequest));
             } else {
@@ -291,7 +292,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         public Optional<Response.Candidacy> mayUpdateCurrentCandidate(Response.Candidacy existingPortCandidacy, Response.Candidacy candidacy, Set<Port> activePorts) {
             if (existingPortCandidacy.nodeId < candidacy.nodeId) {
                 // Can only happen in case of termination
-                assert isCandidateTerminated(existingPortCandidacy.nodeId);// terminatedCandidates.add(existingPortCandidacy.nodeId);
+                assert existingPortCandidacy == Port.NULL_RECEIVED_CANDIDACY || isCandidateTerminated(existingPortCandidacy.nodeId);// terminatedCandidates.add(existingPortCandidacy.nodeId);
                 if (existingPortCandidacy.nodeId == currentCandidate.nodeId) {
                     //////////////////////////////////////
                     ////    WE STILL HAVE A PROBLEM   ///
