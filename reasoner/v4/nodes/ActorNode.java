@@ -295,6 +295,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         }
 
         public Optional<Response.Candidacy> mayUpdateCurrentCandidate(Response.Candidacy existingPortCandidacy, Response.Candidacy candidacy, Set<Port> activePorts) {
+            if (thisActorNode.getClass().equals(NegatedNode.class)) return Optional.empty(); // Optimisation
             if (existingPortCandidacy.nodeId < candidacy.nodeId) {
                 // Can only happen in case of termination
                 assert existingPortCandidacy == Port.NULL_RECEIVED_CANDIDACY || isCandidateTerminated(existingPortCandidacy.nodeId);// terminatedCandidates.add(existingPortCandidacy.nodeId);
