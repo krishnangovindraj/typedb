@@ -279,14 +279,13 @@ public class NodeRegistry {
     }
 
 
-// TODO: A later optimisation.
-//    public void notiyNodeTermination(Integer nodeId) {
-//        terminatedNodes.add(nodeId);
-//    }
-//
-//    public boolean isCandidateTerminated(Integer nodeId) {
-//        return terminatedNodes.contains(nodeId);
-//    }
+    public void notifyNodeTermination(Integer nodeId) {
+        terminatedNodes.add(nodeId);
+    }
+
+    public boolean isCandidateTerminated(Integer nodeId) {
+        return terminatedNodes.contains(nodeId);
+    }
 
     public abstract class SubRegistry<KEY, NODE extends ActorNode<NODE>> {
         protected final KEY key;
