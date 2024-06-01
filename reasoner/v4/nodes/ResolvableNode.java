@@ -53,7 +53,7 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
             if (traversal.hasNext()) {
                 return answerTable.recordAnswer(traversal.next());
             } else {
-                nodeRegistry.notifyNodeTermination(nodeId);
+                terminationTracker.notifyTermination();
                 Response done = answerTable.recordDone();
                 System.out.printf("TERMINATE: Node[%d] has terminated\n", this.nodeId);
                 return done;
