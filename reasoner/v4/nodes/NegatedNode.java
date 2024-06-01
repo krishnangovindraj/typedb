@@ -49,7 +49,7 @@ public class NegatedNode extends ResolvableNode<Negated, NegatedNode> {
 
     @Override
     protected void onTermination() {
-        nodeRegistry.notifyNodeTermination(this.nodeId);
+        terminationTracker.notifyTermination();
         if (!answerTable.isComplete()) {
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Response toSend = answerTable.recordAnswer(bounds);

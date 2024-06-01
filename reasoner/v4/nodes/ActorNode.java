@@ -28,7 +28,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
     private final Set<Port> downstreamPorts;
 
-    TerminationTracker terminationTracker;
+    protected TerminationTracker terminationTracker;
 
     protected ActorNode(NodeRegistry nodeRegistry, Driver<NODE> driver, Supplier<String> debugName) {
         super(nodeRegistry, driver, debugName);
@@ -74,6 +74,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
     protected void terminateSCC(Port requestorPort, Request.TerminateSCC terminateSCC) {
         // TOD: We're sending TreeVotes multiple times & hence receiving duplicated TerminateSCC for some reason.
+        terminationTracker.notifyTermination(); // It's not wrong to do it here, but it's not elegant at all.
         assert terminationTracker.__DBG__terminateSCC == null || terminationTracker.__DBG__terminateSCC.sccState().equals(terminateSCC.sccState());
         terminationTracker.__DBG__terminateSCC = terminateSCC;
 
@@ -83,6 +84,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             sendResponse(requestorPort.owner, requestorPort, answerTable.getDoneMessageForNonParent(requestorPort));
         }
     }
+
 
     // Response handling
     @Override
@@ -120,7 +122,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             // We must either terminate or iterate
             Either<Request.TerminateSCC, Request.GrowTree> terminateOrIterate = terminationTracker.terminateOrIterate(ourVote);
             if (terminateOrIterate.isFirst()) {
-                nodeRegistry.notifyNodeTermination(nodeId); // We need to do this for proper termination tracking.
+                terminationTracker.notifyTermination(); // We need to do this for proper termination tracking.
                 Request.TerminateSCC terminateRequest = terminateOrIterate.first();
                 activePorts.forEach(port -> port.sendRequest(terminateRequest));
             } else {
@@ -154,7 +156,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
     protected void onTermination() {
         assert allPortsDone(); // TODO: Bit of a weak assert. // Why? this.getClass().equals(NegatedNode.class) ?
-        nodeRegistry.notifyNodeTermination(this.nodeId);
+        terminationTracker.notifyTermination();
         if (!answerTable.isComplete()) {
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Response toSend = answerTable.recordDone();
@@ -240,7 +242,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         public boolean isReady() { return state == State.READY; }
     }
 
-    private static class TerminationTracker {
+    protected static class TerminationTracker {
         private final ActorNode<?> thisActorNode;
         private Request.TerminateSCC __DBG__terminateSCC;
         private Response.Candidacy currentCandidate;
@@ -248,6 +250,8 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
         private Response.TreeVote __DBG__lastTreeVote;
 //        private final Set<Integer> terminatedCandidates;
+        private boolean alreadyNotifiedTermination;
+
 
         public TerminationTracker(ActorNode<?> actorNode) {
             this.thisActorNode = actorNode;
@@ -255,6 +259,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             currentGrowTreeRequest = new Pair<>(new Request.GrowTree(actorNode.nodeId, 0), null);
             __DBG__lastTreeVote = null;
 //            terminatedCandidates = new HashSet<>();
+            alreadyNotifiedTermination = false;
         }
 
 
@@ -356,7 +361,12 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             }
         }
 
-
+        public void notifyTermination() {
+            if (!alreadyNotifiedTermination) {
+                alreadyNotifiedTermination = true; // Optimisation to prevent needless writes to the ConcurrentHashMap
+                thisActorNode.nodeRegistry.notifyNodeTermination(thisActorNode.nodeId);
+            }
+        }
 
         private boolean isCandidateTerminated(int nodeId) {
             // Remember to update the setting accordingly.
