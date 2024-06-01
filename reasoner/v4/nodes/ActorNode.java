@@ -153,6 +153,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
     protected void onTermination() {
         assert allPortsDone(); // TODO: Bit of a weak assert. // Why? this.getClass().equals(NegatedNode.class) ?
+        nodeRegistry.notifyNodeTermination(this.nodeId);
         if (!answerTable.isComplete()) {
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Response toSend = answerTable.recordDone();
@@ -245,14 +246,14 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         private Pair<Request.GrowTree, Port> currentGrowTreeRequest; // We can't use nodeId for ancestor because we could have multiple ports
 
         private Response.TreeVote __DBG__lastTreeVote;
-        private final Set<Integer> terminatedCandidates;
+//        private final Set<Integer> terminatedCandidates;
 
         public TerminationTracker(ActorNode<?> actorNode) {
             this.thisActorNode = actorNode;
             currentCandidate = new Response.Candidacy(actorNode.nodeId);
             currentGrowTreeRequest = new Pair<>(new Request.GrowTree(actorNode.nodeId, 0), null);
             __DBG__lastTreeVote = null;
-            terminatedCandidates = new HashSet<>();
+//            terminatedCandidates = new HashSet<>();
         }
 
 
@@ -290,7 +291,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         public Optional<Response.Candidacy> mayUpdateCurrentCandidate(Response.Candidacy existingPortCandidacy, Response.Candidacy candidacy, Set<Port> activePorts) {
             if (existingPortCandidacy.nodeId < candidacy.nodeId) {
                 // Can only happen in case of termination
-                terminatedCandidates.add(existingPortCandidacy.nodeId);
+                assert isCandidateTerminated(existingPortCandidacy.nodeId);// terminatedCandidates.add(existingPortCandidacy.nodeId);
                 if (existingPortCandidacy.nodeId == currentCandidate.nodeId) {
                     //////////////////////////////////////
                     ////    WE STILL HAVE A PROBLEM   ///
@@ -304,7 +305,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
                 }
             }
 
-            if (candidacy.nodeId < currentCandidate.nodeId && !terminatedCandidates.contains(candidacy.nodeId)) {
+            if (candidacy.nodeId < currentCandidate.nodeId && !isCandidateTerminated(candidacy.nodeId)) {
                 currentCandidate = candidacy;
                 return Optional.of(candidacy);
             } else {
@@ -315,7 +316,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         private Response.Candidacy selectReplacementCandidate(Set<Port>  activePorts) {
             // TODO: Optimise so we can avoid the isCandidateTerminated check.
             Stream<Response.Candidacy> activePortCandidateStream = activePorts.stream().map(port -> port.receivedCandidacy)
-                    .filter(portCandidacy -> portCandidacy != null && !terminatedCandidates.contains(portCandidacy.nodeId));
+                    .filter(portCandidacy -> portCandidacy != null && !isCandidateTerminated(portCandidacy.nodeId));
             return Stream.concat(
                     Stream.of(new Response.Candidacy(thisActorNode.nodeId)),
                     activePortCandidateStream
@@ -352,6 +353,13 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
                 currentGrowTreeRequest = new Pair<>(new Request.GrowTree(thisActorNode.nodeId, ourVote.subtreeContribution), null);
                 return Either.second(currentGrowTreeRequest.first());
             }
+        }
+
+
+
+        private boolean isCandidateTerminated(int nodeId) {
+            // Remember to update the setting accordingly.
+            return thisActorNode.nodeRegistry.isCandidateTerminated(nodeId);
         }
     }
 }
