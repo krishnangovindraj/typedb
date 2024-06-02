@@ -149,7 +149,6 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
                 queue.done(e.getCause());
             }
         }
-        throw TypeDBException.of(REASONING_TERMINATED_WITH_CAUSE, e);
     }
 
     @Override

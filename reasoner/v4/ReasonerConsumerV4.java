@@ -14,6 +14,7 @@ public interface ReasonerConsumerV4 extends ReasonerConsumer<ConceptMap> {
         throw new RuntimeException(ILLEGAL_STATE.message());
     }
 
+    @Override
     default void exception(Throwable e) {
         throw new RuntimeException(ILLEGAL_STATE.message());
     }
