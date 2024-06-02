@@ -334,7 +334,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             if (currentGrowTreeRequest.first().root != this.currentCandidate.nodeId) return Optional.empty();
             if (this.__DBG__lastTreeVote != null && this.__DBG__lastTreeVote.candidate == currentGrowTreeRequest.first().root && this.__DBG__lastTreeVote.target == currentGrowTreeRequest.first().target) return Optional.empty(); // Already voted;
 
-            int subtreeSum = thisActorNode.answerTable.size();
+            int subtreeSum = thisActorNode.voteContribution();
             for (Port port: activePorts) {
                 if (port.receivedTreeVote == null ||
                         port.receivedTreeVote.candidate != this.currentGrowTreeRequest.first().root ||
@@ -373,5 +373,10 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             // Remember to update the setting accordingly.
             return thisActorNode.nodeRegistry.isCandidateTerminated(nodeId);
         }
+    }
+
+    protected int voteContribution() {
+        // Separate method so it can be overridden
+        return answerTable.size();
     }
 }
