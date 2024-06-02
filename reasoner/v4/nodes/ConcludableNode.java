@@ -18,12 +18,14 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
     private final Set<ConceptMap> seenAnswers;
     private Map<Port, Pair<Unifier, Unifier.Requirements.Instance>> conclusioNodePorts; // TODO: Improve
     private Port lookupPort;
+    private int duplicateAnswersReceived;
 
     public ConcludableNode(Concludable concludable, ConceptMap bounds,
                            NodeRegistry nodeRegistry, Driver<com.vaticle.typedb.core.reasoner.v4.nodes.ConcludableNode> driver) {
         super(concludable, bounds, nodeRegistry, driver);
         this.seenAnswers = new HashSet<>();
         this.conclusioNodePorts = null;
+        duplicateAnswersReceived = 0;
     }
 
     @Override
@@ -69,7 +71,10 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
 
     private void recordAndForwardAnswers(FunctionalIterator<ConceptMap> answers) {
         answers.forEachRemaining(conceptMap -> {
-            if (seenAnswers.contains(conceptMap)) return;
+            if (seenAnswers.contains(conceptMap)) {
+                duplicateAnswersReceived += 1;
+                return;
+            }
             seenAnswers.add(conceptMap);
             // We can do this multiple times, since subscribers will be empty
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
@@ -82,5 +87,10 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
         public ConcludableLookupNode(Concludable concludable, ConceptMap bounds, NodeRegistry nodeRegistry, Driver<ConcludableLookupNode> driver) {
             super(concludable, bounds, nodeRegistry, driver);
         }
+    }
+
+    @Override
+    protected int voteContribution() {
+        return super.voteContribution() + duplicateAnswersReceived;
     }
 }
