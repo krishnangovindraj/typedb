@@ -60,7 +60,12 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     }
 
     protected void readAnswerAt(ActorNode.Port reader, Request.ReadAnswer readAnswerRequest) {
-        readAnswerAtStrictlyAcyclic(reader, readAnswerRequest.index);
+        Optional<Response> peekAnswer = answerTable.answerAt(readAnswerRequest.index);
+        if (peekAnswer.isPresent()) {
+            sendResponse(reader.owner(), reader, peekAnswer.get());
+        } else {
+            computeNextAnswer(reader, readAnswerRequest.index); // This is now effectively a 'pull'
+        }
     }
 
     protected abstract void hello(ActorNode.Port proposer, Request.Hello helloRequest);
@@ -70,12 +75,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     protected abstract void terminateSCC(ActorNode.Port requester, Request.TerminateSCC terminateSCC);
 
     private void readAnswerAtStrictlyAcyclic(ActorNode.Port reader, int index) {
-        Optional<Response> peekAnswer = answerTable.answerAt(index);
-        if (peekAnswer.isPresent()) {
-            sendResponse(reader.owner(), reader, peekAnswer.get());
-        } else {
-            computeNextAnswer(reader, index); // This is now effectively a 'pull'
-        }
+
     }
 
     protected abstract void computeNextAnswer(ActorNode.Port reader, int index);
@@ -118,8 +118,6 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     protected abstract void handleTreeVote(ActorNode.Port onPort, Response.TreeVote treeVote);
 
     protected abstract void handleDone(ActorNode.Port onPort);
-
-    protected abstract ActorNode.Port createPort(ActorNode<?> remote);
 
     protected FunctionalIterator<ActorNode.Port> allPorts() {
         return Iterators.iterate(ports);

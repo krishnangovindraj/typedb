@@ -2,6 +2,7 @@ package com.vaticle.typedb.core.reasoner.v4.nodes;
 
 import com.vaticle.typedb.common.collection.Either;
 import com.vaticle.typedb.common.collection.Pair;
+import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.reasoner.v4.Request;
 import com.vaticle.typedb.core.reasoner.v4.Response;
@@ -11,6 +12,8 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
+
+import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
 //WERE STRUGGLING ON CANDIDACY STABILITY (A LACK OF IT OR TOO MUCH)
 
 public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAcyclicNode<NODE> {
@@ -87,6 +90,23 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
 
     // Response handling
+    @Override
+    public void receiveResponse(ActorNode.Port onPort, Response received) {
+        switch (received.type()) {
+            case ANSWER:
+            case CONCLUSION:
+            case DONE: {
+                terminationTracker.recordReceivedAnswer();
+                break;
+            }
+            case CANDIDACY:
+            case TREE_VOTE: {
+                break;
+            }
+            default: throw TypeDBException.of(ILLEGAL_STATE);
+        }
+        super.receiveResponse(onPort, received);
+    }
     @Override
     protected void handleCandidacy(Port onPort, Response.Candidacy candidacy) {
         // TODO: Add assert that receivedCandidacy is never null
@@ -251,6 +271,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         private Response.TreeVote __DBG__lastTreeVote;
 //        private final Set<Integer> terminatedCandidates;
         private boolean alreadyNotifiedTermination;
+        private int receivedAnswers;
 
 
         public TerminationTracker(ActorNode<?> actorNode) {
@@ -260,6 +281,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             __DBG__lastTreeVote = null;
 //            terminatedCandidates = new HashSet<>();
             alreadyNotifiedTermination = false;
+            receivedAnswers = 0;
         }
 
 
@@ -334,7 +356,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             if (currentGrowTreeRequest.first().root != this.currentCandidate.nodeId) return Optional.empty();
             if (this.__DBG__lastTreeVote != null && this.__DBG__lastTreeVote.candidate == currentGrowTreeRequest.first().root && this.__DBG__lastTreeVote.target == currentGrowTreeRequest.first().target) return Optional.empty(); // Already voted;
 
-            int subtreeSum = thisActorNode.voteContribution();
+            int subtreeSum = receivedAnswers;
             for (Port port: activePorts) {
                 if (port.receivedTreeVote == null ||
                         port.receivedTreeVote.candidate != this.currentGrowTreeRequest.first().root ||
@@ -373,10 +395,12 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             // Remember to update the setting accordingly.
             return thisActorNode.nodeRegistry.isCandidateTerminated(nodeId);
         }
-    }
 
-    protected int voteContribution() {
-        // Separate method so it can be overridden
-        return answerTable.size();
+        public void recordReceivedAnswer() {
+            // We used to use answerTable.size() as our TreeVote contribution
+            // Then realised ConclusionNode & ConcludableLookupNode may ignore received answers & not change their vote
+            // This lead to early termination. Hence, we directly track and use receivedAnswers as our vote contribution
+            receivedAnswers += 1;
+        }
     }
 }

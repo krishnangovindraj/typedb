@@ -12,13 +12,10 @@ import java.util.Optional;
 public class ConclusionNode extends ActorNode<ConclusionNode> {
     private final Rule.Conclusion conclusion;
     private final ConceptMap bounds;
-    private int duplicateAnswersReceived;
-
     public ConclusionNode(Rule.Conclusion conclusion, ConceptMap bounds, NodeRegistry nodeRegistry, Driver<ConclusionNode> driver) {
         super(nodeRegistry, driver, () -> String.format("Conclusion[%s, %s, %s]", conclusion.rule(), conclusion, bounds));
         this.conclusion = conclusion;
         this.bounds = bounds;
-        this.duplicateAnswersReceived = 0;
     }
 
     @Override
@@ -52,8 +49,6 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
             FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Response toSend = answerTable.recordConclusion(thenConcepts.get().conclusionAnswer());
             subscribers.forEachRemaining(subscriber -> sendResponse(subscriber.owner(), subscriber, toSend));
-        } else {
-            duplicateAnswersReceived += 1;
         }
         if (onPort.isReady()) onPort.readNext();
     }
@@ -67,10 +62,5 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
 
         if (response.isPresent()) nodeRegistry.perfCounterFields().materialisations.add(1);
         return response;
-    }
-
-    @Override
-    protected int voteContribution() {
-        return super.voteContribution() + duplicateAnswersReceived;
     }
 }
