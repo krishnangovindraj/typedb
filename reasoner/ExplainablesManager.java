@@ -6,10 +6,19 @@
 
 package com.vaticle.typedb.core.reasoner;
 
+import com.vaticle.typedb.core.common.cache.CommonCache;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.logic.resolvable.Concludable;
+import com.vaticle.typedb.core.logic.resolvable.Retrievable;
+import com.vaticle.typedb.core.pattern.Conjunction;
+import com.vaticle.typedb.core.pattern.Pattern;
+import com.vaticle.typedb.core.pattern.variable.Variable;
+import com.vaticle.typedb.core.traversal.common.Identifier;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -27,9 +36,10 @@ public class ExplainablesManager {
         this.nextId = new AtomicLong(NOT_IDENTIFIED + 1);
         this.concludables = new ConcurrentHashMap<>();
         this.bounds = new ConcurrentHashMap<>();
+        this.patternBounds = new HashMap<>();
     }
 
-    void setAndRecordExplainables(ConceptMap explainableMap) {
+    public void setAndRecordExplainables(ConceptMap explainableMap) {
         explainableMap.explainables().iterator().forEachRemaining(explainable -> {
             long nextId = this.nextId.getAndIncrement();
             FunctionalIterator<Concludable> concludable = iterate(Concludable.create(explainable.conjunction()));
@@ -47,5 +57,15 @@ public class ExplainablesManager {
 
     ConceptMap getBounds(long explainableId) {
         return bounds.get(explainableId);
+    }
+
+    // Added in v4
+    private final Map<Conjunction, Set<Identifier.Variable.Retrievable>> patternBounds;
+    public void recordBounds(Conjunction pattern, Set<Identifier.Variable.Retrievable> bounds) {
+        patternBounds.put(pattern, bounds);
+    }
+
+    public Set<Identifier.Variable.Retrievable> getBounds(Conjunction pattern) {
+        return patternBounds.get(pattern);
     }
 }

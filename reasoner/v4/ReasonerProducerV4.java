@@ -17,28 +17,33 @@
 
 package com.vaticle.typedb.core.reasoner.v4;
 
+import com.vaticle.typedb.common.collection.Pair;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.parameters.Options;
+import com.vaticle.typedb.core.concept.Concept;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.concurrent.producer.Producer;
-import com.vaticle.typedb.core.logic.resolvable.ResolvableDisjunction;
+import com.vaticle.typedb.core.logic.Rule;
+import com.vaticle.typedb.core.logic.resolvable.*;
+import com.vaticle.typedb.core.pattern.variable.Variable;
 import com.vaticle.typedb.core.reasoner.ExplainablesManager;
+import com.vaticle.typedb.core.reasoner.answer.Explanation;
+import com.vaticle.typedb.core.reasoner.answer.PartialExplanation;
 import com.vaticle.typedb.core.reasoner.controller.ConjunctionController;
+import com.vaticle.typedb.core.reasoner.planner.ReasonerPlanner;
 import com.vaticle.typedb.core.reasoner.v4.nodes.ActorNode;
 import com.vaticle.typedb.core.reasoner.v4.nodes.NodeRegistry;
+import com.vaticle.typedb.core.traversal.common.Identifier;
 import com.vaticle.typedb.core.traversal.common.Modifiers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.concurrent.ThreadSafe;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Reasoner.REASONING_TERMINATED_WITH_CAUSE;
+import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
 import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducerV4.State.EXCEPTION;
 import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducerV4.State.FINISHED;
 import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducerV4.State.INIT;
@@ -53,14 +58,14 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
     private static final Logger LOG = LoggerFactory.getLogger(ReasonerProducerV4.class);
 
     protected final NodeRegistry nodeRegistry;
-    private final ExplainablesManager explainablesManager;
+    protected final ExplainablesManager explainablesManager;
     final AtomicInteger requiredAnswers;
     final Options.Query options;
     private Throwable exception;
     Queue<ANSWER> queue;
     State state;
     protected ROOTNODE rootNode; // TODO: Make final, init in constructor, change return type of initialiseRoot
-    private final Set<ANSWER> seenAnswers;
+    final Set<ANSWER> seenAnswers;
 
     enum State {
         INIT,
@@ -152,22 +157,6 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
     }
 
     @Override
-    public synchronized void receiveAnswer(ConceptMap answer) {
-        state = READY;
-        ANSWER transformedAnswer = transformAnswer(answer);
-        if (!seenAnswers.contains(transformedAnswer)) {
-            seenAnswers.add(transformedAnswer);
-            queue.put(transformedAnswer);
-            if (requiredAnswers.decrementAndGet() > 0) pull();
-        } else {
-            if (requiredAnswers.get() > 0) pull();
-        }
-
-    }
-
-    protected abstract ANSWER transformAnswer(ConceptMap answer);
-
-    @Override
     public void recycle() {
 
     }
@@ -177,12 +166,14 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
         private final ResolvableDisjunction disjunction;
         private final Modifiers.Filter filter;
         private AtomicInteger answersReceived;
+        private final Map<ActorNode.Port, ResolvableConjunction> portToConjunction;
 
         public Basic(ResolvableDisjunction disjunction, Modifiers.Filter filter, Options.Query options, NodeRegistry nodeRegistry, ExplainablesManager explainablesManager) {
             super(options, nodeRegistry, explainablesManager);
             this.disjunction = disjunction;
             this.filter = filter;
             this.answersReceived = new AtomicInteger(0);
+            this.portToConjunction = new HashMap<>();
         }
 
         @Override
@@ -195,14 +186,22 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
             return nodeRegistry.createRoot(nodeDriver -> new RootNode(nodeRegistry, nodeDriver));
         }
 
-        @Override
-        protected ConceptMap transformAnswer(ConceptMap answer) {
-            return answer.filter(filter);
-        }
-
         void readNextAnswer() {
             int nextAnswerIndex = answersReceived.getAndIncrement();
             rootNode.driver().execute(rootNode -> rootNode.readAnswerAt(null, new Request.ReadAnswer(nextAnswerIndex)));
+        }
+
+        @Override
+        public synchronized void receiveAnswer(ConceptMap answer) {
+            state = READY;
+            if (!seenAnswers.contains(answer)) {
+                explainablesManager.setAndRecordExplainables(answer);
+                seenAnswers.add(answer);
+                queue.put(answer);
+                if (requiredAnswers.decrementAndGet() > 0) pull();
+            } else {
+                if (requiredAnswers.get() > 0) pull();
+            }
         }
 
         class RootNode extends ActorNode<RootNode> {
@@ -219,6 +218,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
                     Port port = createPort(subRegistry.getNode(ConceptMap.EMPTY));
                     ports.add(port);
                     activePorts.add(port);
+                    portToConjunction.put(port, conjunction);
                 });
                 nodeRegistry.perfCounters().startPeriodicPrinting();
             }
@@ -253,7 +253,38 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
 
             @Override
             protected void handleAnswer(Port onPort, Response.Answer answer) {
-                Basic.this.receiveAnswer(answer.answer());
+                ResolvableConjunction conj = portToConjunction.get(onPort);
+                Basic.this.receiveAnswer(transformAnswer(conj, answer.answer()));
+            }
+
+            private ConceptMap transformAnswer(ResolvableConjunction conj, ConceptMap answer) {
+                if (options.explain()) {
+                    ReasonerPlanner.Plan plan = nodeRegistry.planner().getPlan(conj, Collections.emptySet());
+                    ConceptMap withExplainables = answer;
+                    Set<Identifier.Variable.Retrievable> bounds = new HashSet<>();
+                    for (Resolvable<?> resolvable : plan.plan()) {
+                        if (resolvable.isConcludable()) {
+                            Concludable concludable = resolvable.asConcludable();
+                            if (concludable.isRelation()) {
+                                withExplainables = withExplainables.withExplainableConcept(concludable.asRelation().generatingVariable().id(), concludable.pattern());
+                            } else if (concludable.isAttribute()) {
+                                withExplainables = withExplainables.withExplainableConcept(concludable.asAttribute().generatingVariable().id(), concludable.pattern());
+                            } else if (concludable.isIsa()) {
+                                // TODO?
+                                // withExplainables = withExplainables.withExplainableConcept(concludable.asIsa().generatingVariable().id(), concludable.pattern());
+                            } else if (concludable.isHas()) {
+                                withExplainables = withExplainables.withExplainableOwnership(concludable.asHas().owner().id(), concludable.asHas().attribute().id(), concludable.pattern());
+                            } else {
+                                throw TypeDBException.of(ILLEGAL_STATE);
+                            }
+                            explainablesManager.recordBounds(concludable.pattern(), new HashSet<>(bounds));
+                        }
+                        bounds.addAll(resolvable.retrieves());
+                    }
+                    return withExplainables;
+                } else {
+                    return answer.filter(filter);
+                }
             }
 
             @Override
@@ -261,6 +292,142 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
                 activePorts.remove(onPort);
                 if (activePorts.isEmpty()) {
                     Basic.this.finish();
+                    nodeRegistry.perfCounters().stopPrinting();
+                }
+            }
+        }
+    }
+
+    // This requires some work to track the bounds for efficient re-use
+    public static class Explain extends ReasonerProducerV4<Explain.ExplainNode, Explanation> {
+        private final Concludable concludable;
+        private final ConceptMap bounds;
+        private AtomicInteger answersReceived;
+
+        public Explain(Concludable explainableConcludable, ConceptMap explainableBounds, Options.Query options, NodeRegistry nodeRegistry, ExplainablesManager explainablesManager) {
+            super(options, nodeRegistry, explainablesManager);
+            this.concludable = explainableConcludable;
+            this.bounds = explainableBounds;
+            this.answersReceived = new AtomicInteger(0);
+        }
+
+        @Override
+        protected void prepare() {
+            // The node registry is already prepared
+        }
+
+        @Override
+        ExplainNode createRootNode() {
+            return nodeRegistry.createRoot(nodeDriver -> new ExplainNode(nodeRegistry, nodeDriver));
+        }
+
+        @Override
+        void readNextAnswer() {
+            int nextAnswerIndex = answersReceived.getAndIncrement();
+            rootNode.driver().execute(rootNode -> rootNode.readAnswerAt(null, new Request.ReadAnswer(nextAnswerIndex)));
+        }
+
+        public synchronized void receiveAnswer(Explanation answer) {
+            state = READY;
+            if (!seenAnswers.contains(answer) ) {
+                seenAnswers.add(answer);
+                queue.put(answer);
+                if (requiredAnswers.decrementAndGet() > 0) pull();
+            } else {
+                if (requiredAnswers.get() > 0) pull();
+            }
+        }
+
+        @Override
+        public void receiveAnswer(ConceptMap conceptMap) {
+            throw TypeDBException.of(ILLEGAL_STATE);
+        }
+
+        class ExplainNode extends ActorNode<ExplainNode> {
+            // We try to plug straight into the conditions of the rules which the concludable unified with.
+            // This also means re-using the original bounds of the concludable, and filtering out the answers that don't match.
+            private final Map<Port, Pair<Unifier, Unifier.Requirements.Instance>> portUnifiers; // TODO: Improve
+            private final Map<Port, Rule.Condition.ConditionBranch> portToRuleCondition;
+
+            protected ExplainNode(NodeRegistry nodeRegistry, Driver<ExplainNode> driver) {
+                super(nodeRegistry, driver, () -> "ExplainNode: " + concludable.pattern() + "/" + bounds);
+                portUnifiers = new HashMap<>();
+                portToRuleCondition = new HashMap<>();
+            }
+
+            @Override
+            public void initialise() {
+                // TODO: This seems a bit inefficient. We use multiple ports for the same node just because we have multiple unifiers
+                Set<Identifier.Variable.Retrievable> reusableBoundVariables = explainablesManager.getBounds(concludable.pattern());
+                ConceptMap reusableBounds = bounds.filter(reusableBoundVariables);
+                nodeRegistry.logicManager().applicableRules(concludable).forEach((rule, unifiers) -> {
+                    unifiers.forEach(unifier -> unifier.unify(reusableBounds).ifPresent(boundsAndRequirements -> {
+                        rule.condition().branches().forEach(branch -> {
+                            ConceptMap filteredBounds = boundsAndRequirements.first().filter(branch.conjunction().pattern().retrieves());
+                            ConjunctionController.ConjunctionStreamPlan csPlan = nodeRegistry.conjunctionStreamPlan(branch.conjunction(), filteredBounds);
+                            Port port = createPort(nodeRegistry.getRegistry(csPlan).getNode(filteredBounds));
+                            portUnifiers.put(port, new Pair<>(unifier, boundsAndRequirements.second()));
+                            portToRuleCondition.put(port, branch);
+                        });
+                    }));
+                });
+                nodeRegistry.perfCounters().startPeriodicPrinting();
+            }
+
+            @Override
+            public void terminate(Throwable e) {
+                nodeRegistry.perfCounters().stopPrinting();
+                super.terminate(e);
+                Explain.this.exception(e);
+            }
+
+            @Override
+            protected void readAnswerAt(Port _ignored, Request.ReadAnswer readAnswer) {
+                // TODO: Improve based on Basic.RootNode
+                for (Port port: ports) {
+                    if (port.isReady()) {
+                        port.readNext();
+                    }
+                }
+            }
+
+            @Override
+            protected void computeNextAnswer(Port reader, int index) {
+                // port.readNext();
+                assert false;
+            }
+
+            @Override
+            protected void handleAnswer(Port onPort, Response.Answer answer) {
+                // Check if it matches the bounds
+                Pair<Unifier, Unifier.Requirements.Instance> unifiers = portUnifiers.get(onPort);
+                Map<Identifier.Variable, Concept> toUnunify = new HashMap<>(answer.answer().concepts());
+                boolean anyMatch = unifiers.first().unUnify(toUnunify, unifiers.second())
+                        .anyMatch(conceptMap -> conceptMap.equals(bounds));
+                if (anyMatch) {
+                    Explain.this.receiveAnswer(transformAnswer(onPort, answer.answer()));
+                } else {
+                    readNextAnswer();
+                }
+            }
+
+            private Explanation transformAnswer(Port onPort, ConceptMap answer) {
+                Rule.Condition.ConditionBranch branch = portToRuleCondition.get(onPort);
+                Pair<Unifier, Unifier.Requirements.Instance> unifiers = portUnifiers.get(onPort);
+                Map<Identifier.Variable, Concept> conclusionConceptMap = new HashMap<>(answer.concepts());
+                PartialExplanation pe = PartialExplanation.create(
+                        branch.rule(),
+                        conclusionConceptMap,
+                        answer
+                );
+                return new Explanation(branch.rule(), unifiers.first().mapping(), pe.conclusionAnswer(), pe.conditionAnswer());
+            }
+
+            @Override
+            protected void handleDone(Port onPort) {
+                activePorts.remove(onPort);
+                if (activePorts.isEmpty()) {
+                    Explain.this.finish();
                     nodeRegistry.perfCounters().stopPrinting();
                 }
             }
