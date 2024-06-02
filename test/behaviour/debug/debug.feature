@@ -84,7 +84,7 @@ Feature: Debugging Space
     Then verify answer size is: 2
 
   Scenario: test concludable
-
+    Given verifier is initialised
     Given reasoning query
     """
     match
@@ -93,6 +93,7 @@ Feature: Debugging Space
     """
 
     Then verify answer size is: 2
+    Then verify answers are sound
 
   Scenario: test other concludable
 

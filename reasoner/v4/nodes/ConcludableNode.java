@@ -33,7 +33,7 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
         this.conclusioNodePorts = new HashMap<>();
         Driver<ConcludableLookupNode> lookupNode = nodeRegistry.createLocalNode(driver -> new ConcludableLookupNode(resolvable, bounds, nodeRegistry, driver));
         this.lookupPort = createPort(lookupNode.actor());
-
+        // TODO: This seems a bit inefficient. We use multiple ports for the same node just because we have multiple unifiers
         nodeRegistry.logicManager().applicableRules(resolvable).forEach((rule, unifiers) -> {
             unifiers.forEach(unifier -> unifier.unify(bounds).ifPresent(boundsAndRequirements -> {
                 ActorNode<?> conclusionNode = nodeRegistry.conclusionSubRegistry(rule.conclusion()).getNode(boundsAndRequirements.first());
