@@ -53,7 +53,8 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
         if (onPort.isReady()) onPort.readNext();
     }
 
-    private static synchronized Optional<Response.Conclusion> materialise(NodeRegistry nodeRegistry, Response.Answer msg, Rule.Conclusion conclusion) {
+    // TODO: Undo public
+    public static synchronized Optional<Response.Conclusion> materialise(NodeRegistry nodeRegistry, Response.Answer msg, Rule.Conclusion conclusion) {
         Rule.Conclusion.Materialisable materialisable = conclusion.materialisable(msg.answer(), nodeRegistry.conceptManager());
         Optional<Response.Conclusion> response = Materialiser
                 .materialise(materialisable, nodeRegistry.traversalEngine(), nodeRegistry.conceptManager())

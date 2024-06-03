@@ -3,6 +3,7 @@ package com.vaticle.typedb.core.reasoner.v4.nodes;
 import com.vaticle.typedb.common.collection.Collections;
 import com.vaticle.typedb.common.collection.ConcurrentSet;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
+import com.vaticle.typedb.core.common.parameters.Options;
 import com.vaticle.typedb.core.common.perfcounter.PerfCounters;
 import com.vaticle.typedb.core.concept.ConceptManager;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
@@ -47,7 +48,7 @@ public class NodeRegistry {
     private final Set<ActorNode<?>> roots;
     private final LogicManager logicManager;
     private final RecursivePlanner planner;
-    ;
+    private final Options.Transaction transactionOptions;
     private final ReasonerPerfCounters perfCounters;
     private AtomicBoolean terminated;
     private final TraversalEngine traversalEngine;
@@ -61,7 +62,7 @@ public class NodeRegistry {
 
     public NodeRegistry(ActorExecutorGroup executorService, ReasonerPerfCounters perfCounters,
                         ConceptManager conceptManager, LogicManager logicManager, TraversalEngine traversalEngine,
-                        ReasonerPlanner planner) {
+                        ReasonerPlanner planner, Options.Transaction options) {
         this.executorService = executorService;
         this.perfCounters = perfCounters;
         this.perfCountersFields = new PerfCounterFields(perfCounters);
@@ -69,6 +70,8 @@ public class NodeRegistry {
         this.conceptManager = conceptManager;
         this.logicManager = logicManager;
         this.planner = planner.asRecursivePlanner();
+        this.transactionOptions = options;
+
         this.csPlans = new HashMap<>();
         this.cyclicConjunctionStreamPlans = new HashSet<>();
         this.conjunctionSubRegistries = new HashMap<>();
@@ -116,8 +119,10 @@ public class NodeRegistry {
             ReasonerPlanner.Plan plan = planner.getPlan(callMode.conjunction, callMode.mode);
             Set<Identifier.Variable.Retrievable> modeIds = iterate(callMode.mode).map(Variable::id)
                     .filter(Identifier::isRetrievable).map(Identifier.Variable::asRetrievable).toSet();
+
+            Set<Identifier.Variable.Retrievable> csPlanOutputVariables = (transactionOptions.explain()) ? callMode.conjunction.pattern().retrieves() : outputVariables;
             ConjunctionController.ConjunctionStreamPlan csPlan = ConjunctionController.ConjunctionStreamPlan.createUnflattened(
-                    plan.plan(), modeIds, outputVariables);
+                    plan.plan(), modeIds, csPlanOutputVariables);
             csPlans.put(callMode, csPlan);
 
             Set<Variable> runningBounds = new HashSet<>(callMode.mode);

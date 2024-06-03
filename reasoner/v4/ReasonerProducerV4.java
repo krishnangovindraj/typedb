@@ -18,6 +18,7 @@
 package com.vaticle.typedb.core.reasoner.v4;
 
 import com.vaticle.typedb.common.collection.Pair;
+import com.vaticle.typedb.core.common.cache.CommonCache;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.parameters.Options;
 import com.vaticle.typedb.core.concept.Concept;
@@ -25,12 +26,14 @@ import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.concurrent.producer.Producer;
 import com.vaticle.typedb.core.logic.Rule;
 import com.vaticle.typedb.core.logic.resolvable.*;
+import com.vaticle.typedb.core.pattern.variable.Variable;
 import com.vaticle.typedb.core.reasoner.ExplainablesManager;
 import com.vaticle.typedb.core.reasoner.answer.Explanation;
 import com.vaticle.typedb.core.reasoner.answer.PartialExplanation;
 import com.vaticle.typedb.core.reasoner.controller.ConjunctionController;
 import com.vaticle.typedb.core.reasoner.planner.ReasonerPlanner;
 import com.vaticle.typedb.core.reasoner.v4.nodes.ActorNode;
+import com.vaticle.typedb.core.reasoner.v4.nodes.ConclusionNode;
 import com.vaticle.typedb.core.reasoner.v4.nodes.NodeRegistry;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 import com.vaticle.typedb.core.traversal.common.Modifiers;
@@ -41,6 +44,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.*;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
 import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducerV4.State.EXCEPTION;
@@ -258,7 +262,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
 
             private ConceptMap transformAnswer(ResolvableConjunction conj, ConceptMap answer) {
                 if (options.explain()) {
-                    return enrichWithExplainables(Basic.this, conj, answer);
+                    return enrichWithExplainables(Basic.this, conj, Collections.emptySet(), answer);
                 } else {
                     return answer.filter(filter);
                 }
@@ -309,6 +313,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
         public synchronized void receiveAnswer(Explanation answer) {
             state = READY;
             if (!seenAnswers.contains(answer) ) {
+                explainablesManager.setAndRecordExplainables(answer.conditionAnswer());
                 seenAnswers.add(answer);
                 queue.put(answer);
                 if (requiredAnswers.decrementAndGet() > 0) pull();
@@ -327,11 +332,13 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
             // This also means re-using the original bounds of the concludable, and filtering out the answers that don't match.
             private final Map<Port, Pair<Unifier, Unifier.Requirements.Instance>> portUnifiers; // TODO: Improve
             private final Map<Port, Rule.Condition.ConditionBranch> portToRuleCondition;
+            private final Map<Port,Set<Variable>> portToRuleBounds;
 
             protected ExplainNode(NodeRegistry nodeRegistry, Driver<ExplainNode> driver) {
                 super(nodeRegistry, driver, () -> "ExplainNode: " + concludable.pattern() + "/" + bounds);
                 portUnifiers = new HashMap<>();
                 portToRuleCondition = new HashMap<>();
+                portToRuleBounds = new HashMap<>();
             }
 
             @Override
@@ -347,6 +354,8 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
                             Port port = createPort(nodeRegistry.getRegistry(csPlan).getNode(filteredBounds));
                             portUnifiers.put(port, new Pair<>(unifier, boundsAndRequirements.second()));
                             portToRuleCondition.put(port, branch);
+                            Set<Variable> mode = filteredBounds.concepts().keySet().stream().map(id -> branch.conjunction().pattern().variable(id)).collect(Collectors.toSet());
+                            portToRuleBounds.put(port, mode);
                         });
                     }));
                 });
@@ -379,23 +388,17 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
             @Override
             protected void handleAnswer(Port onPort, Response.Answer answer) {
                 // Check if it matches the bounds
-                Pair<Unifier, Unifier.Requirements.Instance> unifiers = portUnifiers.get(onPort);
-
-                Map<Identifier.Variable, Concept> reverseMapped = new HashMap<>();
-                // Construct
-                unifiers.first().reverseUnifier().forEach((answerVar, concludableVarSet)-> {
-                    if (answerVar.isVariable()) {
-                        concludableVarSet.forEach(concludableVar -> reverseMapped.put(concludableVar, answer.answer().get(answerVar.asRetrievable())));
-                    }
-                });
-                if (reverseMapped.getOrDefault(concludable.generatingVariable().id(), null) == null) {
-                    // The when concepts may not have the generating variable. Inject it.
-                    assert concludable.isRelation();
-                    reverseMapped.put(concludable.generatingVariable().id(), bounds.get(concludable.generatingVariable().id()));
+                Rule.Condition.ConditionBranch condition = portToRuleCondition.get(onPort);
+                Optional<Response.Conclusion> thenConcepts = ConclusionNode.materialise(nodeRegistry, answer, condition.rule().conclusion());
+                if (thenConcepts.isEmpty()) {
+                    readNextAnswer();
+                    return; // Not inferred
                 }
 
-                if (reverseMapped.equals(bounds.concepts())) {
-                    Explanation explanation = createExplanation(onPort, reverseMapped, answer.answer());
+                Pair<Unifier, Unifier.Requirements.Instance> unifiers = portUnifiers.get(onPort);
+                Optional<ConceptMap> reverseMapped = unifiers.first().unUnify(thenConcepts.get().conclusionAnswer(), unifiers.second()).first();
+                if (reverseMapped.isPresent() && reverseMapped.get().concepts().equals(bounds.concepts())) {
+                    Explanation explanation = createExplanation(onPort, thenConcepts.get().conclusionAnswer(), answer.answer());
                     Explain.this.receiveAnswer(explanation);
                 } else {
                     readNextAnswer();
@@ -405,7 +408,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
             private Explanation createExplanation(Port onPort, Map<Identifier.Variable, Concept> conclusionConceptMap, ConceptMap conditionAnswer) {
                 Rule.Condition.ConditionBranch branch = portToRuleCondition.get(onPort);
                 Pair<Unifier, Unifier.Requirements.Instance> unifiers = portUnifiers.get(onPort);
-                ConceptMap enrichedAnswer = enrichWithExplainables(Explain.this, branch.conjunction(), conditionAnswer);
+                ConceptMap enrichedAnswer = enrichWithExplainables(Explain.this, branch.conjunction(), portToRuleBounds.get(onPort), conditionAnswer);
                 PartialExplanation pe = PartialExplanation.create(
                         branch.rule(),
                         conclusionConceptMap,
@@ -425,8 +428,8 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
         }
     }
 
-    static ConceptMap enrichWithExplainables(ReasonerProducerV4<?,?> producerForContext, ResolvableConjunction conj, ConceptMap answer) {
-        ReasonerPlanner.Plan plan = producerForContext.nodeRegistry.planner().getPlan(conj, Collections.emptySet());
+    static ConceptMap enrichWithExplainables(ReasonerProducerV4<?,?> producerForContext, ResolvableConjunction conj, Set<Variable> mode,  ConceptMap answer) {
+        ReasonerPlanner.Plan plan = producerForContext.nodeRegistry.planner().getPlan(conj, mode);
         ConceptMap withExplainables = answer;
         Set<Identifier.Variable.Retrievable> bounds = new HashSet<>();
         for (Resolvable<?> resolvable : plan.plan()) {
