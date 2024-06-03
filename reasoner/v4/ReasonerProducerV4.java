@@ -25,7 +25,6 @@ import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.concurrent.producer.Producer;
 import com.vaticle.typedb.core.logic.Rule;
 import com.vaticle.typedb.core.logic.resolvable.*;
-import com.vaticle.typedb.core.pattern.variable.Variable;
 import com.vaticle.typedb.core.reasoner.ExplainablesManager;
 import com.vaticle.typedb.core.reasoner.answer.Explanation;
 import com.vaticle.typedb.core.reasoner.answer.PartialExplanation;
@@ -259,29 +258,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
 
             private ConceptMap transformAnswer(ResolvableConjunction conj, ConceptMap answer) {
                 if (options.explain()) {
-                    ReasonerPlanner.Plan plan = nodeRegistry.planner().getPlan(conj, Collections.emptySet());
-                    ConceptMap withExplainables = answer;
-                    Set<Identifier.Variable.Retrievable> bounds = new HashSet<>();
-                    for (Resolvable<?> resolvable : plan.plan()) {
-                        if (resolvable.isConcludable()) {
-                            Concludable concludable = resolvable.asConcludable();
-                            if (concludable.isRelation()) {
-                                withExplainables = withExplainables.withExplainableConcept(concludable.asRelation().generatingVariable().id(), concludable.pattern());
-                            } else if (concludable.isAttribute()) {
-                                withExplainables = withExplainables.withExplainableConcept(concludable.asAttribute().generatingVariable().id(), concludable.pattern());
-                            } else if (concludable.isIsa()) {
-                                // TODO?
-                                // withExplainables = withExplainables.withExplainableConcept(concludable.asIsa().generatingVariable().id(), concludable.pattern());
-                            } else if (concludable.isHas()) {
-                                withExplainables = withExplainables.withExplainableOwnership(concludable.asHas().owner().id(), concludable.asHas().attribute().id(), concludable.pattern());
-                            } else {
-                                throw TypeDBException.of(ILLEGAL_STATE);
-                            }
-                            explainablesManager.recordBounds(concludable.pattern(), new HashSet<>(bounds));
-                        }
-                        bounds.addAll(resolvable.retrieves());
-                    }
-                    return withExplainables;
+                    return enrichWithExplainables(Basic.this, conj, answer);
                 } else {
                     return answer.filter(filter);
                 }
@@ -296,6 +273,8 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
                 }
             }
         }
+
+
     }
 
     // This requires some work to track the bounds for efficient re-use
@@ -401,24 +380,36 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
             protected void handleAnswer(Port onPort, Response.Answer answer) {
                 // Check if it matches the bounds
                 Pair<Unifier, Unifier.Requirements.Instance> unifiers = portUnifiers.get(onPort);
-                Map<Identifier.Variable, Concept> toUnunify = new HashMap<>(answer.answer().concepts());
-                boolean anyMatch = unifiers.first().unUnify(toUnunify, unifiers.second())
-                        .anyMatch(conceptMap -> conceptMap.equals(bounds));
-                if (anyMatch) {
-                    Explain.this.receiveAnswer(transformAnswer(onPort, answer.answer()));
+
+                Map<Identifier.Variable, Concept> reverseMapped = new HashMap<>();
+                // Construct
+                unifiers.first().reverseUnifier().forEach((answerVar, concludableVarSet)-> {
+                    if (answerVar.isVariable()) {
+                        concludableVarSet.forEach(concludableVar -> reverseMapped.put(concludableVar, answer.answer().get(answerVar.asRetrievable())));
+                    }
+                });
+                if (reverseMapped.getOrDefault(concludable.generatingVariable().id(), null) == null) {
+                    // The when concepts may not have the generating variable. Inject it.
+                    assert concludable.isRelation();
+                    reverseMapped.put(concludable.generatingVariable().id(), bounds.get(concludable.generatingVariable().id()));
+                }
+
+                if (reverseMapped.equals(bounds.concepts())) {
+                    Explanation explanation = createExplanation(onPort, reverseMapped, answer.answer());
+                    Explain.this.receiveAnswer(explanation);
                 } else {
                     readNextAnswer();
                 }
             }
 
-            private Explanation transformAnswer(Port onPort, ConceptMap answer) {
+            private Explanation createExplanation(Port onPort, Map<Identifier.Variable, Concept> conclusionConceptMap, ConceptMap conditionAnswer) {
                 Rule.Condition.ConditionBranch branch = portToRuleCondition.get(onPort);
                 Pair<Unifier, Unifier.Requirements.Instance> unifiers = portUnifiers.get(onPort);
-                Map<Identifier.Variable, Concept> conclusionConceptMap = new HashMap<>(answer.concepts());
+                ConceptMap enrichedAnswer = enrichWithExplainables(Explain.this, branch.conjunction(), conditionAnswer);
                 PartialExplanation pe = PartialExplanation.create(
                         branch.rule(),
                         conclusionConceptMap,
-                        answer
+                        enrichedAnswer
                 );
                 return new Explanation(branch.rule(), unifiers.first().mapping(), pe.conclusionAnswer(), pe.conditionAnswer());
             }
@@ -432,5 +423,31 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
                 }
             }
         }
+    }
+
+    static ConceptMap enrichWithExplainables(ReasonerProducerV4<?,?> producerForContext, ResolvableConjunction conj, ConceptMap answer) {
+        ReasonerPlanner.Plan plan = producerForContext.nodeRegistry.planner().getPlan(conj, Collections.emptySet());
+        ConceptMap withExplainables = answer;
+        Set<Identifier.Variable.Retrievable> bounds = new HashSet<>();
+        for (Resolvable<?> resolvable : plan.plan()) {
+            if (resolvable.isConcludable()) {
+                Concludable concludable = resolvable.asConcludable();
+                if (concludable.isRelation()) {
+                    withExplainables = withExplainables.withExplainableConcept(concludable.asRelation().generatingVariable().id(), concludable.pattern());
+                } else if (concludable.isAttribute()) {
+                    withExplainables = withExplainables.withExplainableConcept(concludable.asAttribute().generatingVariable().id(), concludable.pattern());
+                } else if (concludable.isIsa()) {
+                    // TODO?
+                    // withExplainables = withExplainables.withExplainableConcept(concludable.asIsa().generatingVariable().id(), concludable.pattern());
+                } else if (concludable.isHas()) {
+                    withExplainables = withExplainables.withExplainableOwnership(concludable.asHas().owner().id(), concludable.asHas().attribute().id(), concludable.pattern());
+                } else {
+                    throw TypeDBException.of(ILLEGAL_STATE);
+                }
+                producerForContext.explainablesManager.recordBounds(concludable.pattern(), new HashSet<>(bounds));
+            }
+            bounds.addAll(resolvable.retrieves());
+        }
+        return withExplainables;
     }
 }
