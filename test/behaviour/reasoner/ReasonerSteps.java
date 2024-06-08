@@ -179,21 +179,18 @@ public class ReasonerSteps {
 
     @Then("verify answers are correct")
     public void verify_answers_are_correct() {
-        System.out.println("TODO: Reenable step: verify answers are correct");
-//        correctnessVerifier.verifySoundness(typeQLQuery);
-//        correctnessVerifier.verifyCompleteness(typeQLQuery);
+        correctnessVerifier.verifySoundness(typeQLQuery);
+        correctnessVerifier.verifyCompleteness(typeQLQuery);
     }
 
     @Then("verify answers are sound")
     public void verify_answers_are_sound() {
-//        System.out.println("TODO: Reenable step: verify answers are sound");
         correctnessVerifier.verifySoundness(typeQLQuery);
     }
 
     @Then("verify answers are complete")
     public void verify_answers_are_complete() {
-        System.out.println("TODO: Reenable step: verify answers are complete");
-//        correctnessVerifier.verifyCompleteness(typeQLQuery);
+        correctnessVerifier.verifyCompleteness(typeQLQuery);
     }
 
     private static void resetDirectory() throws IOException {
