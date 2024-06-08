@@ -18,7 +18,6 @@
 package com.vaticle.typedb.core.reasoner.v4;
 
 import com.vaticle.typedb.common.collection.Pair;
-import com.vaticle.typedb.core.common.cache.CommonCache;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.parameters.Options;
 import com.vaticle.typedb.core.concept.Concept;
@@ -437,6 +436,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
     static ConceptMap enrichWithExplainables(ReasonerProducerV4<?,?> producerForContext, ResolvableConjunction conj, Set<Variable> mode,  ConceptMap answer) {
         ReasonerPlanner.Plan plan = producerForContext.nodeRegistry.planner().getPlan(conj, mode);
         Set<Identifier.Variable.Retrievable> bounds = new HashSet<>();
+        mode.forEach(v -> bounds.add(v.id().asRetrievable()));
         ConceptMap.Explainables.ExplainablesBuilder builder = new ConceptMap.Explainables.ExplainablesBuilder();
         for (Resolvable<?> resolvable : plan.plan()) {
             if (resolvable.isConcludable()) {
@@ -453,9 +453,8 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
                 } else {
                     throw TypeDBException.of(ILLEGAL_STATE);
                 }
-                // We don't have to worry about the same explainable having been evaluated under multiple plans // TODO: Unless it's a bound relation?
-//                Set<Identifier.Variable.Retrievable> concludableBounds = com.vaticle.typedb.common.collection.Collections.intersection(bounds, concludable.pattern().retrieves());
-                producerForContext.explainablesManager.recordBounds(concludable.pattern(), new HashSet<>(bounds));
+                // Explainables might override plans. // TODO: Is this ok for a bound relation?
+                producerForContext.explainablesManager.recordBoundsIfNotPresent(concludable.pattern(), new HashSet<>(bounds));
             }
             bounds.addAll(resolvable.retrieves());
         }
