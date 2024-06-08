@@ -6,6 +6,8 @@ import com.vaticle.typedb.core.common.iterator.Iterators;
 import com.vaticle.typedb.core.concurrent.actor.Actor;
 import com.vaticle.typedb.core.reasoner.v4.Request;
 import com.vaticle.typedb.core.reasoner.v4.Response;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -23,6 +25,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     protected List<ActorNode.Port> ports;
     protected final Set<ActorNode.Port> activePorts;
     protected final AnswerTable answerTable;
+    private static final Logger TRACER_LOG = LoggerFactory.getLogger("ReasonerTracer");
 
     protected AbstractAcyclicNode(NodeRegistry nodeRegistry, Driver<NODE> driver, Supplier<String> debugName) {
         super(driver, debugName);
@@ -33,12 +36,16 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
         answerTable = new AnswerTable();
     }
 
+    protected static void trace(String formatStr, Object... args) {
+        TRACER_LOG.info(String.format(formatStr, args));
+    }
+
     protected void initialise() {
-        System.out.printf("CREATION: Node[%d] has been created as a %s\n", this.nodeId, this.getClass().getSimpleName());
+        trace("CREATION: Node[%d] has been created as a %s", this.nodeId, this.getClass().getSimpleName());
     }
 
     public void receiveRequest(ActorNode.Port requester, Request request) {
-        System.out.printf("RECV_REQUEST: Node[%d] received request %s from Node[%d]\n", this.nodeId, request, requester.owner().nodeId);
+        trace("RECV_REQUEST: Node[%d] received request %s from Node[%d]", this.nodeId, request, requester.owner().nodeId);
         switch (request.type()) {
             case HELLO : {
                 hello(requester, request.asHello());
@@ -125,13 +132,13 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
 
     // TODO: See if i can safely get recipient from port
     protected void sendResponse(ActorNode<?> recipient, ActorNode.Port recipientPort, Response response) { // TODO: Refactor redundant recipient
-        System.out.printf("SEND_RESPONSE: Node[%d] sent response %s to Node[%d]\n", this.nodeId, response, recipient.nodeId);
+        trace("SEND_RESPONSE: Node[%d] sent response %s to Node[%d]", this.nodeId, response, recipient.nodeId);
         assert recipientPort.remote().equals(this);
         recipient.driver().execute(actor -> actor.receiveResponseOnPort(recipientPort, response));
     }
 
     protected void receiveResponseOnPort(ActorNode.Port port, Response response) {
-        System.out.printf("RECV_RESPONSE: Node[%d] received response %s from Node[%d]\n", port.owner().nodeId, response, port.remote().nodeId);
+        trace("RECV_RESPONSE: Node[%d] received response %s from Node[%d]", port.owner().nodeId, response, port.remote().nodeId);
         port.mayUpdateStateOnReceive(response); // Is it strange that I call this implicitly?
         receiveResponse(port, response);
     }

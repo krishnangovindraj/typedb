@@ -55,7 +55,7 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
             } else {
                 terminationTracker.notifyTermination();
                 Response done = answerTable.recordDone();
-                System.out.printf("TERMINATE: Node[%d] has terminated\n", this.nodeId);
+                trace("TERMINATE: Node[%d] has terminated", this.nodeId);
                 return done;
             }
         }

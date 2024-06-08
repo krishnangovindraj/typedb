@@ -27,8 +27,6 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     // At the start of an iteration, the SCC leader must write these messages to it's table, and then send a growTree to all it's with the new target (0 for the first iteration).
     // The target for further iterations is the subtree sum + the size of the (Careful to include/exclude the TreeVote message)
 
-    static final Logger LOG = LoggerFactory.getLogger(ActorNode.class);
-
     private final Set<Port> downstreamPorts;
 
     protected TerminationTracker terminationTracker;
@@ -181,13 +179,13 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
             Response toSend = answerTable.recordDone();
             subscribers.forEachRemaining(subscriber -> sendResponse(subscriber.owner(), subscriber, toSend));
-            System.out.printf("TERMINATE: Node[%d] has terminated\n", this.nodeId);
+            trace("TERMINATE: Node[%d] has terminated", this.nodeId);
         }
     }
 
 
     protected Port createPort(ActorNode<?> remote) {
-        System.out.printf("PORT: Node[%d] opened a port to Node[%d]\n", this.nodeId, remote.nodeId);
+        trace("PORT: Node[%d] opened a port to Node[%d]", this.nodeId, remote.nodeId);
         Port port = new Port(this, remote);
         ports.add(port);
         activePorts.add(port);
@@ -239,7 +237,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         }
 
         private void sendRequest(Request request) {
-            System.out.printf("SEND_REQUEST: Node[%d] sent request %s to Node[%d]\n", owner.nodeId, request, remote.nodeId);
+            trace("SEND_REQUEST: Node[%d] sent request %s to Node[%d]", owner.nodeId, request, remote.nodeId);
             remote.driver().execute(nodeActor -> nodeActor.receiveRequest(this, request));
         }
 

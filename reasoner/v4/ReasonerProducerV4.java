@@ -279,8 +279,6 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
                 }
             }
         }
-
-
     }
 
     // TODO: Three kinds of explanation tests currently fail:
