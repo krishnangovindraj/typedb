@@ -198,7 +198,9 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
         public synchronized void receiveAnswer(ConceptMap answer) {
             state = READY;
             if (!seenAnswers.contains(answer)) {
-                explainablesManager.setAndRecordExplainables(answer);
+                if (!answer.explainables().isEmpty()) {
+                    explainablesManager.setAndRecordExplainables(answer);
+                }
                 seenAnswers.add(answer);
                 queue.put(answer);
                 if (requiredAnswers.decrementAndGet() > 0) pull();
@@ -215,6 +217,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
 
             @Override
             public void initialise() {
+                super.initialise();
                 disjunction.conjunctions().forEach(conjunction -> {
                     ConjunctionController.ConjunctionStreamPlan csPlan = nodeRegistry.conjunctionStreamPlan(conjunction, ConceptMap.EMPTY);
                     NodeRegistry.SubRegistry<?, ?> subRegistry = nodeRegistry.getRegistry(csPlan);
@@ -290,7 +293,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
         public Explain(Concludable explainableConcludable, ConceptMap explainableBounds, Options.Query options, NodeRegistry nodeRegistry, ExplainablesManager explainablesManager) {
             super(options, nodeRegistry, explainablesManager);
             this.concludable = explainableConcludable;
-            this.bounds = explainableBounds;
+            this.bounds = explainableBounds.filter(explainableConcludable.retrieves());
             this.answersReceived = new AtomicInteger(0);
         }
 
@@ -313,7 +316,9 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
         public synchronized void receiveAnswer(Explanation answer) {
             state = READY;
             if (!seenAnswers.contains(answer) ) {
-                explainablesManager.setAndRecordExplainables(answer.conditionAnswer());
+                if (!answer.conditionAnswer().explainables().isEmpty()) {
+                    explainablesManager.setAndRecordExplainables(answer.conditionAnswer());
+                }
                 seenAnswers.add(answer);
                 queue.put(answer);
                 if (requiredAnswers.decrementAndGet() > 0) pull();
@@ -343,6 +348,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
 
             @Override
             public void initialise() {
+                super.initialise();
                 // TODO: This seems a bit inefficient. We use multiple ports for the same node just because we have multiple unifiers
                 Set<Identifier.Variable.Retrievable> reusableBoundVariables = explainablesManager.getBounds(concludable.pattern());
                 ConceptMap reusableBounds = bounds.filter(reusableBoundVariables);
@@ -430,27 +436,29 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
 
     static ConceptMap enrichWithExplainables(ReasonerProducerV4<?,?> producerForContext, ResolvableConjunction conj, Set<Variable> mode,  ConceptMap answer) {
         ReasonerPlanner.Plan plan = producerForContext.nodeRegistry.planner().getPlan(conj, mode);
-        ConceptMap withExplainables = answer;
         Set<Identifier.Variable.Retrievable> bounds = new HashSet<>();
+        ConceptMap.Explainables.ExplainablesBuilder builder = new ConceptMap.Explainables.ExplainablesBuilder();
         for (Resolvable<?> resolvable : plan.plan()) {
             if (resolvable.isConcludable()) {
                 Concludable concludable = resolvable.asConcludable();
                 if (concludable.isRelation()) {
-                    withExplainables = withExplainables.withExplainableConcept(concludable.asRelation().generatingVariable().id(), concludable.pattern());
+                    builder.addRelation(concludable.asRelation().generatingVariable().id(), ConceptMap.Explainable.of(concludable, concludable.pattern()));
                 } else if (concludable.isAttribute()) {
-                    withExplainables = withExplainables.withExplainableConcept(concludable.asAttribute().generatingVariable().id(), concludable.pattern());
+                    builder.addAttribute(concludable.asAttribute().generatingVariable().id(), ConceptMap.Explainable.of(concludable, concludable.pattern()));
                 } else if (concludable.isIsa()) {
                     // TODO?
                     // withExplainables = withExplainables.withExplainableConcept(concludable.asIsa().generatingVariable().id(), concludable.pattern());
                 } else if (concludable.isHas()) {
-                    withExplainables = withExplainables.withExplainableOwnership(concludable.asHas().owner().id(), concludable.asHas().attribute().id(), concludable.pattern());
+                    builder.addHas(concludable.asHas().owner().id(), concludable.asHas().attribute().id(), ConceptMap.Explainable.of(concludable, concludable.pattern()));
                 } else {
                     throw TypeDBException.of(ILLEGAL_STATE);
                 }
+                // We don't have to worry about the same explainable having been evaluated under multiple plans // TODO: Unless it's a bound relation?
+//                Set<Identifier.Variable.Retrievable> concludableBounds = com.vaticle.typedb.common.collection.Collections.intersection(bounds, concludable.pattern().retrieves());
                 producerForContext.explainablesManager.recordBounds(concludable.pattern(), new HashSet<>(bounds));
             }
             bounds.addAll(resolvable.retrieves());
         }
-        return withExplainables;
+        return new ConceptMap(answer.concepts(), builder.build());
     }
 }
