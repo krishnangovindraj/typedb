@@ -29,7 +29,7 @@ import com.vaticle.typedb.core.pattern.variable.Variable;
 import com.vaticle.typedb.core.reasoner.ExplainablesManager;
 import com.vaticle.typedb.core.reasoner.answer.Explanation;
 import com.vaticle.typedb.core.reasoner.answer.PartialExplanation;
-import com.vaticle.typedb.core.reasoner.controller.ConjunctionController;
+import com.vaticle.typedb.core.reasoner.planner.ConjunctionStreamPlan;
 import com.vaticle.typedb.core.reasoner.planner.ReasonerPlanner;
 import com.vaticle.typedb.core.reasoner.v4.nodes.ActorNode;
 import com.vaticle.typedb.core.reasoner.v4.nodes.ConclusionNode;
@@ -46,18 +46,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
-import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducerV4.State.EXCEPTION;
-import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducerV4.State.FINISHED;
-import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducerV4.State.INIT;
-import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducerV4.State.INITIALISING;
-import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducerV4.State.PULLING;
-import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducerV4.State.READY;
+import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducer.State.EXCEPTION;
+import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducer.State.FINISHED;
+import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducer.State.INIT;
+import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducer.State.INITIALISING;
+import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducer.State.PULLING;
+import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducer.State.READY;
 
 
 @ThreadSafe
-public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, ANSWER> implements Producer<ANSWER>, ReasonerConsumerV4 {
+public abstract class ReasonerProducer<ROOTNODE extends ActorNode<ROOTNODE>, ANSWER> implements Producer<ANSWER>, ReasonerConsumer {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ReasonerProducerV4.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ReasonerProducer.class);
 
     protected final NodeRegistry nodeRegistry;
     protected final ExplainablesManager explainablesManager;
@@ -79,7 +79,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
     }
 
     // TODO: this class should not be a Producer, it implements a different async processing mechanism
-    private ReasonerProducerV4(Options.Query options, NodeRegistry nodeRegistry, ExplainablesManager explainablesManager) {
+    private ReasonerProducer(Options.Query options, NodeRegistry nodeRegistry, ExplainablesManager explainablesManager) {
         this.options = options;
         this.nodeRegistry = nodeRegistry;
         this.explainablesManager = explainablesManager;
@@ -163,7 +163,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
 
     }
 
-    public static class Basic extends ReasonerProducerV4<Basic.RootNode, ConceptMap> {
+    public static class Basic extends ReasonerProducer<Basic.RootNode, ConceptMap> {
 
         private final ResolvableDisjunction disjunction;
         private final Modifiers.Filter filter;
@@ -218,7 +218,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
             public void initialise() {
                 super.initialise();
                 disjunction.conjunctions().forEach(conjunction -> {
-                    ConjunctionController.ConjunctionStreamPlan csPlan = nodeRegistry.conjunctionStreamPlan(conjunction, ConceptMap.EMPTY);
+                    ConjunctionStreamPlan csPlan = nodeRegistry.conjunctionStreamPlan(conjunction, ConceptMap.EMPTY);
                     NodeRegistry.SubRegistry<?, ?> subRegistry = nodeRegistry.getRegistry(csPlan);
                     Port port = createPort(subRegistry.getNode(ConceptMap.EMPTY));
                     ports.add(port);
@@ -286,7 +286,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
     // These seem to be because of differences with how the oracle and we interpret things
     // We consider an answer with a type bound to a type variable to be explainable by an answer with a subtype bound.
     // We consider value-predicates to be concludable & explainable - If the attribute is bound, we probably shouldn't.
-    public static class Explain extends ReasonerProducerV4<Explain.ExplainNode, Explanation> {
+    public static class Explain extends ReasonerProducer<Explain.ExplainNode, Explanation> {
         private final Concludable concludable;
         private final ConceptMap bounds;
         private AtomicInteger answersReceived;
@@ -357,7 +357,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
                     unifiers.forEach(unifier -> unifier.unify(reusableBounds).ifPresent(boundsAndRequirements -> {
                         rule.condition().branches().forEach(branch -> {
                             ConceptMap filteredBounds = boundsAndRequirements.first().filter(branch.conjunction().pattern().retrieves());
-                            ConjunctionController.ConjunctionStreamPlan csPlan = nodeRegistry.conjunctionStreamPlan(branch.conjunction(), filteredBounds);
+                            ConjunctionStreamPlan csPlan = nodeRegistry.conjunctionStreamPlan(branch.conjunction(), filteredBounds);
                             Port port = createPort(nodeRegistry.getRegistry(csPlan).getNode(filteredBounds));
                             portUnifiers.put(port, new Pair<>(unifier, boundsAndRequirements.second()));
                             portToRuleCondition.put(port, branch);
@@ -435,7 +435,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
         }
     }
 
-    static ConceptMap enrichWithExplainables(ReasonerProducerV4<?,?> producerForContext, ResolvableConjunction conj, Set<Variable> mode,  ConceptMap answer) {
+    static ConceptMap enrichWithExplainables(ReasonerProducer<?,?> producerForContext, ResolvableConjunction conj, Set<Variable> mode, ConceptMap answer) {
         ReasonerPlanner.Plan plan = producerForContext.nodeRegistry.planner().getPlan(conj, mode);
         Set<Identifier.Variable.Retrievable> bounds = new HashSet<>();
         mode.forEach(v -> bounds.add(v.id().asRetrievable()));

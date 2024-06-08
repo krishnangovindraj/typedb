@@ -5,8 +5,7 @@ import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.concept.Concept;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.logic.resolvable.ResolvableConjunction;
-import com.vaticle.typedb.core.reasoner.controller.ConjunctionController;
-import com.vaticle.typedb.core.reasoner.controller.ConjunctionController.ConjunctionStreamPlan.CompoundStreamPlan;
+import com.vaticle.typedb.core.reasoner.planner.ConjunctionStreamPlan;
 import com.vaticle.typedb.core.reasoner.v4.Response;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 import org.slf4j.Logger;
@@ -21,11 +20,11 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
     private static final Logger LOG = LoggerFactory.getLogger(ConjunctionNode.class);
     private final ResolvableConjunction conjunction;
     private final ConceptMap bounds;
-    private final CompoundStreamPlan compoundStreamPlan;
+    private final ConjunctionStreamPlan.CompoundStreamPlan compoundStreamPlan;
     private Port leftChildPort;
     private Map<Port, ConceptMap> rightPortExtensions;
 
-    public ConjunctionNode(ResolvableConjunction conjunction, ConceptMap bounds, CompoundStreamPlan compoundStreamPlan, NodeRegistry nodeRegistry, Driver<ConjunctionNode> driver) {
+    public ConjunctionNode(ResolvableConjunction conjunction, ConceptMap bounds, ConjunctionStreamPlan.CompoundStreamPlan compoundStreamPlan, NodeRegistry nodeRegistry, Driver<ConjunctionNode> driver) {
         super(nodeRegistry, driver, () -> "ConjunctionNode[" + conjunction + ", " + bounds + "]");
         this.conjunction = conjunction;
         this.bounds = bounds;
@@ -81,11 +80,11 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
         return new ConceptMap(compounded, into.explainables().merge(from.explainables()));
     }
 
-    private ConjunctionController.ConjunctionStreamPlan leftPlan() {
+    private ConjunctionStreamPlan leftPlan() {
         return compoundStreamPlan.childAt(0);
     }
 
-    private ConjunctionController.ConjunctionStreamPlan rightPlan() {
+    private ConjunctionStreamPlan rightPlan() {
         return compoundStreamPlan.childAt(1);
     }
 }

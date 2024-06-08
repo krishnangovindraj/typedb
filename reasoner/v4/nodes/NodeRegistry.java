@@ -14,9 +14,8 @@ import com.vaticle.typedb.core.logic.Rule;
 import com.vaticle.typedb.core.logic.resolvable.*;
 import com.vaticle.typedb.core.pattern.variable.Variable;
 import com.vaticle.typedb.core.reasoner.common.ReasonerPerfCounters;
-import com.vaticle.typedb.core.reasoner.controller.ConjunctionController;
-import com.vaticle.typedb.core.reasoner.controller.ConjunctionController.ConjunctionStreamPlan.CompoundStreamPlan;
 import com.vaticle.typedb.core.reasoner.planner.ConjunctionGraph;
+import com.vaticle.typedb.core.reasoner.planner.ConjunctionStreamPlan;
 import com.vaticle.typedb.core.reasoner.planner.ReasonerPlanner;
 import com.vaticle.typedb.core.reasoner.planner.RecursivePlanner;
 import com.vaticle.typedb.core.traversal.TraversalEngine;
@@ -39,12 +38,12 @@ import static com.vaticle.typedb.core.common.iterator.Iterators.iterate;
 public class NodeRegistry {
     private final ActorExecutorGroup executorService;
     private final PerfCounterFields perfCountersFields;
-    private final Map<CompoundStreamPlan, SubConjunctionRegistry> conjunctionSubRegistries;
+    private final Map<ConjunctionStreamPlan.CompoundStreamPlan, SubConjunctionRegistry> conjunctionSubRegistries;
     private final Map<Rule.Conclusion, ConclusionRegistry> conclusionSubRegistries;
     private final Map<Retrievable, RetrievableRegistry> retrievableSubRegistries;
     private final Map<Concludable, ConcludableRegistry> concludableSubRegistries;
     private final Map<Negated, NegatedRegistry> negatedSubRegistries;
-    private final Map<ReasonerPlanner.CallMode, ConjunctionController.ConjunctionStreamPlan> csPlans;
+    private final Map<ReasonerPlanner.CallMode, ConjunctionStreamPlan> csPlans;
     private final Set<ActorNode<?>> roots;
     private final LogicManager logicManager;
     private final RecursivePlanner planner;
@@ -54,7 +53,7 @@ public class NodeRegistry {
     private final TraversalEngine traversalEngine;
     private final ConceptManager conceptManager;
     private final AtomicInteger nodeAgeClock;
-    private final Set<ConjunctionController.ConjunctionStreamPlan> cyclicConjunctionStreamPlans;
+    private final Set<ConjunctionStreamPlan> cyclicConjunctionStreamPlans;
 
     // Terminated leaders violate monotonicity of the candidate. We must track & ignore their candidacy to prevent oscillation.
     // TODO: Consider an ArrayList?
@@ -84,6 +83,8 @@ public class NodeRegistry {
         this.nodeAgeClock = new AtomicInteger();
         this.terminatedNodes = new ConcurrentSet<>();
     }
+
+    public void close() {} // TODO: Do we need to do anything?
 
     public Integer nextNodeAge() {
         return nodeAgeClock.getAndIncrement();
@@ -121,7 +122,7 @@ public class NodeRegistry {
                     .filter(Identifier::isRetrievable).map(Identifier.Variable::asRetrievable).toSet();
 
             Set<Identifier.Variable.Retrievable> csPlanOutputVariables = (transactionOptions.explain()) ? callMode.conjunction.pattern().retrieves() : outputVariables;
-            ConjunctionController.ConjunctionStreamPlan csPlan = ConjunctionController.ConjunctionStreamPlan.createUnflattened(
+            ConjunctionStreamPlan csPlan = ConjunctionStreamPlan.createUnflattened(
                     plan.plan(), modeIds, csPlanOutputVariables);
             csPlans.put(callMode, csPlan);
 
@@ -149,13 +150,13 @@ public class NodeRegistry {
         }
     }
 //
-//    private boolean cacheIsCyclicConjunctionStreamPlans(ConjunctionGraph.ConjunctionNode infoNode, ConjunctionController.ConjunctionStreamPlan conjunctionStreamPlan) {
+//    private boolean cacheIsCyclicConjunctionStreamPlans(ConjunctionGraph.ConjunctionNode infoNode, ConjunctionStreamPlan conjunctionStreamPlan) {
 //        boolean isCyclic = false;
 //        if (conjunctionStreamPlan.isResolvablePlan()) {
 //            isCyclic  = infoNode.cyclicConcludables().contains(conjunctionStreamPlan.asResolvablePlan().resolvable());
 //        } else if (conjunctionStreamPlan.isCompoundStreamPlan()) {
 //            for (int i=0; i < conjunctionStreamPlan.asCompoundStreamPlan().size(); i++) {
-//                ConjunctionController.ConjunctionStreamPlan child = conjunctionStreamPlan.asCompoundStreamPlan().childAt(i);
+//                ConjunctionStreamPlan child = conjunctionStreamPlan.asCompoundStreamPlan().childAt(i);
 //                isCyclic = isCyclic || cacheIsCyclicConjunctionStreamPlans(infoNode, child);
 //            }
 //        } else throw TypeDBException.of(ILLEGAL_STATE);
@@ -166,7 +167,7 @@ public class NodeRegistry {
 //        } else return false;
 //    }
 
-    private void populateConjunctionRegistries(ResolvableConjunction conjunction, CompoundStreamPlan compoundStreamPlan) {
+    private void populateConjunctionRegistries(ResolvableConjunction conjunction, ConjunctionStreamPlan.CompoundStreamPlan compoundStreamPlan) {
         conjunctionSubRegistries.put(compoundStreamPlan, new SubConjunctionRegistry(conjunction, compoundStreamPlan));
         for (int i = 0; i < compoundStreamPlan.size(); i++) {
             if (compoundStreamPlan.childAt(i).isCompoundStreamPlan()) {
@@ -188,14 +189,14 @@ public class NodeRegistry {
         });
     }
 
-    public ConjunctionController.ConjunctionStreamPlan conjunctionStreamPlan(ResolvableConjunction conjunction, ConceptMap bounds) {
+    public ConjunctionStreamPlan conjunctionStreamPlan(ResolvableConjunction conjunction, ConceptMap bounds) {
         ReasonerPlanner.CallMode callMode = new ReasonerPlanner.CallMode(conjunction,
                 iterate(bounds.concepts().keySet()).map(id -> conjunction.pattern().variable(id)).toSet());
         return csPlans.get(callMode);
     }
 
     // Now that we have conclusions, Top-level conjunction nodes are local too. But the ones after them aren't
-    public SubConjunctionRegistry conjunctionSubRegistry(CompoundStreamPlan compoundStreamPlan) {
+    public SubConjunctionRegistry conjunctionSubRegistry(ConjunctionStreamPlan.CompoundStreamPlan compoundStreamPlan) {
         assert conjunctionSubRegistries.containsKey(compoundStreamPlan);
         return conjunctionSubRegistries.get(compoundStreamPlan);
     }
@@ -265,7 +266,7 @@ public class NodeRegistry {
     }
 
 
-    public SubRegistry<?, ?> getRegistry(ConjunctionController.ConjunctionStreamPlan csPlan) {
+    public SubRegistry<?, ?> getRegistry(ConjunctionStreamPlan csPlan) {
         return csPlan.isCompoundStreamPlan() ?
                 conjunctionSubRegistry(csPlan.asCompoundStreamPlan()) :
                 resolvableSubRegistry(csPlan.asResolvablePlan().resolvable());
@@ -353,11 +354,11 @@ public class NodeRegistry {
         }
     }
 
-    public class SubConjunctionRegistry extends SubRegistry<CompoundStreamPlan, ConjunctionNode> {
+    public class SubConjunctionRegistry extends SubRegistry<ConjunctionStreamPlan.CompoundStreamPlan, ConjunctionNode> {
 
         private final ResolvableConjunction conjunction;
 
-        private SubConjunctionRegistry(ResolvableConjunction conjunction, CompoundStreamPlan conjunctionStreamPlan) {
+        private SubConjunctionRegistry(ResolvableConjunction conjunction, ConjunctionStreamPlan.CompoundStreamPlan conjunctionStreamPlan) {
             super(conjunctionStreamPlan);
             this.conjunction = conjunction;
         }

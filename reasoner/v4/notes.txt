@@ -1,6 +1,0 @@
- (Implement Answer Table & RetrievableNode):
-Easy test using: eadedd3b2c1a11ca67fdeee01c6940e37ec74989
-    public void readAnswerAt(ActorNode<?> sender, int index) {
-        Retrievable retrievable = nodeRegistry.logicManager().compile(conjunction).stream().findFirst().get().asRetrievable();
-        nodeRegistry.retrievableSubRegistry(retrievable).getNode(new ConceptMap()).driver().execute(actor -> actor.readAnswerAt(this, index));
-    }

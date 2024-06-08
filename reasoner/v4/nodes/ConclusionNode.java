@@ -4,7 +4,7 @@ import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.logic.Materialiser;
 import com.vaticle.typedb.core.logic.Rule;
-import com.vaticle.typedb.core.reasoner.controller.ConjunctionController;
+import com.vaticle.typedb.core.reasoner.planner.ConjunctionStreamPlan;
 import com.vaticle.typedb.core.reasoner.v4.Response;
 
 import java.util.Optional;
@@ -27,7 +27,7 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
             answerTable.recordDone();
         } else {
             conclusion.rule().condition().disjunction().conjunctions().forEach(conjunction -> {
-                ConjunctionController.ConjunctionStreamPlan csPlan = nodeRegistry.conjunctionStreamPlan(conjunction, bounds);
+                ConjunctionStreamPlan csPlan = nodeRegistry.conjunctionStreamPlan(conjunction, bounds);
                 createPort(nodeRegistry.getRegistry(csPlan).getNode(bounds));
             });
         }
