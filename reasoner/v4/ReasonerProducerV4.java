@@ -283,7 +283,11 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
 
     }
 
-    // This requires some work to track the bounds for efficient re-use
+    // TODO: Three kinds of explanation tests currently fail:
+    //      value_predicate, schema_queries and variable_roles
+    // These seem to be because of differences with how the oracle and we interpret things
+    // We consider an answer with a type bound to a type variable to be explainable by an answer with a subtype bound.
+    // We consider value-predicates to be concludable & explainable - If the attribute is bound, we probably shouldn't.
     public static class Explain extends ReasonerProducerV4<Explain.ExplainNode, Explanation> {
         private final Concludable concludable;
         private final ConceptMap bounds;
