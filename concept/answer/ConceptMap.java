@@ -33,7 +33,6 @@ import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILL
 import static com.vaticle.typedb.core.common.iterator.Iterators.iterate;
 import static com.vaticle.typedb.core.common.iterator.Iterators.link;
 import static java.util.Collections.emptyMap;
-import static java.util.Collections.unmodifiableMap;
 
 public class ConceptMap {
 
@@ -135,16 +134,11 @@ public class ConceptMap {
     }
 
     public ConceptMap withExplainableConcept(Retrievable id, Conjunction conjunction) {
-        assert concepts.get(id).isRelation() || concepts.get(id).isAttribute();
-        if (concepts.get(id).isRelation()) {
-            return new ConceptMap(concepts, explainables.cloneWithRelation(id, conjunction));
-        } else {
-            return new ConceptMap(concepts, explainables.cloneWithAttribute(id, conjunction));
-        }
+        throw TypeDBException.of(ILLEGAL_STATE);
     }
 
     public ConceptMap withExplainableOwnership(Retrievable ownerID, Retrievable attrID, Conjunction conjunction) {
-        return new ConceptMap(concepts, explainables.cloneWithOwnership(ownerID, attrID, conjunction));
+        throw TypeDBException.of(ILLEGAL_STATE);
     }
 
     @Override
@@ -190,17 +184,12 @@ public class ConceptMap {
 
         @Override
         public Sortable withExplainableConcept(Retrievable id, Conjunction conjunction) {
-            assert get(id).isRelation() || get(id).isAttribute();
-            if (get(id).isRelation()) {
-                return new Sortable(concepts(), explainables().cloneWithRelation(id, conjunction), conceptsComparator);
-            } else {
-                return new Sortable(concepts(), explainables().cloneWithAttribute(id, conjunction), conceptsComparator);
-            }
+            throw TypeDBException.of(ILLEGAL_STATE);
         }
 
         @Override
         public Sortable withExplainableOwnership(Retrievable ownerID, Retrievable attrID, Conjunction conjunction) {
-            return new Sortable(concepts(), explainables().cloneWithOwnership(ownerID, attrID, conjunction), conceptsComparator);
+            throw TypeDBException.of(ILLEGAL_STATE);
         }
 
         @Override
@@ -305,22 +294,33 @@ public class ConceptMap {
             this.explainableOwnerships = explainableOwnerships;
         }
 
-        Explainables cloneWithRelation(Retrievable id, Conjunction conjunction) {
-            HashMap<Retrievable, Explainable> clone = new HashMap<>(explainableRelations);
-            clone.put(id, Explainable.unidentified(conjunction));
-            return new Explainables(unmodifiableMap(clone), explainableAttributes, explainableOwnerships);
-        }
 
-        Explainables cloneWithAttribute(Retrievable id, Conjunction conjunction) {
-            HashMap<Retrievable, Explainable> clone = new HashMap<>(explainableAttributes);
-            clone.put(id, Explainable.unidentified(conjunction));
-            return new Explainables(explainableRelations, unmodifiableMap(clone), explainableOwnerships);
-        }
+        public static class ExplainablesBuilder {
 
-        Explainables cloneWithOwnership(Retrievable ownerID, Retrievable attrID, Conjunction conjunction) {
-            Map<Pair<Retrievable, Retrievable>, Explainable> explainableAttributeOwnershipsClone = new HashMap<>(explainableOwnerships);
-            explainableAttributeOwnershipsClone.put(new Pair<>(ownerID, attrID), Explainable.unidentified(conjunction));
-            return new Explainables(explainableRelations, explainableAttributes, unmodifiableMap(explainableAttributeOwnershipsClone));
+            private final Map<Retrievable, Explainable> explainableRelations;
+            private final Map<Retrievable, Explainable> explainableAttributes;
+            private final Map<Pair<Retrievable, Retrievable>, Explainable> explainableOwnerships;
+
+            public ExplainablesBuilder() {
+                this.explainableRelations = new HashMap<>();
+                this.explainableAttributes = new HashMap<>();
+                this.explainableOwnerships = new HashMap<>();
+            }
+
+            public Explainables build() {
+                return new Explainables(explainableRelations, explainableAttributes, explainableOwnerships);
+            }
+
+            // Very awkward because concludable is above ConceptMap and we can't add the dependency.
+            public void  addRelation(Retrievable retrievable, Explainable explainableRelation) {
+                explainableRelations.put(retrievable, explainableRelation);
+            }
+            public void addAttribute(Retrievable retrievable, Explainable explainableAttribute) {
+                explainableAttributes.put(retrievable, explainableAttribute);
+            }
+            public void addHas(Retrievable owner, Retrievable attribute, Explainable explainableHas) {
+                explainableOwnerships.put(new Pair<>(owner, attribute), explainableHas);
+            }
         }
 
         public FunctionalIterator<Explainable> iterator() {
@@ -375,22 +375,31 @@ public class ConceptMap {
 
         public static long NOT_IDENTIFIED = -1L;
 
+        private final Object concludable;
         private final Conjunction conjunction;
         private long id;
 
-        private Explainable(Conjunction conjunction, long id) {
-            this.conjunction = conjunction;
+        private Explainable(Object concludable, long id, Conjunction concludablePattern) {
+            this.concludable = concludable;
             this.id = id;
+            this.conjunction = concludablePattern;
         }
 
         static Explainable unidentified(Conjunction conjunction) {
-            return new Explainable(conjunction, NOT_IDENTIFIED);
+            throw TypeDBException.of(ILLEGAL_STATE);
+        }
+
+        public static Explainable of(Object concludable, Conjunction conjunction) {
+            return new Explainable(concludable, NOT_IDENTIFIED, conjunction);
         }
 
         public void setId(long id) {
             this.id = id;
         }
 
+        public Object concludable() {
+            return concludable;
+        }
         public Conjunction conjunction() {
             return conjunction;
         }
@@ -404,12 +413,12 @@ public class ConceptMap {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             Explainable that = (Explainable) o;
-            return conjunction == that.conjunction; // exclude ID as it changes
+            return concludable == that.concludable; // exclude ID as it changes
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(conjunction); // exclude ID as it changes
+            return Objects.hash(concludable); // exclude ID as it changes
         }
     }
 }

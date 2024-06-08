@@ -42,10 +42,7 @@ public class ExplainablesManager {
     public void setAndRecordExplainables(ConceptMap explainableMap) {
         explainableMap.explainables().iterator().forEachRemaining(explainable -> {
             long nextId = this.nextId.getAndIncrement();
-            FunctionalIterator<Concludable> concludable = iterate(Concludable.create(explainable.conjunction()));
-            assert concludable.hasNext();
-            concludables.put(nextId, concludable.next());
-            assert !concludable.hasNext();
+            concludables.put(nextId, (Concludable) explainable.concludable());
             bounds.put(nextId, explainableMap);
             explainable.setId(nextId);
         });
