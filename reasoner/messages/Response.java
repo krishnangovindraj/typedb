@@ -1,11 +1,10 @@
-package com.vaticle.typedb.core.reasoner.v4;
+package com.vaticle.typedb.core.reasoner.messages;
 
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.concept.Concept;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 
-import java.util.Comparator;
 import java.util.Map;
 import java.util.Objects;
 

@@ -15,7 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package com.vaticle.typedb.core.reasoner.v4;
+package com.vaticle.typedb.core.reasoner;
 
 import com.vaticle.typedb.common.collection.Pair;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
@@ -26,14 +26,15 @@ import com.vaticle.typedb.core.concurrent.producer.Producer;
 import com.vaticle.typedb.core.logic.Rule;
 import com.vaticle.typedb.core.logic.resolvable.*;
 import com.vaticle.typedb.core.pattern.variable.Variable;
-import com.vaticle.typedb.core.reasoner.ExplainablesManager;
 import com.vaticle.typedb.core.reasoner.answer.Explanation;
 import com.vaticle.typedb.core.reasoner.answer.PartialExplanation;
 import com.vaticle.typedb.core.reasoner.planner.ConjunctionStreamPlan;
 import com.vaticle.typedb.core.reasoner.planner.ReasonerPlanner;
-import com.vaticle.typedb.core.reasoner.v4.nodes.ActorNode;
-import com.vaticle.typedb.core.reasoner.v4.nodes.ConclusionNode;
-import com.vaticle.typedb.core.reasoner.v4.nodes.NodeRegistry;
+import com.vaticle.typedb.core.reasoner.messages.Request;
+import com.vaticle.typedb.core.reasoner.messages.Response;
+import com.vaticle.typedb.core.reasoner.nodes.ActorNode;
+import com.vaticle.typedb.core.reasoner.nodes.ConclusionNode;
+import com.vaticle.typedb.core.reasoner.nodes.NodeRegistry;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 import com.vaticle.typedb.core.traversal.common.Modifiers;
 import org.slf4j.Logger;
@@ -46,12 +47,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
-import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducer.State.EXCEPTION;
-import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducer.State.FINISHED;
-import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducer.State.INIT;
-import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducer.State.INITIALISING;
-import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducer.State.PULLING;
-import static com.vaticle.typedb.core.reasoner.v4.ReasonerProducer.State.READY;
+import static com.vaticle.typedb.core.reasoner.ReasonerProducer.State.EXCEPTION;
+import static com.vaticle.typedb.core.reasoner.ReasonerProducer.State.FINISHED;
+import static com.vaticle.typedb.core.reasoner.ReasonerProducer.State.INIT;
+import static com.vaticle.typedb.core.reasoner.ReasonerProducer.State.INITIALISING;
+import static com.vaticle.typedb.core.reasoner.ReasonerProducer.State.PULLING;
+import static com.vaticle.typedb.core.reasoner.ReasonerProducer.State.READY;
 
 
 @ThreadSafe

@@ -1,4 +1,4 @@
-package com.vaticle.typedb.core.reasoner.v4.nodes;
+package com.vaticle.typedb.core.reasoner.nodes;
 
 import com.vaticle.typedb.common.collection.Collections;
 import com.vaticle.typedb.common.collection.ConcurrentSet;

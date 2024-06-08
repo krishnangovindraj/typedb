@@ -1,14 +1,14 @@
-package com.vaticle.typedb.core.reasoner.v4.nodes;
+package com.vaticle.typedb.core.reasoner.nodes;
 
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.logic.resolvable.Negated;
-import com.vaticle.typedb.core.reasoner.v4.Response;
+import com.vaticle.typedb.core.reasoner.messages.Response;
 
 public class NegatedNode extends ResolvableNode<Negated, NegatedNode> {
 
 
-    public NegatedNode(Negated resolvable, ConceptMap bounds, NodeRegistry nodeRegistry, Driver<com.vaticle.typedb.core.reasoner.v4.nodes.NegatedNode> driver) {
+    public NegatedNode(Negated resolvable, ConceptMap bounds, NodeRegistry nodeRegistry, Driver<com.vaticle.typedb.core.reasoner.nodes.NegatedNode> driver) {
         super(resolvable, bounds, nodeRegistry, driver);
     }
 

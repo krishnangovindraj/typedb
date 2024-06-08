@@ -1,4 +1,4 @@
-package com.vaticle.typedb.core.reasoner.v4.nodes;
+package com.vaticle.typedb.core.reasoner.nodes;
 
 import com.vaticle.typedb.common.collection.Pair;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
@@ -6,7 +6,7 @@ import com.vaticle.typedb.core.common.iterator.Iterators;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.logic.resolvable.Concludable;
 import com.vaticle.typedb.core.logic.resolvable.Unifier;
-import com.vaticle.typedb.core.reasoner.v4.Response;
+import com.vaticle.typedb.core.reasoner.messages.Response;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -20,7 +20,7 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
     private Port lookupPort;
 
     public ConcludableNode(Concludable concludable, ConceptMap bounds,
-                           NodeRegistry nodeRegistry, Driver<com.vaticle.typedb.core.reasoner.v4.nodes.ConcludableNode> driver) {
+                           NodeRegistry nodeRegistry, Driver<com.vaticle.typedb.core.reasoner.nodes.ConcludableNode> driver) {
         super(concludable, bounds, nodeRegistry, driver);
         this.seenAnswers = new HashSet<>();
         this.conclusioNodePorts = null;

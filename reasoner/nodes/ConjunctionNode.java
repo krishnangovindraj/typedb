@@ -1,4 +1,4 @@
-package com.vaticle.typedb.core.reasoner.v4.nodes;
+package com.vaticle.typedb.core.reasoner.nodes;
 
 import com.vaticle.typedb.common.collection.Collections;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
@@ -6,7 +6,7 @@ import com.vaticle.typedb.core.concept.Concept;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.logic.resolvable.ResolvableConjunction;
 import com.vaticle.typedb.core.reasoner.planner.ConjunctionStreamPlan;
-import com.vaticle.typedb.core.reasoner.v4.Response;
+import com.vaticle.typedb.core.reasoner.messages.Response;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

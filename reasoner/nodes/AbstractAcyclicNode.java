@@ -1,11 +1,11 @@
-package com.vaticle.typedb.core.reasoner.v4.nodes;
+package com.vaticle.typedb.core.reasoner.nodes;
 
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.common.iterator.Iterators;
 import com.vaticle.typedb.core.concurrent.actor.Actor;
-import com.vaticle.typedb.core.reasoner.v4.Request;
-import com.vaticle.typedb.core.reasoner.v4.Response;
+import com.vaticle.typedb.core.reasoner.messages.Request;
+import com.vaticle.typedb.core.reasoner.messages.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,7 +37,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     }
 
     protected static void trace(String formatStr, Object... args) {
-        TRACER_LOG.info(String.format(formatStr, args));
+        TRACER_LOG.trace(String.format(formatStr, args));
     }
 
     protected void initialise() {

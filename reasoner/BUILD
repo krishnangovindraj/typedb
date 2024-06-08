@@ -21,14 +21,11 @@ native_java_libraries(
     name = "reasoner",
     srcs = glob(
         ["*.java",
-        "processor/*.java",
-        "processor/reactive/*.java",
-        "processor/reactive/common/*.java",
-        "controller/*.java",
         "answer/*.java",
         "common/*.java",
         "planner/*.java",
-        "v4/**/*.java"
+        "nodes/*.java",
+        "messages/*.java"
         ], exclude = ["*Test.java", "**/*Test.java"],
     ),
     native_libraries_deps = [

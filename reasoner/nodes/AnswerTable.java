@@ -1,10 +1,10 @@
-package com.vaticle.typedb.core.reasoner.v4.nodes;
+package com.vaticle.typedb.core.reasoner.nodes;
 
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.common.iterator.Iterators;
 import com.vaticle.typedb.core.concept.Concept;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
-import com.vaticle.typedb.core.reasoner.v4.Response;
+import com.vaticle.typedb.core.reasoner.messages.Response;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 
 import java.util.ArrayList;

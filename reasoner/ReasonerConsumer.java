@@ -1,4 +1,4 @@
-package com.vaticle.typedb.core.reasoner.v4;
+package com.vaticle.typedb.core.reasoner;
 
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 

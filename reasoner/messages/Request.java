@@ -1,4 +1,4 @@
-package com.vaticle.typedb.core.reasoner.v4;
+package com.vaticle.typedb.core.reasoner.messages;
 
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 
