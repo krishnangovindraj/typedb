@@ -170,8 +170,10 @@ public class ProducerIterator<T> extends AbstractFunctionalIterator<T> {
 
         @Override
         public synchronized void done(@Nullable Throwable error) {
-            assert !producers.isEmpty();
-            producers.remove();
+            assert !producers.isEmpty(); // TODO: Krishnan:  This assertion can kill my threads.
+            if (!producers.isEmpty()) {  // TODO: Krishnan:  So I added a condition
+                producers.remove();
+            }
             requested = 0;
             try {
                 if (error != null) blockingQueue.put(Either.second(Done.error(error)));

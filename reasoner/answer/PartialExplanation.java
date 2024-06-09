@@ -70,5 +70,18 @@ public class PartialExplanation {
         public Map<Identifier.Variable, Concept> concepts() {
             return concepts;
         }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(concepts);
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            ConclusionAnswer that = (ConclusionAnswer) o;
+            return concepts.equals(that.concepts);
+        }
     }
 }

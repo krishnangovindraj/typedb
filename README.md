@@ -1,3 +1,43 @@
+# About this branch
+
+This branch is experimental. It rewrites the reasoner, with 2 major changes:
+1. **It uses only actors, as opposed to a mix of actors & streams.**
+   * Roughly, one actor maps to one 'goal'. The messages remain small - Only the size of the answer being carried.
+2. **The 'monitor' has been replaced with a local termination algorithm.** 
+   * The monitor was an actor which constructed a copy of the reasoner graph and counted active nodes + in-flight messages in each 'subgraph'.
+   This means it had to be informed of every node, dependency and message.
+   * The new algorithm is based on the spanning tree approaches to termination in message-passing systems. It achieves 'incremental completion', as it is able to determine the completion of a 'strongly connected component' (SCC) - the unit of termination. This was partially inspired by the incremental-termination of XSB's SLG-WAM.
+
+
+### Test status
+When this readme was written, all 'reasoning' tests were passing, however the recursive verification of explanations were failing due to discrepancies in how the reasoner & the forward chaining oracle decide what is and isn't explainable.
+- `ValuePredicateTest` : fails because the oracle treats multiple `$x == $y` statements different (whether they have explanations or not).
+- `VariableRolesTest` & `SchemaQueriesTest`: When a concludable has a type-variable, say `($r: $p) isa my-relation` The oracle does not seem to consider any answer with `$r` to be unified with a supertype of the concrete role-type to be explainable.
+
+### Roadmap
+The rewrite is a significant simplifcation over the existing reasoner, and makes experimentation & new features much easier to implement. Some of the bigger ones are:
+#### Factorise conjunctions:
+Because we currently evaluate conjunctions by splitting it recursively into subconjunctions, we effectively materialise the whole joined table - We have a row in the root node of the conjunction which stores the answers to the whole conjunction. 
+Though we try to [minimize the size of the intermediate tables](https://github.com/vaticle/typedb/pull/6826/files), we can do much better in memory use by storing only the factorised tables (i.e., the answer to each atom) and join them on demand.
+
+### True reactiveness
+The previous reasoner would effectively do a BFS when looking for answers. The parallelism was unbounded and there was no way to apply backpressure to it.
+There is a 'pull' mechanism implemented in this rewrite, but I have not bothered to make it any different to the BFS in the previous reasoner.
+How we pull determines our parallelism model and our search strategy.
+
+#### Subqueries & aggregates
+Because we now have incremental termination, we can get subqueries for free. 
+This allows stratified aggregates in rules (stratified to prevent an aggregate from feeding into itself).  
+
+---
+
+---
+## The remainder of this file is the original TypeDB readme.
+
+---
+
+---
+
 [![TypeDB](./docs/banner.png)](https://typedb.com/introduction)
 
 [![Factory](https://factory.vaticle.com/api/status/vaticle/typedb/badge.svg)](https://factory.vaticle.com/vaticle/typedb)

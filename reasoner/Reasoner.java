@@ -23,14 +23,15 @@ import com.vaticle.typedb.core.concurrent.producer.Producer;
 import com.vaticle.typedb.core.concurrent.producer.Producers;
 import com.vaticle.typedb.core.logic.LogicManager;
 import com.vaticle.typedb.core.logic.resolvable.Concludable;
+import com.vaticle.typedb.core.logic.resolvable.ResolvableDisjunction;
 import com.vaticle.typedb.core.pattern.Conjunction;
 import com.vaticle.typedb.core.pattern.Disjunction;
 import com.vaticle.typedb.core.pattern.Negation;
 import com.vaticle.typedb.core.pattern.variable.Variable;
 import com.vaticle.typedb.core.reasoner.answer.Explanation;
 import com.vaticle.typedb.core.reasoner.common.ReasonerPerfCounters;
-import com.vaticle.typedb.core.reasoner.controller.ControllerRegistry;
 import com.vaticle.typedb.core.reasoner.planner.ReasonerPlanner;
+import com.vaticle.typedb.core.reasoner.nodes.NodeRegistry;
 import com.vaticle.typedb.core.traversal.TraversalEngine;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 import com.vaticle.typedb.core.traversal.common.Modifiers.Filter;
@@ -67,10 +68,10 @@ public class Reasoner {
     private final TraversalEngine traversalEng;
     private final ConceptManager conceptMgr;
     private final LogicManager logicMgr;
-    private final ControllerRegistry controllerRegistry;
     private final ExplainablesManager explainablesManager;
     private final ReasonerPlanner planner;
     private final ReasonerPerfCounters perfCounters;
+    private final NodeRegistry nodeRegistry;
 
     public Reasoner(ConceptManager conceptMgr, LogicManager logicMgr,
                     TraversalEngine traversalEng, Context.Transaction context) {
@@ -79,12 +80,9 @@ public class Reasoner {
         this.logicMgr = logicMgr;
         this.perfCounters = new ReasonerPerfCounters(context.options().infer() && context.options().reasonerPerfCounters());
         this.planner = ReasonerPlanner.create(traversalEng, conceptMgr, logicMgr, perfCounters, context.options().explain());
-        this.controllerRegistry = new ControllerRegistry(actor(), traversalEng, conceptMgr, logicMgr, planner, perfCounters, context);
         this.explainablesManager = new ExplainablesManager();
-    }
 
-    public ControllerRegistry controllerRegistry() {
-        return controllerRegistry;
+        this.nodeRegistry = new NodeRegistry(actor(), perfCounters, conceptMgr, logicMgr , traversalEng, planner, context.options());
     }
 
     public FunctionalIterator<? extends ConceptMap> execute(Disjunction disjunction, List<Identifier.Variable.Name> filterVars,
@@ -173,10 +171,11 @@ public class Reasoner {
     }
 
     private boolean mayReason(Disjunction disjunction, Context.Query context) {
-        if (!context.options().infer() || context.transactionType().isWrite() || !logicMgr.rules().hasNext()) {
-            return false;
-        }
-        return mayReason(disjunction);
+        return true; // TODO: Fix this
+//        if (!context.options().infer() || context.transactionType().isWrite() || !logicMgr.rules().hasNext()) {
+//            return false;
+//        }
+//        return mayReason(disjunction);
     }
 
     private boolean mayReason(Disjunction disjunction) {
@@ -215,9 +214,7 @@ public class Reasoner {
     }
 
     public FunctionalIterator<ConceptMap> executeReasoner(Disjunction disjunction, Filter filter, Context.Query context) {
-        ReasonerProducer.Match producer = disjunction.conjunctions().size() == 1
-                ? new ReasonerProducer.Match.Conjunction(disjunction.conjunctions().get(0), filter, context.options(), controllerRegistry, explainablesManager)
-                : new ReasonerProducer.Match.Disjunction(disjunction, filter, context.options(), controllerRegistry, explainablesManager);
+        ReasonerProducer.Basic producer = new ReasonerProducer.Basic(ResolvableDisjunction.of(disjunction), filter, context.options(), nodeRegistry, explainablesManager);
         return produce(producer, context.producer(), async1());
     }
 
@@ -313,14 +310,13 @@ public class Reasoner {
         Concludable explainableConcludable = explainablesManager.getConcludable(explainableId);
         ConceptMap explainableBounds = explainablesManager.getBounds(explainableId);
         return produce(
-                list(new ReasonerProducer.Explain(explainableConcludable, explainableBounds, defaultContext.options(),
-                        controllerRegistry, explainablesManager)),
+                list(new ReasonerProducer.Explain(explainableConcludable, explainableBounds, defaultContext.options(), nodeRegistry, explainablesManager)),
                 Either.first(Arguments.Query.Producer.INCREMENTAL),
                 async1()
         );
     }
 
     public void close() {
-        controllerRegistry.close();
+        nodeRegistry.close();
     }
 }

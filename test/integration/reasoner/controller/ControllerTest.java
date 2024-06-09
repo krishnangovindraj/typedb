@@ -23,7 +23,6 @@ import com.vaticle.typedb.core.logic.resolvable.ResolvableDisjunction;
 import com.vaticle.typedb.core.pattern.Conjunction;
 import com.vaticle.typedb.core.pattern.Disjunction;
 import com.vaticle.typedb.core.pattern.variable.Variable;
-import com.vaticle.typedb.core.reasoner.ReasonerConsumer;
 import com.vaticle.typedb.core.reasoner.processor.AbstractProcessor;
 import com.vaticle.typedb.core.test.integration.util.Util;
 import com.vaticle.typedb.core.traversal.common.Identifier;
@@ -480,7 +479,7 @@ public class ControllerTest {
         return transaction;
     }
 
-    private static class AnswerProducer implements ReasonerConsumer<ConceptMap> {
+    private static class AnswerProducer {
 
         private final LinkedBlockingQueue<ConceptMap> responses;
         private final LinkedBlockingQueue<Throwable> exceptions;

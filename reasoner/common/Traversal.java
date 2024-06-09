@@ -15,7 +15,7 @@ import com.vaticle.typedb.core.concurrent.producer.Producer;
 import com.vaticle.typedb.core.concurrent.producer.Producers;
 import com.vaticle.typedb.core.pattern.Conjunction;
 import com.vaticle.typedb.core.pattern.variable.Variable;
-import com.vaticle.typedb.core.reasoner.controller.ControllerRegistry;
+import com.vaticle.typedb.core.reasoner.nodes.NodeRegistry;
 import com.vaticle.typedb.core.traversal.GraphTraversal;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 
@@ -26,8 +26,7 @@ import java.util.Optional;
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
 
 public class Traversal {
-
-    public static FunctionalIterator<ConceptMap> traversalIterator(ControllerRegistry registry,
+    public static FunctionalIterator<ConceptMap> traversalIterator(NodeRegistry registry,
                                                                    Conjunction conjunction, ConceptMap bounds) {
         return compatibleBounds(conjunction, bounds).map(c -> {
             GraphTraversal.Thing traversal = boundTraversal(conjunction.traversal(), c);
@@ -35,7 +34,7 @@ public class Traversal {
         }).orElse(Iterators.empty());
     }
 
-    public static Producer<ConceptMap> traversalProducer(ControllerRegistry registry, Conjunction conjunction,
+    public static Producer<ConceptMap> traversalProducer(NodeRegistry registry, Conjunction conjunction,
                                                          ConceptMap bounds, int parallelisation) {
         return compatibleBounds(conjunction, bounds).map(b -> {
             GraphTraversal.Thing traversal = boundTraversal(conjunction.traversal(), b);

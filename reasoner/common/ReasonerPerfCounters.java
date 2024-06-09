@@ -43,7 +43,7 @@ public class ReasonerPerfCounters extends PerfCounters {
     }
 
     public void logCounters() {
-        if (enabled) LOG.debug("Perf counters:\n{}", this);
+        if (enabled) LOG.error("Perf counters:\n{}", this);
     }
 
     private ScheduledFuture<?> printingTask;

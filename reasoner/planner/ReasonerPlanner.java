@@ -7,6 +7,7 @@
 package com.vaticle.typedb.core.reasoner.planner;
 
 import com.vaticle.typedb.core.common.cache.CommonCache;
+import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.concept.ConceptManager;
 import com.vaticle.typedb.core.logic.LogicManager;
 import com.vaticle.typedb.core.logic.Rule;
@@ -17,7 +18,6 @@ import com.vaticle.typedb.core.logic.resolvable.ResolvableDisjunction;
 import com.vaticle.typedb.core.logic.resolvable.Unifier;
 import com.vaticle.typedb.core.pattern.variable.Variable;
 import com.vaticle.typedb.core.reasoner.common.ReasonerPerfCounters;
-import com.vaticle.typedb.core.reasoner.controller.ConcludableController;
 import com.vaticle.typedb.core.traversal.TraversalEngine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +33,7 @@ import java.util.Set;
 
 import static com.vaticle.typedb.common.collection.Collections.intersection;
 import static com.vaticle.typedb.common.collection.Collections.set;
+import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_CAST;
 import static com.vaticle.typedb.core.common.iterator.Iterators.iterate;
 import static com.vaticle.typedb.core.common.iterator.Iterators.link;
 
@@ -56,8 +57,16 @@ public abstract class ReasonerPlanner {
         this.planCache = new CommonCache<>();
     }
 
+    public RecursivePlanner asRecursivePlanner() {
+        throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), ReasonerPlanner.class);
+    }
+
     public static ReasonerPlanner create(TraversalEngine traversalEng, ConceptManager conceptMgr, LogicManager logicMgr, ReasonerPerfCounters perfCounters, boolean explain) {
         return RecursivePlanner.create(traversalEng, conceptMgr, logicMgr, perfCounters, explain);
+    }
+
+    public static boolean canBypassReasoning(Concludable concludable, Set<com.vaticle.typedb.core.traversal.common.Identifier.Variable.Retrievable> boundVariables, boolean isExplainEnabled) {
+        return !isExplainEnabled && !concludable.isHas() && boundVariables.contains(concludable.generatingVariable().id());
     }
 
     static Set<Variable> estimateableVariables(Set<Variable> variables) {
@@ -161,7 +170,7 @@ public abstract class ReasonerPlanner {
     public Set<CallMode> triggeredCalls(Concludable concludable, Set<Variable> mode, @Nullable Set<ResolvableConjunction> dependencyFilter) {
         Set<CallMode> calls = new HashSet<>();
 
-        if (ConcludableController.canBypassReasoning(concludable, iterate(mode).map(v -> v.id().asRetrievable()).toSet(), explain)) {
+        if (canBypassReasoning(concludable, iterate(mode).map(v -> v.id().asRetrievable()).toSet(), explain)) {
             return calls;
         }
 
@@ -190,12 +199,12 @@ public abstract class ReasonerPlanner {
         }
     }
 
-    static class CallMode {
-        final ResolvableConjunction conjunction;
-        final Set<Variable> mode;
+    public static class CallMode {
+        public final ResolvableConjunction conjunction;
+        public final Set<Variable> mode;
         private final int hash;
 
-        CallMode(ResolvableConjunction conjunction, Set<Variable> mode) {
+        public CallMode(ResolvableConjunction conjunction, Set<Variable> mode) {
             this.conjunction = conjunction;
             this.mode = mode;
             this.hash = Objects.hash(conjunction, mode);
