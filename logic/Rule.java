@@ -338,9 +338,10 @@ public class Rule {
         public abstract Materialisable materialisable(ConceptMap whenConcepts, ConceptManager conceptMgr);
 
         Optional<Map<Identifier.Variable, Concept>> materialiseAndBind(
+                Materialiser materialiser,
                 ConceptMap whenConcepts, TraversalEngine traversalEng, ConceptManager conceptMgr
         ) {
-            return Materialiser.materialise(materialisable(whenConcepts, conceptMgr), traversalEng, conceptMgr)
+            return materialiser.materialise(materialisable(whenConcepts, conceptMgr), traversalEng, conceptMgr)
                     .map(materialisation -> materialisation.bindToConclusion(this, whenConcepts));
         }
 

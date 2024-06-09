@@ -1,13 +1,14 @@
 # About this branch
 
-This branch is experimental. It rewrites the reasoner, with 2 major changes:
+This branch is experimental. It rewrites the reasoner, with 3 major changes:
 1. **It uses only actors, as opposed to a mix of actors & streams.**
    * Roughly, one actor maps to one 'goal'. The messages remain small - Only the size of the answer being carried.
 2. **The 'monitor' has been replaced with a local termination algorithm.** 
    * The monitor was an actor which constructed a copy of the reasoner graph and counted active nodes + in-flight messages in each 'subgraph'.
    This means it had to be informed of every node, dependency and message.
    * The new algorithm is based on the spanning tree approaches to termination in message-passing systems. It achieves 'incremental completion', as it is able to determine the completion of a 'strongly connected component' (SCC) - the unit of termination. This was partially inspired by the incremental-termination of XSB's SLG-WAM.
-
+3. We introduce a flag in Materliaser called `RELAXED_RELATION_INFERENCE_SEMANTICS` which skips the lookup and will insert a new relation into the database even if a persisted relation which subsumes it already exists.
+   - I did not enable it at the time of writing this readme, but it's worth checking.
 
 ### Test status
 When this readme was written, all 'reasoning' tests were passing, however the recursive verification of explanations were failing due to discrepancies in how the reasoner & the forward chaining oracle decide what is and isn't explainable.

@@ -120,6 +120,10 @@ public class Reasoner {
         return answers;
     }
 
+    public ReasonerPerfCounters perfCounters() {
+        return perfCounters;
+    }
+
     private Disjunction filterUnanswerable(Disjunction disjunction) {
         return new Disjunction(iterate(disjunction.conjunctions()).filter(Conjunction::isAnswerable).toList());
     }
@@ -171,11 +175,10 @@ public class Reasoner {
     }
 
     private boolean mayReason(Disjunction disjunction, Context.Query context) {
-        return true; // TODO: Fix this
-//        if (!context.options().infer() || context.transactionType().isWrite() || !logicMgr.rules().hasNext()) {
-//            return false;
-//        }
-//        return mayReason(disjunction);
+        if (!context.options().infer() || context.transactionType().isWrite() || !logicMgr.rules().hasNext()) {
+            return false;
+        }
+        return mayReason(disjunction);
     }
 
     private boolean mayReason(Disjunction disjunction) {

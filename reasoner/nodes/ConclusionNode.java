@@ -1,12 +1,16 @@
 package com.vaticle.typedb.core.reasoner.nodes;
 
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
+import com.vaticle.typedb.core.concept.Concept;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.logic.Materialiser;
 import com.vaticle.typedb.core.logic.Rule;
 import com.vaticle.typedb.core.reasoner.planner.ConjunctionStreamPlan;
 import com.vaticle.typedb.core.reasoner.messages.Response;
+import com.vaticle.typedb.core.traversal.common.Identifier;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 public class ConclusionNode extends ActorNode<ConclusionNode> {
@@ -53,15 +57,15 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
         if (onPort.isReady()) onPort.readNext();
     }
 
-    // TODO: Undo public
-    public static synchronized Optional<Response.Conclusion> materialise(NodeRegistry nodeRegistry, Response.Answer msg, Rule.Conclusion conclusion) {
+    // TODO: Remove the synchronised.
+    public static Optional<Response.Conclusion> materialise(NodeRegistry nodeRegistry, Response.Answer msg, Rule.Conclusion conclusion) {
         Rule.Conclusion.Materialisable materialisable = conclusion.materialisable(msg.answer(), nodeRegistry.conceptManager());
-        Optional<Response.Conclusion> response = Materialiser
+        Optional<Response.Conclusion> response = nodeRegistry.materialiser()
                 .materialise(materialisable, nodeRegistry.traversalEngine(), nodeRegistry.conceptManager())
                 .map(materialisation -> materialisation.bindToConclusion(conclusion, msg.answer()))
                 .map(conclusionAnswer -> new Response.Conclusion(msg.index(), conclusionAnswer));
 
-        if (response.isPresent()) nodeRegistry.perfCounterFields().materialisations.add(1);
+        if (response.isPresent()) nodeRegistry.perfCounters().materialisations.add(1);
         return response;
     }
 }

@@ -10,6 +10,7 @@ import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.concurrent.actor.Actor;
 import com.vaticle.typedb.core.concurrent.actor.ActorExecutorGroup;
 import com.vaticle.typedb.core.logic.LogicManager;
+import com.vaticle.typedb.core.logic.Materialiser;
 import com.vaticle.typedb.core.logic.Rule;
 import com.vaticle.typedb.core.logic.resolvable.*;
 import com.vaticle.typedb.core.pattern.variable.Variable;
@@ -37,7 +38,6 @@ import static com.vaticle.typedb.core.common.iterator.Iterators.iterate;
 // TODO: See if we can use ConjunctionStreamPlan as the only one key we need. The nodes can do safe-downcasting
 public class NodeRegistry {
     private final ActorExecutorGroup executorService;
-    private final PerfCounterFields perfCountersFields;
     private final Map<ConjunctionStreamPlan.CompoundStreamPlan, SubConjunctionRegistry> conjunctionSubRegistries;
     private final Map<Rule.Conclusion, ConclusionRegistry> conclusionSubRegistries;
     private final Map<Retrievable, RetrievableRegistry> retrievableSubRegistries;
@@ -58,13 +58,13 @@ public class NodeRegistry {
     // Terminated leaders violate monotonicity of the candidate. We must track & ignore their candidacy to prevent oscillation.
     // TODO: Consider an ArrayList?
     private final ConcurrentSet<Integer> terminatedNodes;
+    private final Materialiser materialiser;
 
     public NodeRegistry(ActorExecutorGroup executorService, ReasonerPerfCounters perfCounters,
                         ConceptManager conceptManager, LogicManager logicManager, TraversalEngine traversalEngine,
                         ReasonerPlanner planner, Options.Transaction options) {
         this.executorService = executorService;
         this.perfCounters = perfCounters;
-        this.perfCountersFields = new PerfCounterFields(perfCounters);
         this.traversalEngine = traversalEngine;
         this.conceptManager = conceptManager;
         this.logicManager = logicManager;
@@ -82,6 +82,7 @@ public class NodeRegistry {
         this.terminated = new AtomicBoolean(false);
         this.nodeAgeClock = new AtomicInteger();
         this.terminatedNodes = new ConcurrentSet<>();
+        materialiser = new Materialiser();
     }
 
     public void close() {} // TODO: Do we need to do anything?
@@ -280,17 +281,16 @@ public class NodeRegistry {
         return perfCounters;
     }
 
-    public PerfCounterFields perfCounterFields() {
-        return perfCountersFields;
-    }
-
-
     public void notifyNodeTermination(Integer nodeId) {
         terminatedNodes.add(nodeId);
     }
 
     public boolean isCandidateTerminated(Integer nodeId) {
         return terminatedNodes.contains(nodeId);
+    }
+
+    public Materialiser materialiser() {
+        return materialiser;
     }
 
     public abstract class SubRegistry<KEY, NODE extends ActorNode<NODE>> {
@@ -383,20 +383,4 @@ public class NodeRegistry {
 
     }
 
-    public class PerfCounterFields {
-        public final PerfCounters.Counter subConjunctionNodes;
-        public final PerfCounters.Counter resolvableNodes;
-        public final PerfCounters.Counter materialisations;
-        public final PerfCounters.Counter answersInTables;
-
-        private PerfCounterFields(PerfCounters perfCounters) {
-
-            subConjunctionNodes = perfCounters.register("v4_subConjunctionNodes");
-            ;
-            resolvableNodes = perfCounters.register("v4_resolvableNodes");
-            materialisations = perfCounters.register("v4_materialisations");
-            answersInTables = perfCounters.register("v4_tabledAnswers");
-        }
-
-    }
 }

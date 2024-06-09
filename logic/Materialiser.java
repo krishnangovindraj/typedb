@@ -16,6 +16,7 @@ import com.vaticle.typedb.core.concept.thing.Attribute;
 import com.vaticle.typedb.core.concept.thing.Relation;
 import com.vaticle.typedb.core.concept.thing.Thing;
 import com.vaticle.typedb.core.concept.type.AttributeType;
+import com.vaticle.typedb.core.concept.type.RoleType;
 import com.vaticle.typedb.core.logic.Rule.Conclusion;
 import com.vaticle.typedb.core.pattern.constraint.common.Predicate;
 import com.vaticle.typedb.core.pattern.constraint.thing.PredicateConstraint;
@@ -27,6 +28,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.vaticle.typedb.common.collection.Collections.set;
@@ -36,6 +38,13 @@ import static com.vaticle.typedb.core.common.parameters.Concept.Existence.STORED
 import static com.vaticle.typedb.core.traversal.common.Identifier.Variable.anon;
 
 public class Materialiser {
+    // A v4 relaxation of semantics to avoid lookups during relation materialisation.
+    public static final boolean RELAXED_RELATION_INFERENCE_SEMANTICS = false;
+
+    private final ConcurrentHashMap<Map<Pair<RoleType, Thing>, Integer>, Materialisation.Relation> materialisedRelations;
+    public Materialiser() {
+        materialisedRelations = new ConcurrentHashMap<>();
+    }
 
     /**
      * Perform a put operation on the `then` of the rule. This may insert a new fact, or return an existing inferred fact
@@ -45,7 +54,7 @@ public class Materialiser {
      * @param conceptMgr   - used to insert the conclusion if it doesn't already exist
      * @return - an inference if it either was, or could have been, inferred by this conclusion
      */
-    public static Optional<Materialisation> materialise(Conclusion.Materialisable materialisable, TraversalEngine traversalEng,
+    public Optional<Materialisation> materialise(Conclusion.Materialisable materialisable, TraversalEngine traversalEng,
                                                         ConceptManager conceptMgr) {
         if (materialisable.isRelation()) {
             return materialise(materialisable.asRelation(), traversalEng, conceptMgr);
@@ -100,23 +109,31 @@ public class Materialiser {
         return Optional.of(new Materialisation.Has.WithoutIsa(owner, attribute));
     }
 
-    private static Optional<Materialisation> materialise(
+    private Optional<Materialisation> materialise(
             Conclusion.Relation.Materialisable materialisable, TraversalEngine traversalEng, ConceptManager conceptMgr
     ) {
-        FunctionalIterator<Relation> existingRelations = matchRelation(materialisable, traversalEng, conceptMgr);
-        if (!existingRelations.hasNext()) {
-            return Optional.of(new Materialisation.Relation(insert(materialisable)));
+        if (RELAXED_RELATION_INFERENCE_SEMANTICS) {
+            Materialisation.Relation materialisedRelation = materialisedRelations.computeIfAbsent(materialisable.players(), playerMap -> new Materialisation.Relation(insert(materialisable)));
+            return Optional.of(materialisedRelation);
         } else {
-            while (existingRelations.hasNext()) {
-                Relation preexisting = existingRelations.next();
-                if (preexisting.existence() == STORED) return Optional.empty();
-                else {
-                    if (insertable(preexisting, materialisable)) {
-                        return Optional.of(new Materialisation.Relation(preexisting));
+            synchronized (materialisable.asRelation().relationType()) {
+                FunctionalIterator<Relation> existingRelations = matchRelation(materialisable, traversalEng, conceptMgr);
+                if (!existingRelations.hasNext()) {
+                    return Optional.of(new Materialisation.Relation(insert(materialisable)));
+                } else {
+                    while (existingRelations.hasNext()) {
+                        Relation preexisting = existingRelations.next();
+                        if (preexisting.existence() == STORED) return Optional.empty();
+                        else {
+                            if (insertable(preexisting, materialisable)) {
+                                return Optional.of(new Materialisation.Relation(preexisting));
+                            }
+                        }
                     }
+                    return Optional.empty();
                 }
             }
-            return Optional.empty();
+
         }
     }
 

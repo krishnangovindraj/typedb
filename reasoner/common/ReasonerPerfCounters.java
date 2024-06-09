@@ -24,6 +24,8 @@ public class ReasonerPerfCounters extends PerfCounters {
     public static final String COMPOUND_STREAMS = "streams_compound_streams";
     public static final String COMPOUND_STREAM_MESSAGES_RECEIVED = "streams_compound_stream_messages_received";
     public static final String RETRIEVABLE_PROCESSORS = "processors_retrievable";
+    public static final String RESOLVABLE_NODES = "resolvable_nodes";
+    public static final String TOTAL_ANSWER_TABLE_ENTRIES = "answer_table_entries";
 
     public final Counter timePlanning;
     public final Counter materialisations;
@@ -31,6 +33,8 @@ public class ReasonerPerfCounters extends PerfCounters {
     public final Counter compoundStreams;
     public final Counter compoundStreamMessagesReceived;
     public final Counter retrievableProcessors;
+    public final Counter resolvableNodes;
+    public final Counter answerTableEntries;
 
     public ReasonerPerfCounters(boolean enabled) {
         super(enabled);
@@ -40,6 +44,8 @@ public class ReasonerPerfCounters extends PerfCounters {
         compoundStreams = register(COMPOUND_STREAMS);
         compoundStreamMessagesReceived = register(COMPOUND_STREAM_MESSAGES_RECEIVED);
         retrievableProcessors = register(RETRIEVABLE_PROCESSORS);
+        resolvableNodes = register(RESOLVABLE_NODES);
+        answerTableEntries = register(TOTAL_ANSWER_TABLE_ENTRIES);
     }
 
     public void logCounters() {

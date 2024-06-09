@@ -31,6 +31,7 @@ import com.vaticle.typedb.core.test.integration.util.Util;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 import com.vaticle.typeql.lang.TypeQL;
 import com.vaticle.typeql.lang.pattern.statement.ThingStatement;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -63,9 +64,15 @@ public class RuleTest {
     private static final Options.Database options = new Options.Database().dataDir(dataDir).reasonerDebuggerDir(logDir)
             .storageIndexCacheSize(MB).storageDataCacheSize(MB);
     private static String database = "rule-test";
+    private Materialiser materialiser;
 
     private Variable getVariable(Set<Variable> vars, Identifier identifier) {
         return iterate(vars).filter(v -> v.id().equals(identifier)).next();
+    }
+
+    @Before
+    public void createMaterialiser() {
+        materialiser = new Materialiser();
     }
 
     @BeforeClass
@@ -111,7 +118,7 @@ public class RuleTest {
                     ConceptMap whenAnswer = new ConceptMap(map(pair(Identifier.Variable.namedConcept("x"), people.get(0)),
                             pair(Identifier.Variable.namedConcept("y"), people.get(1))));
 
-                    Optional<Map<Identifier.Variable, Concept>> materialisation = rule.conclusion().materialiseAndBind(whenAnswer, txn.traversal(), conceptMgr);
+                    Optional<Map<Identifier.Variable, Concept>> materialisation = rule.conclusion().materialiseAndBind(materialiser, whenAnswer, txn.traversal(), conceptMgr);
                     assertTrue(materialisation.isPresent());
                     assertEquals(5, materialisation.get().size());
 
@@ -167,7 +174,7 @@ public class RuleTest {
                     ConceptMap whenAnswer = new ConceptMap(map(pair(Identifier.Variable.namedConcept("x"), people.get(0)),
                             pair(Identifier.Variable.namedConcept("y"), people.get(1))));
 
-                    Optional<Map<Identifier.Variable, Concept>> materialisation = rule.conclusion().materialiseAndBind(whenAnswer, txn.traversal(), conceptMgr);
+                    Optional<Map<Identifier.Variable, Concept>> materialisation = rule.conclusion().materialiseAndBind(materialiser, whenAnswer, txn.traversal(), conceptMgr);
                     assertFalse(materialisation.isPresent());
                 }
             }
@@ -209,7 +216,7 @@ public class RuleTest {
                     Rule rule = txn.logic().getRule("old-milk-is-not-good");
                     ConceptMap whenAnswer = new ConceptMap(map(pair(Identifier.Variable.namedConcept("x"), milkInst),
                             pair(Identifier.Variable.namedConcept("a"), ageInDays10)));
-                    Optional<Map<Identifier.Variable, Concept>> materialisation = rule.conclusion().materialiseAndBind(whenAnswer, txn.traversal(), conceptMgr);
+                    Optional<Map<Identifier.Variable, Concept>> materialisation = rule.conclusion().materialiseAndBind(materialiser, whenAnswer, txn.traversal(), conceptMgr);
                     assertTrue(materialisation.isPresent());
                     assertEquals(2, materialisation.get().size());
 
@@ -255,7 +262,7 @@ public class RuleTest {
 
                     Rule rule = txn.logic().getRule("old-milk-is-not-good");
                     ConceptMap whenAnswer = new ConceptMap(map(pair(Identifier.Variable.namedConcept("x"), milkInst)));
-                    Optional<Map<Identifier.Variable, Concept>> materialisation = rule.conclusion().materialiseAndBind(whenAnswer, txn.traversal(), conceptMgr);
+                    Optional<Map<Identifier.Variable, Concept>> materialisation = rule.conclusion().materialiseAndBind(materialiser, whenAnswer, txn.traversal(), conceptMgr);
                     assertTrue(materialisation.isPresent());
                     assertEquals(3, materialisation.get().size());
 

@@ -49,11 +49,13 @@ public class ForwardChainingMaterialiser {
     private final Map<com.vaticle.typedb.core.logic.Rule, Rule> rules;
     private final CoreTransaction tx;
     private final Materialisations materialisations;
+    private final Materialiser materialiser;
     private List<Set<Rule>> rulePartitions;
 
     private ForwardChainingMaterialiser(CoreSession session) {
         this.rules = new HashMap<>();
         this.tx = session.transaction(Arguments.Transaction.Type.WRITE, new Options.Transaction().infer(false));
+        this.materialiser = new Materialiser();
         this.materialisations = new Materialisations();
         this.rulePartitions = null;
     }
@@ -207,7 +209,7 @@ public class ForwardChainingMaterialiser {
         private Optional<Map<Identifier.Variable, Concept>> materialiseAndBind(
                 com.vaticle.typedb.core.logic.Rule.Conclusion conclusion, ConceptMap whenConcepts, TraversalEngine traversalEng, ConceptManager conceptMgr
         ) {
-            return Materialiser.materialise(conclusion.materialisable(whenConcepts, conceptMgr), traversalEng, conceptMgr)
+            return materialiser.materialise(conclusion.materialisable(whenConcepts, conceptMgr), traversalEng, conceptMgr)
                     .map(materialisation -> materialisation.bindToConclusion(conclusion, whenConcepts));
         }
 
