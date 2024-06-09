@@ -316,15 +316,9 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             if (thisActorNode.getClass().equals(NegatedNode.class)) return Optional.empty(); // Optimisation
             if (existingPortCandidacy.nodeId < candidacy.nodeId) {
                 // Can only happen in case of termination
-                assert existingPortCandidacy == Port.NULL_RECEIVED_CANDIDACY || isCandidateTerminated(existingPortCandidacy.nodeId);// terminatedCandidates.add(existingPortCandidacy.nodeId);
+                assert existingPortCandidacy == Port.NULL_RECEIVED_CANDIDACY || isCandidateTerminated(existingPortCandidacy.nodeId); // TODO: This assertion still fails in v4 trunk (2024/06/09)
+                // terminatedCandidates.add(existingPortCandidacy.nodeId);
                 if (existingPortCandidacy.nodeId == currentCandidate.nodeId) {
-                    //////////////////////////////////////
-                    ////    WE STILL HAVE A PROBLEM   ///
-                    ////////////////////////////////////
-                    // The exact candidate from the port gets added to the terminated list, but race conditions can keep other candidates which are terminated in flight.
-                    // Just reverting the termination tracker to global might do the trick efficiently.
-                    // The alternative is using a stack to track candidates from ports, but that seems overkill.
-
                     currentCandidate = selectReplacementCandidate(activePorts);
                     return Optional.of(currentCandidate);
                 }

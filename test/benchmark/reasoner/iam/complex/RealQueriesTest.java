@@ -113,7 +113,7 @@ public class RealQueriesTest {
                 "$ac(object: $o, action: $a) isa access;\n" +
                 "$s-requesting isa subject, has parent-company-name \"Vaticle\", has id $s-requesting-id;\n" +
                 "$s-requested isa subject, has parent-company-name \"Vaticle\", has id $s-requested-id;\n" +
-                "(requester: $s-requesting, requestee: $s-requested, change: $ac) isa change-request;\n;" +
+                "(requester: $s-requesting, requestee: $s-requested, change: $ac) isa change-request;\n" +
                 "get;";
         Benchmark benchmark = new Benchmark("list-change-requests", query, 7);
         benchmarker.runBenchmark(benchmark);
