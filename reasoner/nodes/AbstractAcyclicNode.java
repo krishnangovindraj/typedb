@@ -37,7 +37,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     }
 
     protected static void trace(String formatStr, Object... args) {
-        TRACER_LOG.trace(String.format(formatStr, args));
+        TRACER_LOG.trace(formatStr, args);
     }
 
     protected void initialise() {
