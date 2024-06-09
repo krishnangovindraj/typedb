@@ -29,7 +29,7 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
         this.conjunction = conjunction;
         this.bounds = bounds;
         this.compoundStreamPlan = compoundStreamPlan;
-        nodeRegistry.perfCounterFields().subConjunctionNodes.add(1);
+        nodeRegistry.perfCounters().conjunctionProcessors.add(1);
     }
 
     @Override

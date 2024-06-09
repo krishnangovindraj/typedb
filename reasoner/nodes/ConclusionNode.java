@@ -61,7 +61,7 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
                 .map(materialisation -> materialisation.bindToConclusion(conclusion, msg.answer()))
                 .map(conclusionAnswer -> new Response.Conclusion(msg.index(), conclusionAnswer));
 
-        if (response.isPresent()) nodeRegistry.perfCounterFields().materialisations.add(1);
+        if (response.isPresent()) nodeRegistry.perfCounters().materialisations.add(1);
         return response;
     }
 }

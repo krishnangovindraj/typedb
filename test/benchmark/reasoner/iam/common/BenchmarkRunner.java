@@ -140,7 +140,7 @@ public class BenchmarkRunner {
                 Instant start = Instant.now();
                 long nAnswers = tx.query().get(TypeQL.parseQuery(query).asGet()).count();
                 Duration timeTaken = Duration.between(start, Instant.now());
-                run = new Benchmark.BenchmarkRun(nAnswers, timeTaken, ((CoreTransaction) tx).reasoner().controllerRegistry().perfCounters());
+                run = new Benchmark.BenchmarkRun(nAnswers, timeTaken, ((CoreTransaction) tx).reasoner().perfCounters());
             }
         }
         return run;

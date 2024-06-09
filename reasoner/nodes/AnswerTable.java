@@ -64,20 +64,6 @@ public class AnswerTable {
         return msg;
     }
 
-//    public Response.TreeVote recordTreePreVote(int target, int nodeId) {
-//        assert !complete;
-//        Response.TreeVote msg = new Response.TreeVote(answers.size(), target, null, nodeId);
-//        answers.add(msg);
-//        return msg;
-//    }
-//
-//    public Response.TreeVote recordTreePostVote(int target, int subtreeContribution, int nodeId) {
-//        assert !complete;
-//        Response.TreeVote msg = new Response.TreeVote(answers.size(), target, subtreeContribution, nodeId);
-//        answers.add(msg);
-//        return msg;
-//    }
-
     public Response.Done recordDone() {
         assert !complete;
         Response.Done msg = new Response.Done(answers.size());
