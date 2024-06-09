@@ -11,7 +11,7 @@ This branch is experimental. It rewrites the reasoner, with 2 major changes:
 
 ### Test status
 When this readme was written, all 'reasoning' tests were passing, however the recursive verification of explanations were failing due to discrepancies in how the reasoner & the forward chaining oracle decide what is and isn't explainable.
-- `ValuePredicateTest` : fails because the oracle doesn't consider `$x == 5` as triggering rules if `$x` is bound - We would like to include this optimisation/
+- `ValuePredicateTest` : fails because the oracle treats multiple `$x == $y` statements different (whether they have explanations or not).
 - `VariableRolesTest` & `SchemaQueriesTest`: When a concludable has a type-variable, say `($r: $p) isa my-relation` The oracle does not seem to consider any answer with `$r` to be unified with a supertype of the concrete role-type to be explainable.
 
 ### Roadmap
