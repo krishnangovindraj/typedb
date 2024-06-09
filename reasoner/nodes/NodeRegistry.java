@@ -10,6 +10,7 @@ import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.concurrent.actor.Actor;
 import com.vaticle.typedb.core.concurrent.actor.ActorExecutorGroup;
 import com.vaticle.typedb.core.logic.LogicManager;
+import com.vaticle.typedb.core.logic.Materialiser;
 import com.vaticle.typedb.core.logic.Rule;
 import com.vaticle.typedb.core.logic.resolvable.*;
 import com.vaticle.typedb.core.pattern.variable.Variable;
@@ -57,6 +58,7 @@ public class NodeRegistry {
     // Terminated leaders violate monotonicity of the candidate. We must track & ignore their candidacy to prevent oscillation.
     // TODO: Consider an ArrayList?
     private final ConcurrentSet<Integer> terminatedNodes;
+    private final Materialiser materialiser;
 
     public NodeRegistry(ActorExecutorGroup executorService, ReasonerPerfCounters perfCounters,
                         ConceptManager conceptManager, LogicManager logicManager, TraversalEngine traversalEngine,
@@ -80,6 +82,7 @@ public class NodeRegistry {
         this.terminated = new AtomicBoolean(false);
         this.nodeAgeClock = new AtomicInteger();
         this.terminatedNodes = new ConcurrentSet<>();
+        materialiser = new Materialiser();
     }
 
     public void close() {} // TODO: Do we need to do anything?
@@ -284,6 +287,10 @@ public class NodeRegistry {
 
     public boolean isCandidateTerminated(Integer nodeId) {
         return terminatedNodes.contains(nodeId);
+    }
+
+    public Materialiser materialiser() {
+        return materialiser;
     }
 
     public abstract class SubRegistry<KEY, NODE extends ActorNode<NODE>> {
