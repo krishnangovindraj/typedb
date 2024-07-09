@@ -14,10 +14,18 @@ rust_library(
     ]),
     deps = [
         "//answer",
+        "//common/bytes",
+        "//common/primitive",
+        "//resource",
+        "//concept",
+        "//durability",
         "//encoding",
         "//ir",
+        "//storage",
     ],
 )
+
+
 
 checkstyle_test(
     name = "checkstyle",

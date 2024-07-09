@@ -39,6 +39,13 @@ pub enum PatternDefinitionError {
         assigned_var_count: usize,
         function_return_count: usize,
     },
+    ReturnVariableUnavailable {
+        variable: String,
+    },
+    ArgumentCountMismatch {
+        expected: usize,
+        actual: usize,
+    }, // TODO: Maybe move this fo FunctionReadError
 }
 
 impl fmt::Display for PatternDefinitionError {
@@ -54,6 +61,8 @@ impl Error for PatternDefinitionError {
             Self::VariableCategoryMismatch { .. } => None,
             Self::FunctionArgumentUnused { .. } => None,
             Self::FunctionCallReturnArgCountMismatch { .. } => None,
+            Self::ReturnVariableUnavailable { .. } => None,
+            Self::ArgumentCountMismatch { .. } => None,
         }
     }
 }

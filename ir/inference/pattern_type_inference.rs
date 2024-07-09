@@ -23,7 +23,11 @@ use crate::{
         TypeInferenceError,
     },
     pattern::{conjunction::Conjunction, constraint::Constraint},
-    program::block::FunctionalBlock,
+    program::{
+        block::{BlockContext, FunctionalBlock},
+        function::FunctionIR,
+        program::{LocalFunctionCache, SchemaFunctionCache},
+    },
 };
 
 /*
@@ -57,8 +61,11 @@ pub(crate) fn infer_types_for_block<'graph>(
     snapshot: &impl ReadableSnapshot,
     block: &'graph FunctionalBlock,
     type_manager: &TypeManager,
+    schema_functions: &SchemaFunctionCache,
+    local_function_cache: Option<&LocalFunctionCache>,
 ) -> Result<TypeInferenceGraph<'graph>, TypeInferenceError> {
-    let mut tig = TypeSeeder::new(snapshot, type_manager).seed_types(block.context(), block.conjunction())?;
+    let mut tig = TypeSeeder::new(snapshot, type_manager, schema_functions, local_function_cache)
+        .seed_types(block.context(), block.conjunction())?;
     run_type_inference(&mut tig);
     Ok(tig)
 }
@@ -326,7 +333,7 @@ pub mod tests {
             },
         },
         pattern::constraint::{Constraint, IsaKind},
-        program::block::FunctionalBlock,
+        program::{block::FunctionalBlock, program::SchemaFunctionCache},
     };
 
     pub(crate) fn expected_edge(
@@ -381,8 +388,8 @@ pub mod tests {
 
             let block = builder.finish();
             let constraints = block.conjunction().constraints().constraints();
-
-            let tig = infer_types_for_block(&snapshot, &block, &type_manager).unwrap();
+            let tig =
+                infer_types_for_block(&snapshot, &block, &type_manager, &SchemaFunctionCache::empty(), None).unwrap();
 
             let expected_tig = TypeInferenceGraph {
                 conjunction: block.conjunction(),
@@ -440,7 +447,8 @@ pub mod tests {
             let block = builder.finish();
 
             let constraints = block.conjunction().constraints().constraints();
-            let tig = infer_types_for_block(&snapshot, &block, &type_manager).unwrap();
+            let tig =
+                infer_types_for_block(&snapshot, &block, &type_manager, &SchemaFunctionCache::empty(), None).unwrap();
 
             let expected_tig = TypeInferenceGraph {
                 conjunction: block.conjunction(),
@@ -496,7 +504,8 @@ pub mod tests {
 
             let block = builder.finish();
             let constraints = block.conjunction().constraints().constraints();
-            let tig = infer_types_for_block(&snapshot, &block, &type_manager).unwrap();
+            let tig =
+                infer_types_for_block(&snapshot, &block, &type_manager, &SchemaFunctionCache::empty(), None).unwrap();
 
             let expected_tig = TypeInferenceGraph {
                 conjunction: block.conjunction(),
@@ -539,7 +548,8 @@ pub mod tests {
 
             let block = builder.finish();
             let constraints = block.conjunction().constraints().constraints();
-            let tig = infer_types_for_block(&snapshot, &block, &type_manager).unwrap();
+            let tig =
+                infer_types_for_block(&snapshot, &block, &type_manager, &SchemaFunctionCache::empty(), None).unwrap();
 
             let expected_tig = TypeInferenceGraph {
                 conjunction: block.conjunction(),
@@ -633,10 +643,10 @@ pub mod tests {
             let block = builder.finish();
 
             let snapshot = storage.clone().open_snapshot_write();
-            let tig = infer_types_for_block(&snapshot, &block, &type_manager).unwrap();
+            let tig =
+                infer_types_for_block(&snapshot, &block, &type_manager, &SchemaFunctionCache::empty(), None).unwrap();
 
             let conjunction = block.conjunction();
-
             let disj = conjunction.nested_patterns().first().unwrap().as_disjunction().unwrap();
             let [b1, b2] = &disj.conjunctions()[..] else { unreachable!() };
             let b1_isa = &b1.constraints().constraints()[0];
@@ -736,7 +746,8 @@ pub mod tests {
             let block = builder.finish();
             let conjunction = block.conjunction();
             let constraints = conjunction.constraints().constraints();
-            let tig = infer_types_for_block(&snapshot, &block, &type_manager).unwrap();
+            let tig =
+                infer_types_for_block(&snapshot, &block, &type_manager, &SchemaFunctionCache::empty(), None).unwrap();
 
             let expected_tig = TypeInferenceGraph {
                 conjunction: &conjunction,
@@ -814,8 +825,8 @@ pub mod tests {
 
             let conjunction = block.conjunction();
             let constraints = conjunction.constraints().constraints();
-
-            let tig = infer_types_for_block(&snapshot, &block, &type_manager).unwrap();
+            let tig =
+                infer_types_for_block(&snapshot, &block, &type_manager, &SchemaFunctionCache::empty(), None).unwrap();
 
             let expected_graph = TypeInferenceGraph {
                 conjunction: &conjunction,

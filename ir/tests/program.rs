@@ -21,6 +21,7 @@ use ir::{
     },
     program::{
         block::{BlockContext, FunctionalBlock},
+        function::FunctionID,
         modifier::ModifierDefinitionError,
         program::Program,
     },
@@ -47,7 +48,7 @@ fn build_program_modifiers() {
 
     let block = builder.finish();
 
-    let _ = Program::new(block, HashMap::new());
+    let _ = Program::new(block, Vec::new());
 }
 
 #[test]
@@ -89,11 +90,11 @@ fn build_program_with_functions() {
     conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_person, var_person_type).unwrap();
 
     let mut function_call_var_mapping = BTreeMap::new();
-    function_call_var_mapping.insert(var_person, Variable::new(1000));
+    function_call_var_mapping.insert(var_person, 0);
     let mut function_call_var_categories = HashMap::new();
     function_call_var_categories.insert(var_person, VariableCategory::Object);
     let function_call = FunctionCall::new(
-        DefinitionKey::build(Prefix::DefinitionStruct, DefinitionID::build(1000)),
+        FunctionID::Schema(DefinitionKey::build(Prefix::DefinitionStruct, DefinitionID::build(1000))),
         function_call_var_mapping,
         function_call_var_categories,
         vec![

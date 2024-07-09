@@ -14,17 +14,20 @@ use answer::variable::Variable;
 use encoding::graph::definition::definition_key::DefinitionKey;
 use itertools::Itertools;
 
-use crate::pattern::{
-    variable_category::{VariableCategory, VariableOptionality},
-    IrID,
+use crate::{
+    pattern::{
+        variable_category::{VariableCategory, VariableOptionality},
+        IrID,
+    },
+    program::function::{FunctionID, FunctionIR},
 };
 
 /// This IR has information copied from the target function, so inference can be block-local
 #[derive(Debug, Clone)]
 pub struct FunctionCall<ID: IrID> {
-    function_id: DefinitionKey<'static>,
-    // map call variable to function-internal varirable
-    call_variable_mapping: BTreeMap<ID, Variable>,
+    function_id: FunctionID,
+    // map call variable to index of argument
+    call_variable_mapping: BTreeMap<ID, usize>,
     // map call variable to category of variable as indicated by function signature
     call_variable_categories: HashMap<ID, VariableCategory>,
     returns: Vec<(VariableCategory, VariableOptionality)>,
@@ -33,8 +36,8 @@ pub struct FunctionCall<ID: IrID> {
 
 impl<ID: IrID> FunctionCall<ID> {
     pub fn new(
-        function_id: DefinitionKey<'static>,
-        call_variable_mapping: BTreeMap<ID, Variable>,
+        function_id: FunctionID, // TODO: Replace with FunctionId
+        call_variable_mapping: BTreeMap<ID, usize>,
         call_variable_categories: HashMap<ID, VariableCategory>,
         returns: Vec<(VariableCategory, VariableOptionality)>,
         return_is_stream: bool,
@@ -42,11 +45,11 @@ impl<ID: IrID> FunctionCall<ID> {
         Self { function_id, call_variable_mapping, call_variable_categories, returns, return_is_stream }
     }
 
-    pub(crate) fn function_id(&self) -> DefinitionKey<'static> {
+    pub(crate) fn function_id(&self) -> FunctionID {
         self.function_id.clone()
     }
 
-    pub(crate) fn call_id_mapping(&self) -> &BTreeMap<ID, Variable> {
+    pub(crate) fn call_id_mapping(&self) -> &BTreeMap<ID, usize> {
         &self.call_variable_mapping
     }
 

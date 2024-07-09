@@ -37,6 +37,11 @@ On error, show the inferred types for variables (in minimal original query forma
 In the order that are connected to the variable.
  */
 
+use std::{
+    error::Error,
+    fmt::{Display, Formatter},
+};
+
 use concept::error::ConceptReadError;
 
 pub mod pattern_type_inference;
@@ -50,11 +55,19 @@ pub enum TypeInferenceError {
     LabelNotResolved(String),
 }
 
+impl Display for TypeInferenceError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        todo!()
+    }
+}
+
+impl Error for TypeInferenceError {}
+
 #[cfg(test)]
 pub mod tests {
     use std::{
         borrow::Borrow,
-        collections::{BTreeMap, BTreeSet},
+        collections::{BTreeMap, BTreeSet, HashMap},
         sync::Arc,
     };
 
@@ -88,6 +101,7 @@ pub mod tests {
             NestedTypeInferenceGraphDisjunction, TypeInferenceEdge, TypeInferenceGraph,
         },
         pattern::{conjunction::Conjunction, constraint::Constraint},
+        program::program::SchemaFunctionCache,
     };
 
     impl<'this> PartialEq<Self> for TypeInferenceEdge<'this> {
