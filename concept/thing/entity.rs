@@ -11,8 +11,12 @@ use std::{
 
 use bytes::{byte_array::ByteArray, Bytes};
 use encoding::{
-    graph::{thing::vertex_object::ObjectVertex, type_::vertex::PrefixedTypeVertexEncoding, Typed},
-    layout::prefix::Prefix,
+    graph::{
+        thing::vertex_object::ObjectVertex,
+        type_::vertex::{PrefixedTypeVertexEncoding, TypeVertex},
+        Typed,
+    },
+    layout::prefix::{Prefix, PrefixID},
     AsBytes, Keyable, Prefixed,
 };
 use iterator::Collector;
@@ -26,6 +30,7 @@ use storage::{
 use crate::{
     concept_iterator,
     error::{ConceptReadError, ConceptWriteError},
+    iterator::{ConceptIterator, IterableConcept, IterableThing},
     thing::{
         object::{Object, ObjectAPI},
         relation::{IndexedPlayersIterator, RelationRoleIterator},
@@ -169,11 +174,26 @@ impl<'a> ObjectAPI<'a> for Entity<'a> {
     }
 }
 
-fn storage_key_to_entity(storage_key: StorageKey<'_, BUFFER_KEY_INLINE>) -> Entity<'_> {
-    Entity::new(ObjectVertex::new(storage_key.into_bytes()))
+concept_iterator!(EntityIterator, Entity);
+
+impl IterableConcept for Entity<'static> {
+    type Concept<'a> = Entity<'a>;
+    fn from_storage_key<'a>(storage_key: StorageKey<'a, BUFFER_KEY_INLINE>) -> Self::Concept<'a> {
+        Entity::new(ObjectVertex::new(storage_key.into_bytes()))
+    }
+
+    fn build_prefix() -> StorageKey<'static, { PrefixID::LENGTH }> {
+        ObjectVertex::build_prefix_prefix(Prefix::VertexEntity)
+    }
 }
 
-concept_iterator!(EntityIterator, Entity, storage_key_to_entity);
+impl IterableThing for Entity<'static> {
+    type ConceptType<'a> = EntityType<'a>;
+
+    fn build_prefix_for_type<'a>(type_: Self::ConceptType<'a>) -> StorageKey<'a, { TypeVertex::LENGTH }> {
+        ObjectVertex::build_prefix_type(Prefix::VertexEntity.prefix_id(), type_.vertex().type_id_())
+    }
+}
 
 impl<'a> Display for Entity<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

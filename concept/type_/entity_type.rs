@@ -32,6 +32,7 @@ use storage::{
 use crate::{
     concept_iterator,
     error::{ConceptReadError, ConceptWriteError},
+    iterator::ConceptIterator,
     type_::{
         annotation::{Annotation, AnnotationAbstract, AnnotationCategory, AnnotationError, DefaultFrom},
         attribute_type::AttributeType,
@@ -377,9 +378,4 @@ impl Into<Annotation> for EntityTypeAnnotation {
 //     }
 // }
 
-// TODO: can we inline this into the macro invocation?
-fn storage_key_to_entity_type(storage_key: StorageKey<'_, BUFFER_KEY_INLINE>) -> EntityType<'_> {
-    EntityType::read_from(storage_key.into_bytes())
-}
-
-concept_iterator!(EntityTypeIterator, EntityType, storage_key_to_entity_type);
+concept_iterator!(EntityTypeIterator, EntityType);

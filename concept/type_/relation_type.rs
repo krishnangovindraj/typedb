@@ -32,6 +32,7 @@ use storage::{
 use crate::{
     concept_iterator,
     error::{ConceptReadError, ConceptWriteError},
+    iterator::ConceptIterator,
     type_::{
         annotation::{
             Annotation, AnnotationAbstract, AnnotationCascade, AnnotationCategory, AnnotationError, DefaultFrom,
@@ -426,8 +427,4 @@ impl Into<Annotation> for RelationTypeAnnotation {
 }
 
 // TODO: can we inline this into the macro invocation?
-fn storage_key_to_relation_type(storage_key: StorageKey<'_, BUFFER_KEY_INLINE>) -> RelationType<'_> {
-    RelationType::read_from(storage_key.into_bytes())
-}
-
-concept_iterator!(RelationTypeIterator, RelationType, storage_key_to_relation_type);
+concept_iterator!(RelationTypeIterator, RelationType);

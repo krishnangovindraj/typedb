@@ -11,8 +11,12 @@ use std::{
 
 use bytes::Bytes;
 use encoding::{
-    graph::thing::{edge::ThingEdgeHas, vertex_object::ObjectVertex},
-    layout::prefix::Prefix,
+    graph::{
+        thing::{edge::ThingEdgeHas, vertex_object::ObjectVertex},
+        type_::vertex::TypeVertex,
+        Typed,
+    },
+    layout::prefix::{Prefix, PrefixID},
     value::{decode_value_u64, value::Value},
     Prefixed,
 };
@@ -26,12 +30,13 @@ use storage::{
 use crate::{
     concept_iterator, edge_iterator,
     error::{ConceptReadError, ConceptWriteError},
+    iterator::{ConceptIterator, IterableConcept, IterableThing},
     thing::{
         attribute::Attribute, entity::Entity, has::Has, relation::Relation, thing_manager::ThingManager, ThingAPI,
     },
     type_::{
         attribute_type::AttributeType, object_type::ObjectType, owns::Owns, role_type::RoleType,
-        type_manager::TypeManager, Capability, ObjectTypeAPI, Ordering, OwnerAPI,
+        type_manager::TypeManager, Capability, ObjectTypeAPI, Ordering, OwnerAPI, TypeAPI,
     },
     ConceptStatus,
 };
@@ -414,11 +419,32 @@ impl<'a> Display for Object<'a> {
     }
 }
 
-fn storage_key_to_object(storage_key: StorageKey<'_, BUFFER_KEY_INLINE>) -> Object<'_> {
-    Object::new(ObjectVertex::new(storage_key.into_bytes()))
+concept_iterator!(ObjectIterator, Object);
+impl IterableConcept for Object<'static> {
+    type Concept<'a> = Object<'a>;
+
+    fn from_storage_key<'a>(storage_key: StorageKey<'a, BUFFER_KEY_INLINE>) -> Self::Concept<'a> {
+        Object::new(ObjectVertex::new(storage_key.into_bytes()))
+    }
+
+    fn build_prefix() -> StorageKey<'static, { PrefixID::LENGTH }> {
+        unreachable!()
+    }
 }
 
-concept_iterator!(ObjectIterator, Object, storage_key_to_object);
+impl IterableThing for Object<'static> {
+    type ConceptType<'a> = ObjectType<'a>;
+    fn build_prefix_for_type<'a>(type_: Self::ConceptType<'a>) -> StorageKey<'a, { TypeVertex::LENGTH }> {
+        match type_ {
+            ObjectType::Entity(type_) => {
+                ObjectVertex::build_prefix_type(Prefix::VertexEntity.prefix_id(), type_.vertex().type_id_())
+            }
+            ObjectType::Relation(type_) => {
+                ObjectVertex::build_prefix_type(Prefix::VertexRelation.prefix_id(), type_.vertex().type_id_())
+            }
+        }
+    }
+}
 
 fn storage_key_to_has_attribute<'a>(
     storage_key: StorageKey<'a, BUFFER_KEY_INLINE>,

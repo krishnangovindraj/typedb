@@ -52,6 +52,7 @@ use storage::{
 use super::{decode_role_players, encode_role_players};
 use crate::{
     error::{ConceptReadError, ConceptWriteError},
+    iterator::{ConceptIterator, IterableThing},
     thing::{
         attribute::{Attribute, AttributeIterator, AttributeOwnerIterator, StructIndexToAttributeIterator},
         decode_attribute_ids, encode_attribute_ids,
@@ -67,7 +68,7 @@ use crate::{
         relation_type::RelationType,
         role_type::RoleType,
         type_manager::TypeManager,
-        Capability, ObjectTypeAPI, OwnerAPI, TypeAPI,
+        Capability, KindAPI, ObjectTypeAPI, OwnerAPI, TypeAPI,
     },
     ConceptStatus,
 };
@@ -85,36 +86,32 @@ impl ThingManager {
     pub(crate) fn type_manager(&self) -> &TypeManager {
         &self.type_manager
     }
-
-    pub fn get_entities(&self, snapshot: &impl ReadableSnapshot) -> EntityIterator {
-        let prefix = ObjectVertex::build_prefix_prefix(Prefix::VertexEntity);
-        let snapshot_iterator =
-            snapshot.iterate_range(KeyRange::new_within(prefix, Prefix::VertexEntity.fixed_width_keys()));
-        EntityIterator::new(snapshot_iterator)
+    pub fn get_instances<T: IterableThing>(&self, snapshot: &impl ReadableSnapshot) -> ConceptIterator<T> {
+        let prefix = T::build_prefix();
+        let snapshot_iterator = snapshot.iterate_range(KeyRange::new_within(prefix, T::fixed_width_keys()));
+        ConceptIterator::new(snapshot_iterator)
     }
 
-    pub fn get_objects_in(&self, snapshot: &impl ReadableSnapshot, object_type: ObjectType<'_>) -> ObjectIterator {
-        let vertex_prefix = match object_type {
-            ObjectType::Entity(_) => Prefix::VertexEntity,
-            ObjectType::Relation(_) => Prefix::VertexRelation,
-        };
-        let prefix = ObjectVertex::build_prefix_type(vertex_prefix.prefix_id(), object_type.vertex().type_id_());
-        let snapshot_iterator = snapshot.iterate_range(KeyRange::new_within(prefix, vertex_prefix.fixed_width_keys()));
-        ObjectIterator::new(snapshot_iterator)
+    pub fn get_instances_in<T: IterableThing>(
+        &self,
+        snapshot: &impl ReadableSnapshot,
+        type_: T::ConceptType<'_>,
+    ) -> ConceptIterator<T> {
+        let prefix = T::build_prefix_for_type(type_);
+        let snapshot_iterator = snapshot.iterate_range(KeyRange::new_within(prefix, T::fixed_width_keys()));
+        ConceptIterator::new(snapshot_iterator)
+    }
+
+    pub fn get_entities(&self, snapshot: &impl ReadableSnapshot) -> EntityIterator {
+        self.get_instances(snapshot)
     }
 
     pub fn get_entities_in(&self, snapshot: &impl ReadableSnapshot, entity_type: EntityType<'_>) -> EntityIterator {
-        let prefix = ObjectVertex::build_prefix_type(Prefix::VertexEntity.prefix_id(), entity_type.vertex().type_id_());
-        let snapshot_iterator =
-            snapshot.iterate_range(KeyRange::new_within(prefix, Prefix::VertexEntity.fixed_width_keys()));
-        EntityIterator::new(snapshot_iterator)
+        self.get_instances_in(snapshot, entity_type)
     }
 
     pub fn get_relations(&self, snapshot: &impl ReadableSnapshot) -> RelationIterator {
-        let prefix = ObjectVertex::build_prefix_prefix(Prefix::VertexRelation);
-        let snapshot_iterator =
-            snapshot.iterate_range(KeyRange::new_within(prefix, Prefix::VertexRelation.fixed_width_keys()));
-        RelationIterator::new(snapshot_iterator)
+        self.get_instances(snapshot)
     }
 
     pub fn get_relations_in(
@@ -122,11 +119,11 @@ impl ThingManager {
         snapshot: &impl ReadableSnapshot,
         relation_type: RelationType<'_>,
     ) -> RelationIterator {
-        let prefix =
-            ObjectVertex::build_prefix_type(Prefix::VertexRelation.prefix_id(), relation_type.vertex().type_id_());
-        let snapshot_iterator =
-            snapshot.iterate_range(KeyRange::new_within(prefix, Prefix::VertexRelation.fixed_width_keys()));
-        RelationIterator::new(snapshot_iterator)
+        self.get_instances_in(snapshot, relation_type)
+    }
+
+    pub fn get_objects_in(&self, snapshot: &impl ReadableSnapshot, object_type: ObjectType<'_>) -> ObjectIterator {
+        self.get_instances_in(snapshot, object_type)
     }
 
     pub(crate) fn get_relations_player<'o>(

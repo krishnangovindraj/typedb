@@ -16,10 +16,10 @@ use encoding::{
             edge::{ThingEdgeRolePlayer, ThingEdgeRolePlayerIndex},
             vertex_object::ObjectVertex,
         },
-        type_::vertex::PrefixedTypeVertexEncoding,
+        type_::vertex::{PrefixedTypeVertexEncoding, TypeVertex},
         Typed,
     },
-    layout::prefix::Prefix,
+    layout::prefix::{Prefix, PrefixID},
     value::decode_value_u64,
     AsBytes, Keyable, Prefixed,
 };
@@ -33,6 +33,7 @@ use storage::{
 use crate::{
     concept_iterator, edge_iterator,
     error::{ConceptReadError, ConceptWriteError},
+    iterator::{ConceptIterator, IterableConcept, IterableThing},
     thing::{
         entity::Entity,
         object::{Object, ObjectAPI},
@@ -440,10 +441,27 @@ impl Hkt for Relation<'static> {
 }
 
 // TODO: can we inline this into the macro invocation?
-fn storage_key_to_entity(storage_key: StorageKey<'_, BUFFER_KEY_INLINE>) -> Relation<'_> {
-    Relation::new(ObjectVertex::new(storage_key.into_bytes()))
+concept_iterator!(RelationIterator, Relation);
+
+impl IterableConcept for Relation<'static> {
+    type Concept<'a> = Relation<'a>;
+
+    fn from_storage_key<'a>(storage_key: StorageKey<'a, BUFFER_KEY_INLINE>) -> Self::Concept<'a> {
+        Relation::new(ObjectVertex::new(storage_key.into_bytes()))
+    }
+
+    fn build_prefix() -> StorageKey<'static, { PrefixID::LENGTH }> {
+        ObjectVertex::build_prefix_prefix(Prefix::VertexRelation)
+    }
 }
-concept_iterator!(RelationIterator, Relation, storage_key_to_entity);
+
+impl IterableThing for Relation<'static> {
+    type ConceptType<'a> = RelationType<'a>;
+
+    fn build_prefix_for_type<'a>(type_: Self::ConceptType<'a>) -> StorageKey<'a, { TypeVertex::LENGTH }> {
+        ObjectVertex::build_prefix_type(Prefix::VertexRelation.prefix_id(), type_.vertex().type_id_())
+    }
+}
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct RolePlayer<'a> {

@@ -3,43 +3,72 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//
+// // FIXME: exported macros must provide their own use-declarations or use fully qualified paths
+// //        As it stands, this macro requires imports at point of use.
 
-// FIXME: exported macros must provide their own use-declarations or use fully qualified paths
-//        As it stands, this macro requires imports at point of use.
 #[macro_export]
 macro_rules! concept_iterator {
-    ($name:ident, $concept_type:ident, $map_fn: expr) => {
-        pub struct $name {
-            snapshot_iterator: Option<storage::snapshot::iterator::SnapshotRangeIterator>,
-        }
-
-        #[allow(unused)]
-        impl $name {
-            pub(crate) fn new(snapshot_iterator: storage::snapshot::iterator::SnapshotRangeIterator) -> Self {
-                $name { snapshot_iterator: Some(snapshot_iterator) }
-            }
-
-            pub(crate) fn new_empty() -> Self {
-                $name { snapshot_iterator: None }
-            }
-
-            pub fn seek(&mut self) {
-                todo!()
-            }
-        }
-
-        impl ::lending_iterator::LendingIterator for $name {
-            type Item<'a> = Result<$concept_type<'a>, $crate::error::ConceptReadError>;
-            fn next(&mut self) -> Option<Self::Item<'_>> {
-                use $crate::error::ConceptReadError::SnapshotIterate;
-                self.snapshot_iterator.as_mut()?.next().map(|result| {
-                    result
-                        .map(|(storage_key, _value_bytes)| $map_fn(storage_key))
-                        .map_err(|error| SnapshotIterate { source: error })
-                })
-            }
-        }
+    ($name:ident, $concept_type:ident) => {
+        pub type $name = ConceptIterator<$concept_type<'static>>;
     };
+}
+
+use std::marker::PhantomData;
+
+use encoding::{
+    graph::type_::vertex::{TypeID, TypeVertex},
+    layout::prefix::{Prefix, PrefixID},
+};
+use resource::constants::snapshot::BUFFER_KEY_INLINE;
+use storage::key_value::StorageKey;
+
+use crate::type_::TypeAPI;
+
+pub trait IterableConcept {
+    type Concept<'a>;
+    fn from_storage_key<'a>(storage_key: StorageKey<'a, BUFFER_KEY_INLINE>) -> Self::Concept<'a>;
+    fn build_prefix() -> StorageKey<'static, { PrefixID::LENGTH }>;
+
+    fn fixed_width_keys() -> bool {
+        true
+    }
+}
+
+pub trait IterableThing: IterableConcept {
+    type ConceptType<'a>: TypeAPI<'a>;
+    fn build_prefix_for_type<'a>(type_: Self::ConceptType<'a>) -> StorageKey<'a, { TypeVertex::LENGTH }>;
+}
+
+pub struct ConceptIterator<T: IterableConcept + 'static> {
+    snapshot_iterator: Option<storage::snapshot::iterator::SnapshotRangeIterator>,
+    phantom: PhantomData<T>,
+}
+
+impl<T: IterableConcept + 'static> ConceptIterator<T> {
+    pub(crate) fn new(snapshot_iterator: storage::snapshot::iterator::SnapshotRangeIterator) -> Self {
+        Self { snapshot_iterator: Some(snapshot_iterator), phantom: PhantomData }
+    }
+
+    pub(crate) fn new_empty() -> Self {
+        Self { snapshot_iterator: None, phantom: PhantomData }
+    }
+
+    pub fn seek(&mut self) {
+        todo!()
+    }
+}
+
+impl<T: IterableConcept + 'static> ::lending_iterator::LendingIterator for ConceptIterator<T> {
+    type Item<'a> = Result<T::Concept<'a>, crate::error::ConceptReadError>;
+    fn next(&mut self) -> Option<Self::Item<'_>> {
+        use crate::error::ConceptReadError::SnapshotIterate;
+        self.snapshot_iterator.as_mut()?.next().map(|result| {
+            result
+                .map(|(storage_key, _value_bytes)| T::from_storage_key(storage_key))
+                .map_err(|error| SnapshotIterate { source: error })
+        })
+    }
 }
 
 #[macro_export]

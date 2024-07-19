@@ -34,6 +34,7 @@ use super::Ordering;
 use crate::{
     concept_iterator,
     error::{ConceptReadError, ConceptWriteError},
+    iterator::ConceptIterator,
     type_::{
         annotation::{Annotation, AnnotationAbstract, AnnotationCategory, AnnotationError, DefaultFrom},
         object_type::ObjectType,
@@ -351,8 +352,4 @@ impl Into<Annotation> for RoleTypeAnnotation {
 // }
 
 // TODO: can we inline this into the macro invocation?
-fn storage_key_to_role_type(storage_key: StorageKey<'_, BUFFER_KEY_INLINE>) -> RoleType<'_> {
-    RoleType::read_from(storage_key.into_bytes())
-}
-
-concept_iterator!(RoleTypeIterator, RoleType, storage_key_to_role_type);
+concept_iterator!(RoleTypeIterator, RoleType);
