@@ -13,9 +13,7 @@ use concept::{
 };
 use lending_iterator::higher_order::Hkt;
 
-use crate::executor::{
-    VariablePosition,
-};
+use crate::executor::VariablePosition;
 
 #[derive(Debug, Clone)]
 pub(crate) enum Tuple<'a> {
