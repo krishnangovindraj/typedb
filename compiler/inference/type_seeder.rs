@@ -31,7 +31,7 @@ use itertools::Itertools;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::inference::{
-    annotated_functions::{IndexedAnnotatedFunctions, AnnotatedFunctions, AnnotatedUnindexedFunctions},
+    annotated_functions::{AnnotatedFunctions, AnnotatedUnindexedFunctions, IndexedAnnotatedFunctions},
     pattern_type_inference::{
         NestedTypeInferenceGraphDisjunction, TypeInferenceEdge, TypeInferenceGraph, VertexAnnotations,
     },

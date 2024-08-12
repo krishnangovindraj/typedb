@@ -16,13 +16,14 @@ use ir::{
     program::block::BlockContext,
 };
 use itertools::Itertools;
+use ir::program::block::FunctionalBlock;
 
 use crate::{
-    inference::annotated_program::AnnotatedProgram,
+    expression::compiled_expression::CompiledExpression,
+    inference::type_annotations::TypeAnnotations,
     instruction::constraint::instructions::{ConstraintInstruction, Inputs},
     planner::vertex::{Costed, HasPlanner, PlannerVertex, ThingPlanner, VertexCost},
 };
-use crate::expression::compiled_expression::CompiledExpression;
 
 pub struct PatternPlan {
     pub(crate) steps: Vec<Step>,
@@ -49,7 +50,7 @@ impl PatternPlan {
         block: &FunctionalBlock,
         type_annotations: &TypeAnnotations,
         expressions: &HashMap<Variable, CompiledExpression>,
-        statistics: &Statistics
+        statistics: &Statistics,
     ) -> Self {
         assert!(block.modifiers().is_empty(), "TODO: modifiers in a FunctionalBlock");
         let conjunction = block.conjunction();
@@ -61,7 +62,6 @@ impl PatternPlan {
         let mut adjacency: HashMap<usize, HashSet<usize>> = HashMap::new();
 
         let context = block.context();
-        let type_annotations = program.get_entry_annotations();
 
         for (variable, category) in context.variable_categories() {
             match category {

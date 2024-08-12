@@ -5,6 +5,17 @@
  */
 
 use cucumber::gherkin::Step;
+use std::{collections::HashMap, sync::Arc};
+
+use answer::variable_value::VariableValue;
+use compiler::{
+    inference::annotated_functions::IndexedAnnotatedFunctions,
+};
+use executor::{
+    batch::Row,
+};
+use ir::program::{function_signature::HashMapFunctionSignatureIndex, program::Program};
+use itertools::Itertools;
 use macro_rules_attribute::apply;
 use query::query_manager::QueryManager;
 
@@ -18,9 +29,9 @@ use crate::{
 #[apply(generic_step)]
 #[step(expr = r"typeql define{may_error}")]
 async fn typeql_define(context: &mut Context, may_error: MayError, step: &Step) {
-    let typeql_define = step.docstring.as_ref().unwrap().as_str();
+    let typeql_define = typeql::parse_query(step.docstring.as_ref().unwrap().as_str()).unwrap().into_schema();
     with_schema_tx!(context, |tx| {
-        let result = QueryManager::new().execute(&mut tx.snapshot, &tx.type_manager, typeql_define);
+        let result = QueryManager::new().execute_schema(&mut tx.snapshot, &tx.type_manager, typeql_define);
         assert_eq!(may_error.expects_error(), result.is_err(), "{:?}", result);
     });
 }
