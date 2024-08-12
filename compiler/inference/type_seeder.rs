@@ -19,7 +19,7 @@ use encoding::value::value_type::ValueTypeCategory;
 use ir::{
     pattern::{
         conjunction::Conjunction,
-        constraint::{Comparison, Constraint, FunctionCallBinding, Has, Isa, Label, RolePlayer, Sub},
+        constraint::{Comparison, Constraint, FunctionCallBinding, Has, Isa, Label, RoleName, RolePlayer, Sub},
         disjunction::Disjunction,
         nested_pattern::NestedPattern,
         variable_category::VariableCategory,
@@ -192,7 +192,13 @@ impl<'this, Snapshot: ReadableSnapshot> TypeSeeder<'this, Snapshot> {
             match constraint {
                 Constraint::Label(c) => c.apply(self, vertices)?,
                 Constraint::FunctionCallBinding(c) => c.apply(self, vertices)?,
-                _ => {}
+                Constraint::RoleName(c) => c.apply(self, vertices)?,
+                | Constraint::Sub(_)
+                | Constraint::Isa(_)
+                | Constraint::RolePlayer(_)
+                | Constraint::Has(_)
+                | Constraint::ExpressionBinding(_)
+                | Constraint::Comparison(_) => {}
             }
         }
         for nested_tig in tig.nested_disjunctions.iter_mut().flat_map(|nested| &mut nested.disjunction) {
@@ -296,7 +302,10 @@ impl<'this, Snapshot: ReadableSnapshot> TypeSeeder<'this, Snapshot> {
             }
             Constraint::Has(has) => self.try_propagating_vertex_annotation_impl(has, vertices)?,
             Constraint::Comparison(cmp) => self.try_propagating_vertex_annotation_impl(cmp, vertices)?,
-            Constraint::ExpressionBinding(_) | Constraint::FunctionCallBinding(_) | Constraint::Label(_) => false,
+            Constraint::ExpressionBinding(_)
+            | Constraint::FunctionCallBinding(_)
+            | Constraint::RoleName(_)
+            | Constraint::Label(_) => false,
         };
         Ok(any_modified)
     }
@@ -417,7 +426,10 @@ impl<'this, Snapshot: ReadableSnapshot> TypeSeeder<'this, Snapshot> {
                 }
                 Constraint::Has(has) => edges.push(self.seed_edge(constraint, has, vertices)?),
                 Constraint::Comparison(cmp) => edges.push(self.seed_edge(constraint, cmp, vertices)?),
-                Constraint::ExpressionBinding(_) | Constraint::FunctionCallBinding(_) | Constraint::Label(_) => {} // Do nothing
+                Constraint::ExpressionBinding(_)
+                | Constraint::FunctionCallBinding(_)
+                | Constraint::RoleName(_)
+                | Constraint::Label(_) => {} // Do nothing
             }
         }
         for disj in &mut tig.nested_disjunctions {
@@ -487,6 +499,26 @@ impl UnaryConstraint for Label<Variable> {
             Ok(())
         } else {
             Err(TypeInferenceError::LabelNotResolved(self.type_label().to_string()))
+        }
+    }
+}
+
+impl UnaryConstraint for RoleName<Variable> {
+    fn apply<Snapshot: ReadableSnapshot>(
+        &self,
+        seeder: &TypeSeeder<'_, Snapshot>,
+        tig_vertices: &mut VertexAnnotations,
+    ) -> Result<(), TypeInferenceError> {
+        let role_types_opt = seeder
+            .type_manager
+            .get_roles_by_name(seeder.snapshot, self.name())
+            .map_err(|source| TypeInferenceError::ConceptRead { source })?;
+        if let Some(role_types) = role_types_opt {
+            let annotations = role_types.iter().map(|t| TypeAnnotation::RoleType(t.clone())).collect::<BTreeSet<_>>();
+            TypeSeeder::<Snapshot>::add_or_intersect(tig_vertices, self.left(), Cow::Owned(annotations));
+            Ok(())
+        } else {
+            Err(TypeInferenceError::RoleNameNotResolved(self.name().to_string()))
         }
     }
 }

@@ -18,11 +18,12 @@ use concept::{
         Ordering,
     },
 };
-use encoding::value::label::Label;
+
+use encoding::{
+    value::{label::Label},
+};
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 use typeql::{
-    annotation::{Annotation as TypeQLAnnotation, CardinalityRange},
-    common::token::{Kind as TypeQLKind, ValueType},
     type_::{BuiltinValueType, NamedType},
     TypeRef, TypeRefAny,
 };

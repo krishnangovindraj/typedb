@@ -13,7 +13,7 @@ use encoding::{
         definition::{definition_key::DefinitionKey, r#struct::StructDefinition, DefinitionValueEncoding},
         type_::{
             edge::{TypeEdge, TypeEdgeEncoding},
-            index::{LabelToTypeVertexIndex, NameToStructDefinitionIndex},
+            index::{IdentifierIndex, LabelToTypeVertexIndex, NameToStructDefinitionIndex},
             property::{TypeEdgeProperty, TypeEdgePropertyEncoding, TypeVertexProperty, TypeVertexPropertyEncoding},
             vertex::{PrefixedTypeVertexEncoding, TypeVertex, TypeVertexEncoding},
         },
@@ -23,6 +23,7 @@ use encoding::{
     Keyable,
 };
 use iterator::Collector;
+use lending_iterator::LendingIterator;
 use resource::constants::snapshot::{BUFFER_KEY_INLINE, BUFFER_VALUE_INLINE};
 use storage::{key_range::KeyRange, snapshot::ReadableSnapshot};
 
@@ -56,7 +57,8 @@ impl TypeReader {
     where
         T: TypeAPI<'static>,
     {
-        let key = LabelToTypeVertexIndex::build(label.scoped_name.as_reference()).into_storage_key();
+        let key =
+            LabelToTypeVertexIndex::build(label.inverted_scoped_name_for_index().as_reference()).into_storage_key();
         match snapshot.get::<BUFFER_KEY_INLINE>(key.as_reference()) {
             Err(error) => Err(ConceptReadError::SnapshotGet { source: error }),
             Ok(None) => Ok(None),
@@ -68,6 +70,25 @@ impl TypeReader {
                 },
             },
         }
+    }
+
+    pub(crate) fn get_roles_by_name(
+        snapshot: &impl ReadableSnapshot,
+        name: String,
+    ) -> Result<Vec<RoleType<'static>>, ConceptReadError> {
+        let mut name_with_colon = name;
+        name_with_colon.push(':');
+        let key =
+            LabelToTypeVertexIndex::build(Label::build(name_with_colon.as_str()).inverted_scoped_name_for_index())
+                .into_storage_key();
+        let vec = snapshot
+            .iterate_range(KeyRange::new_within(key, IdentifierIndex::<TypeVertex<'static>>::FIXED_WIDTH_ENCODING))
+            .collect_cloned_vec(|key, value| match RoleType::from_bytes(Bytes::copy(value.bytes())) {
+                Err(_) => None,
+                Ok(role_type) => Some(role_type),
+            })
+            .map_err(|source| ConceptReadError::SnapshotIterate { source })?;
+        Ok(vec.into_iter().filter_map(|x| x).collect())
     }
 
     pub(crate) fn get_struct_definition_key(
