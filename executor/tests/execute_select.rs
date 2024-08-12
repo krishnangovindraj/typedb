@@ -23,7 +23,10 @@ use encoding::value::{label::Label, value::Value, value_type::ValueType};
 use executor::{batch::ImmutableRow, program_executor::ProgramExecutor};
 use ir::{
     pattern::constraint::IsaKind,
-    program::{block::FunctionalBlock, program::Program},
+    program::{
+        block::{FunctionalBlock, MultiBlockContext},
+        program::Program,
+    },
 };
 use lending_iterator::LendingIterator;
 use storage::{
@@ -138,7 +141,8 @@ fn anonymous_vars_not_enumerated_or_counted() {
     //    $person has $_;
 
     // IR
-    let mut block = FunctionalBlock::builder();
+    let mut context = MultiBlockContext::new();
+    let mut block = FunctionalBlock::builder(&mut context);
     let mut conjunction = block.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();
     let var_attribute_type = conjunction.declare_variable_anonymous().unwrap();
@@ -153,7 +157,7 @@ fn anonymous_vars_not_enumerated_or_counted() {
     let (entry_annotations, annotated_functions) = {
         let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
         let (type_manager, _) = load_managers(storage.clone());
-        infer_types(&entry, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap()
+        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap()
     };
 
     // Plan
@@ -162,8 +166,9 @@ fn anonymous_vars_not_enumerated_or_counted() {
         vec![ConstraintInstruction::Has(has_attribute.clone(), Inputs::None([]))],
         &vec![var_person],
     ))];
-    let pattern_plan = PatternPlan::new(steps, entry.context().clone());
-    let program_plan = ProgramPlan::new(pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
+    let pattern_plan = PatternPlan::new(steps);
+    let program_plan =
+        ProgramPlan::new(context, pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
 
     // Executor
     let executor = {
@@ -210,7 +215,8 @@ fn unselected_named_vars_counted() {
     //   select $person;
 
     // IR
-    let mut builder = FunctionalBlock::builder();
+    let mut context = MultiBlockContext::new();
+    let mut builder = FunctionalBlock::builder(&mut context);
     let mut conjunction = builder.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();
     let var_attribute_type = conjunction.get_or_declare_variable("attr_type").unwrap();
@@ -225,7 +231,7 @@ fn unselected_named_vars_counted() {
     let (entry_annotations, annotated_functions) = {
         let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
         let (type_manager, _) = load_managers(storage.clone());
-        infer_types(&entry, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap()
+        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap()
     };
 
     // Plan
@@ -234,8 +240,9 @@ fn unselected_named_vars_counted() {
         vec![ConstraintInstruction::Has(has_attribute.clone(), Inputs::None([]))],
         &vec![var_person],
     ))];
-    let pattern_plan = PatternPlan::new(steps, entry.context().clone());
-    let program_plan = ProgramPlan::new(pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
+    let pattern_plan = PatternPlan::new(steps);
+    let program_plan =
+        ProgramPlan::new(context, pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
 
     // Executor
     let executor = {
@@ -282,7 +289,8 @@ fn cartesian_named_counted_checked() {
     //   select $person, $name;
 
     // IR
-    let mut builder = FunctionalBlock::builder();
+    let mut context = MultiBlockContext::new();
+    let mut builder = FunctionalBlock::builder(&mut context);
     let mut conjunction = builder.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();
     let var_name_type = conjunction.declare_variable_anonymous().unwrap();
@@ -308,7 +316,7 @@ fn cartesian_named_counted_checked() {
     let (entry_annotations, annotated_functions) = {
         let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
         let (type_manager, _) = load_managers(storage.clone());
-        infer_types(&entry, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap()
+        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap()
     };
 
     // Plan
@@ -321,8 +329,9 @@ fn cartesian_named_counted_checked() {
         ],
         &vec![var_person, var_age],
     ))];
-    let pattern_plan = PatternPlan::new(steps, entry.context().clone());
-    let program_plan = ProgramPlan::new(pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
+    let pattern_plan = PatternPlan::new(steps);
+    let program_plan =
+        ProgramPlan::new(context, pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
 
     // Executor
     let executor = {

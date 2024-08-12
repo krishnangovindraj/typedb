@@ -7,8 +7,7 @@
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use answer::{variable::Variable, variable_value::VariableValue};
-use compiler::{write::delete::build_delete_plan};
-use compiler::inference::annotated_functions::IndexedAnnotatedFunctions;
+use compiler::{inference::annotated_functions::IndexedAnnotatedFunctions, write::delete::build_delete_plan};
 use concept::{
     error::ConceptReadError,
     thing::{
@@ -23,7 +22,7 @@ use executor::{
     batch::Row,
     write::insert_executor::{InsertExecutor, WriteError},
 };
-use ir::program::function_signature::HashMapFunctionSignatureIndex;
+use ir::program::{block::MultiBlockContext, function_signature::HashMapFunctionSignatureIndex};
 use lending_iterator::LendingIterator;
 use storage::{
     durability_client::WALClient,
@@ -81,15 +80,17 @@ fn execute_insert(
     input_row_var_names: &Vec<&str>,
     input_rows: Vec<Vec<VariableValue<'static>>>,
 ) -> Result<Vec<Vec<VariableValue<'static>>>, WriteError> {
+    let mut context = MultiBlockContext::new();
     let typeql_insert = typeql::parse_query(query_str).unwrap().into_pipeline().stages.pop().unwrap().into_insert();
-    let block = ir::translation::writes::translate_insert(&typeql_insert).unwrap().finish();
+    let block = ir::translation::writes::translate_insert(&mut context, &typeql_insert).unwrap().finish();
     let input_row_format = input_row_var_names
         .iter()
         .enumerate()
-        .map(|(i, v)| (block.context().get_variable_named(v, block.scope_id()).unwrap().clone(), i))
+        .map(|(i, v)| (context.get_variable_named(v, block.scope_id()).unwrap().clone(), i))
         .collect::<HashMap<_, _>>();
     let (entry_annotations, _) = compiler::inference::type_inference::infer_types(
         &block,
+        &mut context,
         vec![],
         snapshot,
         &type_manager,
@@ -104,9 +105,7 @@ fn execute_insert(
     .unwrap();
 
     println!("{:?}", &insert_plan.instructions);
-    insert_plan.debug_info.iter().for_each(|(k, v)| {
-        println!("{:?} -> {:?}", k, block.context().get_variables_named().get(v))
-    });
+    insert_plan.debug_info.iter().for_each(|(k, v)| println!("{:?} -> {:?}", k, context.get_variables_named().get(v)));
 
     let mut output_rows = Vec::with_capacity(input_rows.len());
     for mut input_row in input_rows {
@@ -138,6 +137,7 @@ fn execute_delete(
     input_row_var_names: &Vec<&str>,
     input_rows: Vec<Vec<VariableValue<'static>>>,
 ) -> Result<Vec<Vec<VariableValue<'static>>>, WriteError> {
+    let mut context = MultiBlockContext::new();
     let (entry_annotations, _) = {
         let typeql_match = typeql::parse_query(mock_match_string_for_annotations)
             .unwrap()
@@ -146,10 +146,17 @@ fn execute_delete(
             .pop()
             .unwrap()
             .into_match();
-        let block =
-            ir::translation::match_::translate_match(&HashMapFunctionSignatureIndex::empty(), &typeql_match).unwrap().finish();
+        let mut context = MultiBlockContext::new();
+        let block = ir::translation::match_::translate_match(
+            &mut context,
+            &HashMapFunctionSignatureIndex::empty(),
+            &typeql_match,
+        )
+        .unwrap()
+        .finish();
         compiler::inference::type_inference::infer_types(
             &block,
+            &mut context,
             vec![],
             snapshot,
             &type_manager,
@@ -159,21 +166,18 @@ fn execute_delete(
     };
 
     let typeql_delete = typeql::parse_query(delete_str).unwrap().into_pipeline().stages.pop().unwrap().into_delete();
-    let (block_builder, deleted_concepts) = ir::translation::writes::translate_delete(&typeql_delete).unwrap();
+    let (block_builder, deleted_concepts) =
+        ir::translation::writes::translate_delete(&mut context, &typeql_delete).unwrap();
     let block = block_builder.finish();
     let input_row_format = input_row_var_names
         .iter()
         .enumerate()
-        .map(|(i, v)| (block.context().get_variable_named(v, block.scope_id()).unwrap().clone(), i))
+        .map(|(i, v)| (context.get_variable_named(v, block.scope_id()).unwrap().clone(), i))
         .collect::<HashMap<_, _>>();
 
-    let delete_plan = build_delete_plan(
-        &input_row_format,
-        &entry_annotations,
-        block.conjunction().constraints(),
-        &deleted_concepts,
-    )
-    .unwrap();
+    let delete_plan =
+        build_delete_plan(&input_row_format, &entry_annotations, block.conjunction().constraints(), &deleted_concepts)
+            .unwrap();
     let mut output_rows = Vec::with_capacity(input_rows.len());
     for mut input_row in input_rows {
         let mut output_vec = (0..delete_plan.output_row_plan.len()).map(|_| VariableValue::Empty).collect::<Vec<_>>();

@@ -14,7 +14,7 @@ use ir::{
         variable_category::{VariableCategory, VariableOptionality},
     },
     program::{
-        block::FunctionalBlock,
+        block::{FunctionalBlock, MultiBlockContext},
         function_signature::{FunctionID, FunctionSignature},
         modifier::ModifierDefinitionError,
         program::Program,
@@ -23,7 +23,8 @@ use ir::{
 
 #[test]
 fn build_modifiers() {
-    let mut builder = FunctionalBlock::builder();
+    let mut context = MultiBlockContext::new();
+    let mut builder = FunctionalBlock::builder(&mut context);
     let mut conjunction = builder.conjunction_mut();
 
     let var_person = conjunction.get_or_declare_variable("person").unwrap();
@@ -42,12 +43,13 @@ fn build_modifiers() {
 
     let block = builder.finish();
 
-    let _ = Program::new(block, Vec::new());
+    let _ = Program::new(context, block, Vec::new());
 }
 
 #[test]
 fn build_invalid_modifiers() {
-    let mut builder = FunctionalBlock::builder();
+    let mut context = MultiBlockContext::new();
+    let mut builder = FunctionalBlock::builder(&mut context);
     let mut conjunction = builder.conjunction_mut();
 
     let person_name = String::from("bob");
@@ -71,7 +73,8 @@ fn build_invalid_modifiers() {
 
 #[test]
 fn build_program_with_functions() {
-    let mut builder = FunctionalBlock::builder();
+    let mut context = MultiBlockContext::new();
+    let mut builder = FunctionalBlock::builder(&mut context);
     let mut conjunction = builder.conjunction_mut();
 
     let var_person = conjunction.get_or_declare_variable("person").unwrap();

@@ -10,6 +10,7 @@ use answer::variable::Variable;
 use compiler::planner::program_plan::ProgramPlan;
 use concept::{error::ConceptReadError, thing::thing_manager::ThingManager};
 use encoding::graph::definition::definition_key::DefinitionKey;
+use ir::program::block::MultiBlockContext;
 use lending_iterator::LendingIterator;
 use storage::snapshot::ReadableSnapshot;
 
@@ -29,12 +30,13 @@ impl ProgramExecutor {
         thing_manager: &ThingManager,
     ) -> Result<Self, ConceptReadError> {
         let ProgramPlan {
+            block_context,
             entry: entry_plan,
             entry_type_annotations,
             functions: function_plans,
             entry_value_type_annotations,
         } = program_plan;
-        let entry = PatternExecutor::new(entry_plan, &entry_type_annotations, snapshot, thing_manager)?;
+        let entry = PatternExecutor::new(entry_plan, block_context, &entry_type_annotations, snapshot, thing_manager)?;
 
         // TODO: functions
 

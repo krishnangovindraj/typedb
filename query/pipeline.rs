@@ -5,16 +5,17 @@
  */
 
 use std::collections::HashMap;
-use compiler::instruction::constraint::instructions::ConstraintInstruction;
-use compiler::planner::function_plan::FunctionPlan;
-use compiler::planner::pattern_plan::Step;
-use compiler::planner::program_plan::ProgramPlan;
-use compiler::write::insert::{InsertInstruction, InsertPlan};
-use compiler::write::VariableSource;
-use encoding::graph::definition::definition_key::DefinitionKey;
-use ir::pattern::ScopeId;
-use ir::program::block::BlockContext;
 
+use compiler::{
+    instruction::constraint::instructions::ConstraintInstruction,
+    planner::{function_plan::FunctionPlan, pattern_plan::Step, program_plan::ProgramPlan},
+    write::{
+        insert::{InsertInstruction, InsertPlan},
+        VariableSource,
+    },
+};
+use encoding::graph::definition::definition_key::DefinitionKey;
+use ir::{pattern::ScopeId, program::block::MultiBlockContext};
 
 struct StageIndex(usize);
 
@@ -32,10 +33,9 @@ impl Pipeline {
         functions: HashMap<DefinitionKey<'static>, FunctionPlan>,
         variable_annotation_sources: HashMap<String, Vec<StageIndex>>,
     ) -> Self {
-        Self { stages, functions, variable_annotation_sources}
+        Self { stages, functions, variable_annotation_sources }
     }
 }
-
 
 pub trait Clause {
     type Instruction;

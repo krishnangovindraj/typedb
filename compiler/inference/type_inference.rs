@@ -8,7 +8,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use answer::{variable::Variable, Type};
 use concept::type_::type_manager::TypeManager;
-use ir::program::{block::FunctionalBlock, function::Function};
+use ir::program::{
+    block::{FunctionalBlock, MultiBlockContext},
+    function::Function,
+    program::Program,
+};
 use storage::snapshot::ReadableSnapshot;
 
 use super::pattern_type_inference::infer_types_for_block;
@@ -20,16 +24,24 @@ use crate::inference::{
 
 pub(crate) type VertexAnnotations = BTreeMap<Variable, BTreeSet<Type>>;
 
+// TODO: Deprecate
 pub fn infer_types<Snapshot: ReadableSnapshot>(
     entry: &FunctionalBlock,
+    block_context: &MultiBlockContext,
     functions: Vec<Function>,
     snapshot: &Snapshot,
     type_manager: &TypeManager,
     annotated_schema_functions: &IndexedAnnotatedFunctions,
 ) -> Result<(TypeAnnotations, AnnotatedUnindexedFunctions), TypeInferenceError> {
     let preamble_functions = infer_types_for_functions(functions, snapshot, type_manager, &annotated_schema_functions)?;
-    let root_tig =
-        infer_types_for_block(snapshot, &entry, type_manager, &annotated_schema_functions, Some(&preamble_functions))?;
+    let root_tig = infer_types_for_block(
+        snapshot,
+        &entry,
+        block_context,
+        type_manager,
+        &annotated_schema_functions,
+        Some(&preamble_functions),
+    )?;
     Ok((TypeAnnotations::build(root_tig), preamble_functions))
 }
 
@@ -77,8 +89,14 @@ pub fn infer_types_for_function(
     indexed_annotated_functions: &IndexedAnnotatedFunctions,
     local_functions: Option<&AnnotatedUnindexedFunctions>,
 ) -> Result<FunctionAnnotations, TypeInferenceError> {
-    let root_tig =
-        infer_types_for_block(snapshot, function.block(), type_manager, indexed_annotated_functions, local_functions)?;
+    let root_tig = infer_types_for_block(
+        snapshot,
+        function.block(),
+        function.context(),
+        type_manager,
+        indexed_annotated_functions,
+        local_functions,
+    )?;
     let body_annotations = TypeAnnotations::build(root_tig);
     let return_annotations = function.return_operation().output_annotations(body_annotations.variable_annotations());
     Ok(FunctionAnnotations { return_annotations, block_annotations: body_annotations })
@@ -106,7 +124,7 @@ pub mod tests {
             variable_category::{VariableCategory, VariableOptionality},
         },
         program::{
-            block::{BlockContext, FunctionalBlock},
+            block::{FunctionalBlock, MultiBlockContext},
             function::{Function, ReturnOperation},
             function_signature::{FunctionID, FunctionSignature},
             program::Program,
@@ -157,7 +175,7 @@ pub mod tests {
         let type_player_0 = Type::Entity(EntityType::build_from_type_id(TypeID::build(0)));
         let type_player_1 = Type::Relation(RelationType::build_from_type_id(TypeID::build(2)));
 
-        let dummy = FunctionalBlock::builder().finish();
+        let dummy = FunctionalBlock::builder(&mut MultiBlockContext::new()).finish();
         let constraint1 = Constraint::RolePlayer(RolePlayer::new(var_relation, var_player, var_role_type));
         let constraint2 = Constraint::RolePlayer(RolePlayer::new(var_relation, var_player, var_role_type));
         let nested1 = TypeInferenceGraph {
@@ -274,7 +292,8 @@ pub mod tests {
         ]
         .iter()
         .map(|function_id| {
-            let mut builder = FunctionalBlock::builder();
+            let mut context = MultiBlockContext::new();
+            let mut builder = FunctionalBlock::builder(&mut context);
             let mut f_conjunction = builder.conjunction_mut();
             let f_var_animal = f_conjunction.get_or_declare_variable("called_animal").unwrap();
             let f_var_animal_type = f_conjunction.get_or_declare_variable("called_animal_type").unwrap();
@@ -282,11 +301,12 @@ pub mod tests {
             f_conjunction.constraints_mut().add_label(f_var_animal_type, LABEL_CAT).unwrap();
             f_conjunction.constraints_mut().add_isa(IsaKind::Subtype, f_var_animal, f_var_animal_type).unwrap();
             f_conjunction.constraints_mut().add_has(f_var_animal, f_var_name).unwrap();
-            let f_ir = Function::new(builder.finish(), vec![], ReturnOperation::Stream(vec![f_var_animal]));
+            let f_ir = Function::new(builder.finish(), context, vec![], ReturnOperation::Stream(vec![f_var_animal]));
 
-            let mut builder = FunctionalBlock::builder();
+            let mut entry_context = MultiBlockContext::new();
+            let mut builder = FunctionalBlock::builder(&mut entry_context);
             let mut conjunction = builder.conjunction_mut();
-            let context = BlockContext::new();
+            let context = MultiBlockContext::new();
             let var_animal = conjunction.get_or_declare_variable("animal").unwrap();
 
             let callee_signature = FunctionSignature::new(
@@ -297,21 +317,21 @@ pub mod tests {
             );
             conjunction.constraints_mut().add_function_binding(vec![var_animal], &callee_signature, vec![]).unwrap();
             let entry = builder.finish();
-            (entry, f_ir)
+            (entry, entry_context, f_ir)
         })
         .collect_tuple()
         .unwrap();
 
         let snapshot = storage.open_snapshot_read();
         let f_annotations = {
-            let (_, f_ir) = &with_no_cache;
+            let (_, _, f_ir) = &with_no_cache;
             let f_annotations =
                 infer_types_for_function(f_ir, &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty(), None)
                     .unwrap();
             let isa = f_ir.block().conjunction().constraints()[0].clone();
-            let f_var_animal = f_ir.block().context().get_variable("called_animal").unwrap();
-            let f_var_animal_type = f_ir.block().context().get_variable("called_animal_type").unwrap();
-            let f_var_name = f_ir.block().context().get_variable("called_name").unwrap();
+            let f_var_animal = f_ir.context().get_variable("called_animal").unwrap();
+            let f_var_animal_type = f_ir.context().get_variable("called_animal_type").unwrap();
+            let f_var_name = f_ir.context().get_variable("called_name").unwrap();
             assert_eq!(
                 *f_annotations.block_annotations.variable_annotations(),
                 HashMap::from([
@@ -325,11 +345,18 @@ pub mod tests {
 
         {
             // Local inference only
-            let (entry, _) = with_no_cache;
-            let var_animal = entry.context().get_variable("animal").unwrap();
+            let (entry, entry_context, _) = with_no_cache;
+            let var_animal = entry_context.get_variable("animal").unwrap();
             let annotations_without_schema_cache = TypeAnnotations::build(
-                infer_types_for_block(&snapshot, &entry, &type_manager, &IndexedAnnotatedFunctions::empty(), None)
-                    .unwrap(),
+                infer_types_for_block(
+                    &snapshot,
+                    &entry,
+                    &entry_context,
+                    &type_manager,
+                    &IndexedAnnotatedFunctions::empty(),
+                    None,
+                )
+                .unwrap(),
             );
             assert_eq!(
                 *annotations_without_schema_cache.variable_annotations(),
@@ -338,10 +365,17 @@ pub mod tests {
         }
         {
             // With schema cache
-            let (entry, f_ir) = with_local_cache;
-            let var_animal = entry.context().get_variable("animal").unwrap();
-            let (entry_annotations, annotated_functions) =
-                infer_types(&entry, vec![f_ir], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap();
+            let (entry, entry_context, f_ir) = with_local_cache;
+            let var_animal = entry_context.get_variable("animal").unwrap();
+            let (entry_annotations, annotated_functions) = infer_types(
+                &entry,
+                &entry_context,
+                vec![f_ir],
+                &snapshot,
+                &type_manager,
+                &IndexedAnnotatedFunctions::empty(),
+            )
+            .unwrap();
             assert_eq!(
                 entry_annotations.variable_annotations(),
                 &HashMap::from([(var_animal, Arc::new(HashSet::from([type_cat.clone()])))]),
@@ -350,12 +384,12 @@ pub mod tests {
 
         {
             // With schema cache
-            let (entry, f_ir) = with_schema_cache;
-            let var_animal = entry.context().get_variable("animal").unwrap();
+            let (entry, entry_context, f_ir) = with_schema_cache;
+            let var_animal = entry_context.get_variable("animal").unwrap();
             let f_id = FunctionID::Schema(DefinitionKey::build(Prefix::DefinitionFunction, DefinitionID::build(0)));
             let schema_cache = IndexedAnnotatedFunctions::new(Box::new([Some(f_ir)]), Box::new([Some(f_annotations)]));
             let (entry_annotations, annotated_functions) =
-                infer_types(&entry, vec![], &snapshot, &type_manager, &schema_cache).unwrap();
+                infer_types(&entry, &entry_context, vec![], &snapshot, &type_manager, &schema_cache).unwrap();
             assert_eq!(
                 *entry_annotations.variable_annotations(),
                 HashMap::from([(var_animal, Arc::new(HashSet::from([type_cat.clone()])))]),

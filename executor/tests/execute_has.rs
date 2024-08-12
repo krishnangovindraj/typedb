@@ -23,11 +23,17 @@ use encoding::value::{label::Label, value::Value, value_type::ValueType};
 use executor::{batch::ImmutableRow, program_executor::ProgramExecutor};
 use ir::{
     pattern::constraint::IsaKind,
-    program::{block::FunctionalBlock, program::Program},
+    program::{
+        block::{FunctionalBlock, MultiBlockContext},
+        program::Program,
+    },
 };
 use lending_iterator::LendingIterator;
-use storage::{durability_client::WALClient, snapshot::CommittableSnapshot, MVCCStorage};
-use storage::snapshot::ReadSnapshot;
+use storage::{
+    durability_client::WALClient,
+    snapshot::{CommittableSnapshot, ReadSnapshot},
+    MVCCStorage,
+};
 
 use crate::common::{load_managers, setup_storage};
 
@@ -106,7 +112,8 @@ fn traverse_has_unbounded_sorted_from() {
     //    $person isa person, has age $age;
 
     // IR
-    let mut block = FunctionalBlock::builder();
+    let mut context = MultiBlockContext::new();
+    let mut block = FunctionalBlock::builder(&mut context);
     let mut conjunction = block.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();
     let var_age_type = conjunction.get_or_declare_variable("age_type").unwrap();
@@ -128,7 +135,7 @@ fn traverse_has_unbounded_sorted_from() {
 
     let entry = block.finish();
     let (entry_annotations, annotated_functions) =
-        infer_types(&entry, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap();
+        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap();
 
     // Plan
     let steps = vec![Step::Intersection(IntersectionStep::new(
@@ -137,9 +144,9 @@ fn traverse_has_unbounded_sorted_from() {
         &[var_person, var_age],
     ))];
     // TODO: incorporate the filter
-    let pattern_plan = PatternPlan::new(steps, entry.context().clone());
+    let pattern_plan = PatternPlan::new(steps);
     let program_plan =
-        ProgramPlan::new(pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
+        ProgramPlan::new(context, pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
 
     // Executor
     let executor = ProgramExecutor::new(&program_plan, &snapshot, &thing_manager).unwrap();
@@ -169,7 +176,8 @@ fn traverse_has_bounded_sorted_from_chain_intersect() {
     //    $person-2 has name $name; # reverse!
 
     // IR
-    let mut block = FunctionalBlock::builder();
+    let mut context = MultiBlockContext::new();
+    let mut block = FunctionalBlock::builder(&mut context);
     let mut conjunction = block.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();
     let var_name_type = conjunction.get_or_declare_variable("name_type").unwrap();
@@ -193,7 +201,7 @@ fn traverse_has_bounded_sorted_from_chain_intersect() {
     let snapshot = storage.clone().open_snapshot_read();
     let entry = block.finish();
     let (entry_annotations, annotated_functions) =
-        infer_types(&entry, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap();
+        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap();
 
     // Plan
     let steps = vec![
@@ -212,9 +220,9 @@ fn traverse_has_bounded_sorted_from_chain_intersect() {
         )),
     ];
     // TODO: incorporate the filter
-    let pattern_plan = PatternPlan::new(steps, entry.context().clone());
+    let pattern_plan = PatternPlan::new(steps);
     let program_plan =
-        ProgramPlan::new(pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
+        ProgramPlan::new(context, pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
 
     // Executor
     let executor = ProgramExecutor::new(&program_plan, &snapshot, &thing_manager).unwrap();
@@ -243,7 +251,8 @@ fn traverse_has_unbounded_sorted_from_intersect() {
     //    $person has name $name, has age $age;
 
     // IR
-    let mut builder = FunctionalBlock::builder();
+    let mut context = MultiBlockContext::new();
+    let mut builder = FunctionalBlock::builder(&mut context);
     let mut conjunction = builder.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();
     let var_age_type = conjunction.get_or_declare_variable("age_type").unwrap();
@@ -270,7 +279,7 @@ fn traverse_has_unbounded_sorted_from_intersect() {
     let (entry_annotations, annotated_functions) = {
         let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
         let (type_manager, _) = load_managers(storage.clone());
-        infer_types(&entry, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap()
+        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap()
     };
 
     // Plan
@@ -283,8 +292,9 @@ fn traverse_has_unbounded_sorted_from_intersect() {
         &[var_person, var_name, var_age],
     ))];
     // TODO: incorporate the filter
-    let pattern_plan = PatternPlan::new(steps, entry.context().clone());
-    let program_plan = ProgramPlan::new(pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
+    let pattern_plan = PatternPlan::new(steps);
+    let program_plan =
+        ProgramPlan::new(context, pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
 
     // Executor
     let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
@@ -315,7 +325,8 @@ fn traverse_has_unbounded_sorted_to_merged() {
     //    $person has $attribute;
 
     // IR
-    let mut builder = FunctionalBlock::builder();
+    let mut context = MultiBlockContext::new();
+    let mut builder = FunctionalBlock::builder(&mut context);
     let mut conjunction = builder.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();
     let var_person = conjunction.get_or_declare_variable("person").unwrap();
@@ -328,7 +339,7 @@ fn traverse_has_unbounded_sorted_to_merged() {
     let (entry_annotations, annotated_functions) = {
         let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
         let (type_manager, _) = load_managers(storage.clone());
-        infer_types(&entry, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap()
+        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap()
     };
 
     // Plan
@@ -337,9 +348,9 @@ fn traverse_has_unbounded_sorted_to_merged() {
         vec![ConstraintInstruction::Has(has_attribute.clone(), Inputs::None([]))],
         &[var_person, var_attribute],
     ))];
-    let pattern_plan = PatternPlan::new(steps, entry.context().clone());
-    let program_plan = ProgramPlan::new(pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
-
+    let pattern_plan = PatternPlan::new(steps);
+    let program_plan =
+        ProgramPlan::new(context, pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
 
     // Executor
     let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
@@ -386,7 +397,8 @@ fn traverse_has_reverse_unbounded_sorted_from() {
     //    $person has age $age;
 
     // IR
-    let mut builder = FunctionalBlock::builder();
+    let mut context = MultiBlockContext::new();
+    let mut builder = FunctionalBlock::builder(&mut context);
     let mut conjunction = builder.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();
     let var_age_type = conjunction.get_or_declare_variable("age_type").unwrap();
@@ -406,7 +418,7 @@ fn traverse_has_reverse_unbounded_sorted_from() {
     let (entry_annotations, annotated_functions) = {
         let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
         let (type_manager, _) = load_managers(storage.clone());
-        infer_types(&entry, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap()
+        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap()
     };
 
     // Plan
@@ -415,8 +427,9 @@ fn traverse_has_reverse_unbounded_sorted_from() {
         vec![ConstraintInstruction::HasReverse(has_age.clone(), Inputs::None([]))],
         &[var_person, var_age],
     ))];
-    let pattern_plan = PatternPlan::new(steps, entry.context().clone());
-    let program_plan = ProgramPlan::new(pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
+    let pattern_plan = PatternPlan::new(steps);
+    let program_plan =
+        ProgramPlan::new(context, pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
 
     // Executor
     let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();

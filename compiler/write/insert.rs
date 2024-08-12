@@ -49,7 +49,7 @@ pub enum InsertInstruction {
 
 pub struct InsertPlan {
     pub instructions: Vec<InsertInstruction>,
-    pub created_concept_types: usize,
+    pub n_created_concepts: usize,
     pub output_row_plan: Vec<VariableSource>, // Where to copy from
     pub debug_info: HashMap<VariableSource, Variable>,
 }

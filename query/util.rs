@@ -18,10 +18,7 @@ use concept::{
         Ordering,
     },
 };
-
-use encoding::{
-    value::{label::Label},
-};
+use encoding::value::label::Label;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 use typeql::{
     type_::{BuiltinValueType, NamedType},

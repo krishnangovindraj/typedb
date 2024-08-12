@@ -27,18 +27,13 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct FunctionalBlock {
-    context: BlockContext,
     conjunction: Conjunction,
     modifiers: Vec<Modifier>,
 }
 
 impl FunctionalBlock {
-    pub fn builder() -> FunctionalBlockBuilder {
-        FunctionalBlockBuilder::new()
-    }
-
-    pub fn context(&self) -> &BlockContext {
-        &self.context
+    pub fn builder<'a>(context: &'a mut MultiBlockContext) -> FunctionalBlockBuilder<'a> {
+        FunctionalBlockBuilder::new(context)
     }
 
     pub fn conjunction(&self) -> &Conjunction {
@@ -60,27 +55,27 @@ impl Scope for FunctionalBlock {
     }
 }
 
-pub struct FunctionalBlockBuilder {
-    context: BlockContext,
+pub struct FunctionalBlockBuilder<'a> {
+    context: &'a mut MultiBlockContext,
     conjunction: Conjunction,
     modifiers: Vec<Modifier>,
 }
 
-impl FunctionalBlockBuilder {
-    fn new() -> Self {
-        Self { conjunction: Conjunction::new(ScopeId::ROOT), modifiers: Vec::new(), context: BlockContext::new() }
+impl<'a> FunctionalBlockBuilder<'a> {
+    fn new(context: &'a mut MultiBlockContext) -> Self {
+        Self { conjunction: Conjunction::new(ScopeId::ROOT), modifiers: Vec::new(), context }
     }
 
     pub fn finish(self) -> FunctionalBlock {
-        let Self { context, conjunction, modifiers, .. } = self;
-        FunctionalBlock { context, conjunction, modifiers }
+        let Self { conjunction, modifiers, .. } = self;
+        FunctionalBlock { conjunction, modifiers }
     }
 
     pub fn conjunction_mut(&mut self) -> ConjunctionBuilder<'_> {
         ConjunctionBuilder::new(&mut self.context, &mut self.conjunction)
     }
 
-    pub fn context_mut(&mut self) -> &mut BlockContext {
+    pub fn context_mut(&mut self) -> &mut MultiBlockContext {
         &mut self.context
     }
 
@@ -106,7 +101,7 @@ impl FunctionalBlockBuilder {
 }
 
 #[derive(Debug, Clone)]
-pub struct BlockContext {
+pub struct MultiBlockContext {
     variable_names: HashMap<Variable, String>,
     variable_declaration: HashMap<Variable, ScopeId>,
     variable_names_index: HashMap<String, Variable>,
@@ -119,8 +114,8 @@ pub struct BlockContext {
     variable_optionality: HashMap<Variable, VariableOptionality>,
 }
 
-impl BlockContext {
-    pub fn new() -> BlockContext {
+impl MultiBlockContext {
+    pub fn new() -> MultiBlockContext {
         Self {
             variable_names: HashMap::new(),
             variable_declaration: HashMap::new(),
@@ -286,13 +281,13 @@ fn is_child_scope(parents: &HashMap<ScopeId, ScopeId>, scope: ScopeId, maybe_chi
     parents.get(&maybe_child).is_some_and(|&c| c == scope || is_child_scope(parents, scope, c))
 }
 
-impl Default for BlockContext {
+impl Default for MultiBlockContext {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Display for BlockContext {
+impl Display for MultiBlockContext {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Named variables:")?;
         for var in self.variable_names.keys().sorted_unstable() {

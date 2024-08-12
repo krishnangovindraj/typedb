@@ -16,7 +16,7 @@ use super::{
     optional::Optional,
     Scope, ScopeId,
 };
-use crate::{program::block::BlockContext, PatternDefinitionError};
+use crate::{program::block::MultiBlockContext, PatternDefinitionError};
 
 #[derive(Debug, Clone)]
 pub struct Conjunction {
@@ -60,12 +60,12 @@ impl fmt::Display for Conjunction {
 }
 
 pub struct ConjunctionBuilder<'cx> {
-    context: &'cx mut BlockContext,
+    context: &'cx mut MultiBlockContext,
     conjunction: &'cx mut Conjunction,
 }
 
 impl<'cx> ConjunctionBuilder<'cx> {
-    pub fn new(context: &'cx mut BlockContext, conjunction: &'cx mut Conjunction) -> Self {
+    pub fn new(context: &'cx mut MultiBlockContext, conjunction: &'cx mut Conjunction) -> Self {
         Self { context, conjunction }
     }
 

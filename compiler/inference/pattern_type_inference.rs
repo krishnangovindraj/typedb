@@ -13,7 +13,7 @@ use answer::{variable::Variable, Type as TypeAnnotation, Type};
 use concept::type_::type_manager::TypeManager;
 use ir::{
     pattern::{conjunction::Conjunction, constraint::Constraint},
-    program::block::FunctionalBlock,
+    program::block::{FunctionalBlock, MultiBlockContext},
 };
 use itertools::chain;
 use storage::snapshot::ReadableSnapshot;
@@ -30,12 +30,13 @@ pub(crate) type VertexAnnotations = BTreeMap<Variable, BTreeSet<Type>>;
 pub(crate) fn infer_types_for_block<'graph>(
     snapshot: &impl ReadableSnapshot,
     block: &'graph FunctionalBlock,
+    block_context: &MultiBlockContext,
     type_manager: &TypeManager,
     schema_functions: &IndexedAnnotatedFunctions,
     local_function_cache: Option<&AnnotatedUnindexedFunctions>,
 ) -> Result<TypeInferenceGraph<'graph>, TypeInferenceError> {
     let mut tig = TypeSeeder::new(snapshot, type_manager, schema_functions, local_function_cache)
-        .seed_types(block.context(), block.conjunction())?;
+        .seed_types(block_context, block.conjunction())?;
     run_type_inference(&mut tig);
     Ok(tig)
 }
@@ -286,7 +287,10 @@ pub mod tests {
     use answer::{variable::Variable, Type as TypeAnnotation};
     use ir::{
         pattern::constraint::{Constraint, IsaKind},
-        program::{block::FunctionalBlock, function_signature::HashMapFunctionSignatureIndex},
+        program::{
+            block::{FunctionalBlock, MultiBlockContext},
+            function_signature::HashMapFunctionSignatureIndex,
+        },
     };
     use itertools::Itertools;
 
@@ -341,7 +345,8 @@ pub mod tests {
         {
             // Case 1: $a isa cat, has animal-name $n;
             let snapshot = storage.clone().open_snapshot_write();
-            let mut builder = FunctionalBlock::builder();
+            let mut context = MultiBlockContext::new();
+            let mut builder = FunctionalBlock::builder(&mut context);
             let mut conjunction = builder.conjunction_mut();
             let (var_animal, var_name, var_animal_type, var_name_type) = ["animal", "name", "animal_type", "name_type"]
                 .into_iter()
@@ -357,9 +362,15 @@ pub mod tests {
 
             let block = builder.finish();
             let constraints = block.conjunction().constraints();
-            let tig =
-                infer_types_for_block(&snapshot, &block, &type_manager, &IndexedAnnotatedFunctions::empty(), None)
-                    .unwrap();
+            let tig = infer_types_for_block(
+                &snapshot,
+                &block,
+                &context,
+                &type_manager,
+                &IndexedAnnotatedFunctions::empty(),
+                None,
+            )
+            .unwrap();
 
             let expected_tig = TypeInferenceGraph {
                 conjunction: block.conjunction(),
@@ -400,7 +411,8 @@ pub mod tests {
         {
             // Case 2: $a isa animal, has cat-name $n;
             let snapshot = storage.clone().open_snapshot_write();
-            let mut builder = FunctionalBlock::builder();
+            let mut context = MultiBlockContext::new();
+            let mut builder = FunctionalBlock::builder(&mut context);
             let mut conjunction = builder.conjunction_mut();
             let (var_animal, var_name, var_animal_type, var_name_type) = ["animal", "name", "animal_type", "name_type"]
                 .into_iter()
@@ -417,9 +429,15 @@ pub mod tests {
             let block = builder.finish();
 
             let constraints = block.conjunction().constraints();
-            let tig =
-                infer_types_for_block(&snapshot, &block, &type_manager, &IndexedAnnotatedFunctions::empty(), None)
-                    .unwrap();
+            let tig = infer_types_for_block(
+                &snapshot,
+                &block,
+                &context,
+                &type_manager,
+                &IndexedAnnotatedFunctions::empty(),
+                None,
+            )
+            .unwrap();
 
             let expected_tig = TypeInferenceGraph {
                 conjunction: block.conjunction(),
@@ -459,7 +477,8 @@ pub mod tests {
         {
             // Case 3: $a isa cat, has dog-name $n;
             let snapshot = storage.clone().open_snapshot_write();
-            let mut builder = FunctionalBlock::builder();
+            let mut context = MultiBlockContext::new();
+            let mut builder = FunctionalBlock::builder(&mut context);
             let mut conjunction = builder.conjunction_mut();
             let (var_animal, var_name, var_animal_type, var_name_type) = ["animal", "name", "animal_type", "name_type"]
                 .into_iter()
@@ -475,9 +494,15 @@ pub mod tests {
 
             let block = builder.finish();
             let constraints = block.conjunction().constraints();
-            let tig =
-                infer_types_for_block(&snapshot, &block, &type_manager, &IndexedAnnotatedFunctions::empty(), None)
-                    .unwrap();
+            let tig = infer_types_for_block(
+                &snapshot,
+                &block,
+                &context,
+                &type_manager,
+                &IndexedAnnotatedFunctions::empty(),
+                None,
+            )
+            .unwrap();
 
             let expected_tig = TypeInferenceGraph {
                 conjunction: block.conjunction(),
@@ -504,7 +529,8 @@ pub mod tests {
             let types_a = all_animals.clone();
             let types_n = all_names.clone();
             let snapshot = storage.clone().open_snapshot_write();
-            let mut builder = FunctionalBlock::builder();
+            let mut context = MultiBlockContext::new();
+            let mut builder = FunctionalBlock::builder(&mut context);
             let mut conjunction = builder.conjunction_mut();
             let (var_animal, var_name, var_animal_type, var_name_type) = ["animal", "name", "animal_type", "name_type"]
                 .into_iter()
@@ -520,9 +546,15 @@ pub mod tests {
 
             let block = builder.finish();
             let constraints = block.conjunction().constraints();
-            let tig =
-                infer_types_for_block(&snapshot, &block, &type_manager, &IndexedAnnotatedFunctions::empty(), None)
-                    .unwrap();
+            let tig = infer_types_for_block(
+                &snapshot,
+                &block,
+                &context,
+                &type_manager,
+                &IndexedAnnotatedFunctions::empty(),
+                None,
+            )
+            .unwrap();
 
             let expected_tig = TypeInferenceGraph {
                 conjunction: block.conjunction(),
@@ -585,7 +617,8 @@ pub mod tests {
         let all_animals = BTreeSet::from([type_animal.clone(), type_cat.clone(), type_dog.clone()]);
         let all_names = BTreeSet::from([type_name.clone(), type_catname.clone(), type_dogname.clone()]);
 
-        let mut builder = FunctionalBlock::builder();
+        let mut context = MultiBlockContext::new();
+        let mut builder = FunctionalBlock::builder(&mut context);
         let mut conjunction = builder.conjunction_mut();
         let (var_animal, var_name, var_name_type) = ["animal", "name", "name_type"]
             .into_iter()
@@ -617,9 +650,15 @@ pub mod tests {
             let block = builder.finish();
 
             let snapshot = storage.clone().open_snapshot_write();
-            let tig =
-                infer_types_for_block(&snapshot, &block, &type_manager, &IndexedAnnotatedFunctions::empty(), None)
-                    .unwrap();
+            let tig = infer_types_for_block(
+                &snapshot,
+                &block,
+                &context,
+                &type_manager,
+                &IndexedAnnotatedFunctions::empty(),
+                None,
+            )
+            .unwrap();
 
             let conjunction = block.conjunction();
             let disj = conjunction.nested_patterns().first().unwrap().as_disjunction().unwrap();
@@ -709,7 +748,8 @@ pub mod tests {
         {
             // Case 1: $a has $n;
             let snapshot = storage.clone().open_snapshot_write();
-            let mut builder = FunctionalBlock::builder();
+            let mut context = MultiBlockContext::new();
+            let mut builder = FunctionalBlock::builder(&mut context);
             let mut conjunction = builder.conjunction_mut();
             let (var_animal, var_name) = ["animal", "name"]
                 .into_iter()
@@ -722,9 +762,15 @@ pub mod tests {
             let block = builder.finish();
             let conjunction = block.conjunction();
             let constraints = conjunction.constraints();
-            let tig =
-                infer_types_for_block(&snapshot, &block, &type_manager, &IndexedAnnotatedFunctions::empty(), None)
-                    .unwrap();
+            let tig = infer_types_for_block(
+                &snapshot,
+                &block,
+                &context,
+                &type_manager,
+                &IndexedAnnotatedFunctions::empty(),
+                None,
+            )
+            .unwrap();
 
             let expected_tig = TypeInferenceGraph {
                 conjunction: &conjunction,
@@ -763,7 +809,9 @@ pub mod tests {
         {
             // With roles specified
             let snapshot = storage.clone().open_snapshot_write();
-            let mut builder = FunctionalBlock::builder();
+
+            let mut context = MultiBlockContext::new();
+            let mut builder = FunctionalBlock::builder(&mut context);
             let mut conjunction = builder.conjunction_mut();
             let (
                 var_has_fear,
@@ -803,9 +851,15 @@ pub mod tests {
 
             let conjunction = block.conjunction();
             let constraints = conjunction.constraints();
-            let tig =
-                infer_types_for_block(&snapshot, &block, &type_manager, &IndexedAnnotatedFunctions::empty(), None)
-                    .unwrap();
+            let tig = infer_types_for_block(
+                &snapshot,
+                &block,
+                &context,
+                &type_manager,
+                &IndexedAnnotatedFunctions::empty(),
+                None,
+            )
+            .unwrap();
 
             let expected_graph = TypeInferenceGraph {
                 conjunction: &conjunction,

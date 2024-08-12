@@ -59,7 +59,7 @@
 //         //       that we are about to register into the context. If yes, we should register the same variable again (ie. same ID).
 //         //       inside the context, we can bump the allocator to be (just re-used) + 1 to make sure we never accidentally reuse IDs that pre-allocated
 //
-//         let entry = translate_match(function_index, match_)
+//         let entry = translate_match(&mut MultiBlockContext::new()function_index, match_)
 //             .map_err(|err| QueryError::Pattern { source: err })?
 //             .finish();
 //         let program = Program::new(entry, functions.clone());

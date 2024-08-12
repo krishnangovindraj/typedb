@@ -5,10 +5,10 @@
  */
 
 use std::collections::{BTreeSet, HashMap, HashSet};
-use itertools::Itertools;
 
 use answer::{variable::Variable, Type};
 use encoding::{graph::type_::Kind, value::value::Value};
+use itertools::Itertools;
 
 use crate::write::insert::WriteCompilationError;
 

@@ -79,6 +79,7 @@ pub mod tests {
 
     use ir::{
         program::{
+            block::MultiBlockContext,
             function_signature::{FunctionID, HashMapFunctionSignatureIndex},
             program::Program,
         },
@@ -114,7 +115,8 @@ pub mod tests {
         let function_index =
             HashMapFunctionSignatureIndex::build([(FunctionID::Preamble(0), &typeql_function)].into_iter());
         let function = translate_function(&function_index, &typeql_function).unwrap();
-        let entry = translate_match(&function_index, &typeql_match).unwrap().finish();
+        let mut context = MultiBlockContext::new();
+        let entry = translate_match(&mut context, &function_index, &typeql_match).unwrap().finish();
         let (_tmp_dir, storage) = setup_storage();
         let (type_manager, _) = managers();
         let ((type_animal, type_cat, type_dog), _, _) =
@@ -122,10 +124,10 @@ pub mod tests {
         let empty_cache = IndexedAnnotatedFunctions::empty();
 
         let snapshot = storage.clone().open_snapshot_read();
-        let var_f_c = function.block().context().get_variable_named("c", function.block().scope_id()).unwrap().clone();
-        let var_x = entry.context().get_variable_named("x", entry.scope_id()).unwrap().clone();
+        let var_f_c = function.context().get_variable_named("c", function.block().scope_id()).unwrap().clone();
+        let var_x = context.get_variable_named("x", entry.scope_id()).unwrap().clone();
         let (entry_annotations, function_annotations) =
-            infer_types(&entry, vec![function], &snapshot, &type_manager, &empty_cache).unwrap();
+            infer_types(&entry, &context, vec![function], &snapshot, &type_manager, &empty_cache).unwrap();
         assert_eq!(
             &Arc::new(HashSet::from([type_cat.clone()])),
             function_annotations

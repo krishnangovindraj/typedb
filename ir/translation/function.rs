@@ -13,7 +13,7 @@ use typeql::{
 use crate::{
     pattern::variable_category::{VariableCategory, VariableOptionality},
     program::{
-        block::FunctionalBlock,
+        block::{FunctionalBlock, MultiBlockContext},
         function::{Function, Reducer, ReturnOperation},
         function_signature::{FunctionID, FunctionSignature, FunctionSignatureIndex},
         FunctionDefinitionError,
@@ -25,13 +25,14 @@ pub fn translate_function(
     function_index: &impl FunctionSignatureIndex,
     function: &typeql::Function,
 ) -> Result<Function, FunctionDefinitionError> {
-    let block = translate_match(function_index, &function.body)
+    let mut context = MultiBlockContext::new();
+    let block = translate_match(&mut context, function_index, &function.body)
         .map_err(|source| FunctionDefinitionError::PatternDefinition { source })?
         .finish();
 
     let return_operation = match &function.return_stmt {
-        ReturnStatement::Stream(stream) => build_return_stream(&block, stream),
-        ReturnStatement::Single(single) => build_return_single(&block, single),
+        ReturnStatement::Stream(stream) => build_return_stream(&context, &block, stream),
+        ReturnStatement::Single(single) => build_return_single(&context, &block, single),
     }?;
 
     let arguments: Vec<Variable> = function
@@ -39,13 +40,13 @@ pub fn translate_function(
         .args
         .iter()
         .map(|typeql_arg| {
-            get_variable_in_block(&block, &typeql_arg.var, |var| FunctionDefinitionError::FunctionArgumentUnused {
-                argument_variable: var.name().unwrap().to_string(),
+            get_variable_in_block(&context, &block, &typeql_arg.var, |var| {
+                FunctionDefinitionError::FunctionArgumentUnused { argument_variable: var.name().unwrap().to_string() }
             })
         })
         .collect::<Result<Vec<_>, FunctionDefinitionError>>()?;
 
-    Ok(Function::new(block, arguments, return_operation))
+    Ok(Function::new(block, context, arguments, return_operation))
 }
 
 pub fn build_signature(function_id: FunctionID, function: &typeql::Function) -> FunctionSignature {
@@ -76,6 +77,7 @@ fn type_any_to_category_and_optionality(type_any: &TypeRefAny) -> (VariableCateg
 }
 
 fn build_return_stream(
+    context: &MultiBlockContext,
     block: &FunctionalBlock,
     stream: &ReturnStream,
 ) -> Result<ReturnOperation, FunctionDefinitionError> {
@@ -83,8 +85,8 @@ fn build_return_stream(
         .vars
         .iter()
         .map(|typeql_var| {
-            get_variable_in_block(block, typeql_var, |var| FunctionDefinitionError::ReturnVariableUnavailable {
-                variable: var.name().unwrap().to_string(),
+            get_variable_in_block(context, block, typeql_var, |var| {
+                FunctionDefinitionError::ReturnVariableUnavailable { variable: var.name().unwrap().to_string() }
             })
         })
         .collect::<Result<Vec<Variable>, FunctionDefinitionError>>()?;
@@ -92,18 +94,20 @@ fn build_return_stream(
 }
 
 fn build_return_single(
+    context: &MultiBlockContext,
     block: &FunctionalBlock,
     single: &ReturnSingle,
 ) -> Result<ReturnOperation, FunctionDefinitionError> {
     let reducers = single
         .outputs
         .iter()
-        .map(|output| build_return_single_output(block, output))
+        .map(|output| build_return_single_output(context, block, output))
         .collect::<Result<Vec<Reducer>, FunctionDefinitionError>>()?;
     Ok(ReturnOperation::Single(reducers))
 }
 
 fn build_return_single_output(
+    context: &MultiBlockContext,
     block: &FunctionalBlock,
     single_output: &SingleOutput,
 ) -> Result<Reducer, FunctionDefinitionError> {
@@ -111,6 +115,7 @@ fn build_return_single_output(
 }
 
 fn get_variable_in_block<F>(
+    context: &MultiBlockContext,
     block: &FunctionalBlock,
     typeql_var: &typeql::Variable,
     err: F,
@@ -118,8 +123,7 @@ fn get_variable_in_block<F>(
 where
     F: FnOnce(&typeql::Variable) -> FunctionDefinitionError,
 {
-    block
-        .context()
+    context
         .get_variable_named(typeql_var.name().unwrap(), block.scope_id())
         .map_or_else(|| Err(err(typeql_var)), |var| Ok(var.clone()))
 }

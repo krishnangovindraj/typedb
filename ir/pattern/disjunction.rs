@@ -11,7 +11,7 @@ use answer::variable::Variable;
 use super::conjunction::ConjunctionBuilder;
 use crate::{
     pattern::{conjunction::Conjunction, Scope, ScopeId},
-    program::block::BlockContext,
+    program::block::MultiBlockContext,
 };
 
 #[derive(Debug, Clone)]
@@ -45,13 +45,13 @@ impl fmt::Display for Disjunction {
 }
 
 pub struct DisjunctionBuilder<'cx> {
-    context: &'cx mut BlockContext,
+    context: &'cx mut MultiBlockContext,
     disjunction: &'cx mut Disjunction,
     scope_id: ScopeId,
 }
 
 impl<'cx> DisjunctionBuilder<'cx> {
-    pub fn new(context: &'cx mut BlockContext, scope_id: ScopeId, disjunction: &'cx mut Disjunction) -> Self {
+    pub fn new(context: &'cx mut MultiBlockContext, scope_id: ScopeId, disjunction: &'cx mut Disjunction) -> Self {
         Self { context, disjunction, scope_id }
     }
 

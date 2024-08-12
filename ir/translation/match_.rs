@@ -7,18 +7,19 @@
 use crate::{
     pattern::conjunction::ConjunctionBuilder,
     program::{
-        block::{FunctionalBlock, FunctionalBlockBuilder},
+        block::{FunctionalBlock, FunctionalBlockBuilder, MultiBlockContext},
         function_signature::FunctionSignatureIndex,
     },
     translation::constraints::add_statement,
     PatternDefinitionError,
 };
 
-pub fn translate_match(
+pub fn translate_match<'a>(
+    context: &'a mut MultiBlockContext,
     function_index: &impl FunctionSignatureIndex,
     match_: &typeql::query::stage::Match,
-) -> Result<FunctionalBlockBuilder, PatternDefinitionError> {
-    let mut builder = FunctionalBlock::builder();
+) -> Result<FunctionalBlockBuilder<'a>, PatternDefinitionError> {
+    let mut builder = FunctionalBlock::builder(context);
     add_patterns(function_index, &mut builder.conjunction_mut(), &match_.patterns)?;
     Ok(builder)
 }

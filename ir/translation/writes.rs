@@ -14,17 +14,18 @@ use crate::{
         ScopeId,
     },
     program::{
-        block::{BlockContext, FunctionalBlock, FunctionalBlockBuilder},
+        block::{FunctionalBlock, FunctionalBlockBuilder, MultiBlockContext},
+        function_signature::HashMapFunctionSignatureIndex,
     },
     translation::constraints::{add_statement, add_typeql_relation, register_typeql_var},
     PatternDefinitionError,
 };
-use crate::program::function_signature::HashMapFunctionSignatureIndex;
 
-pub fn translate_insert(
+pub fn translate_insert<'a>(
+    context: &'a mut MultiBlockContext,
     insert: &typeql::query::stage::Insert,
-) -> Result<FunctionalBlockBuilder, PatternDefinitionError> {
-    let mut builder = FunctionalBlock::builder();
+) -> Result<FunctionalBlockBuilder<'a>, PatternDefinitionError> {
+    let mut builder = FunctionalBlock::builder(context);
     let function_index = HashMapFunctionSignatureIndex::empty();
     for statement in &insert.statements {
         add_statement(&function_index, &mut builder.conjunction_mut().constraints_mut(), statement)?;
@@ -33,10 +34,11 @@ pub fn translate_insert(
 }
 //
 
-pub fn translate_delete(
+pub fn translate_delete<'a>(
+    context: &'a mut MultiBlockContext,
     delete: &typeql::query::stage::Delete,
-) -> Result<(FunctionalBlockBuilder, Vec<Variable>), PatternDefinitionError> {
-    let mut builder = FunctionalBlock::builder();
+) -> Result<(FunctionalBlockBuilder<'a>, Vec<Variable>), PatternDefinitionError> {
+    let mut builder = FunctionalBlock::builder(context);
     // let function_index = HashMapFunctionIndex::empty();
     let mut tmp_conjunction = builder.conjunction_mut();
     let mut constraints = tmp_conjunction.constraints_mut();

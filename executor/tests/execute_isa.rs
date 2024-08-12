@@ -20,6 +20,7 @@ use ir::{
     pattern::constraint::IsaKind,
     program::{block::FunctionalBlock, program::Program},
 };
+use ir::program::block::MultiBlockContext;
 use lending_iterator::LendingIterator;
 use storage::{
     durability_client::WALClient,
@@ -68,20 +69,21 @@ fn traverse_isa_unbounded_sorted_thing() {
     //   match $x isa $t; $t label dog;
 
     // IR
-    let mut block = FunctionalBlock::builder();
-    let mut conjunction = block.conjunction_mut();
+    let mut context = MultiBlockContext::new();
+    let mut builder = FunctionalBlock::builder(&mut context);
+    let mut conjunction = builder.conjunction_mut();
     let var_dog_type = conjunction.get_or_declare_variable("dog_type").unwrap();
     let var_dog = conjunction.get_or_declare_variable("dog").unwrap();
 
     // add all constraints to make type inference return correct types, though we only plan Has's
     let isa = conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_dog, var_dog_type).unwrap().clone();
     conjunction.constraints_mut().add_label(var_dog_type, DOG_LABEL.scoped_name().as_str()).unwrap();
-    let program = Program::new(block.finish(), Vec::new());
 
-    let annotated_program = {
+    let block = builder.finish();
+    let (entry_annotations, annotated_functions) = {
         let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
         let (type_manager, _) = load_managers(storage.clone());
-        infer_types(program, &snapshot, &type_manager, Arc::new(IndexedAnnotatedFunctions::empty())).unwrap()
+        infer_types(&block, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap()
     };
 
     // Plan
@@ -91,9 +93,9 @@ fn traverse_isa_unbounded_sorted_thing() {
         &[var_dog, var_dog_type],
     ))];
 
-    let pattern_plan = PatternPlan::new(steps, annotated_program.get_entry().context().clone());
+    let pattern_plan = PatternPlan::new(steps);
     let program_plan =
-        ProgramPlan::new(pattern_plan, annotated_program.get_entry_annotations().clone(), HashMap::new());
+        ProgramPlan::new(context, pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
 
     // Executor
     let executor = {
