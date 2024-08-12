@@ -340,6 +340,7 @@ fn traverse_has_unbounded_sorted_to_merged() {
     let pattern_plan = PatternPlan::new(steps, entry.context().clone());
     let program_plan = ProgramPlan::new(pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
 
+
     // Executor
     let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
     let (type_manager, thing_manager) = load_managers(storage.clone());

@@ -13,6 +13,7 @@ mod match_;
 mod pipeline;
 pub mod query_manager;
 mod util;
+mod pipeline;
 
 #[derive(Debug)]
 pub enum SymbolResolutionError {

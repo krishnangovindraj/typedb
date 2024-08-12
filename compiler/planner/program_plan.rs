@@ -19,7 +19,7 @@ use crate::{
     planner::{function_plan::FunctionPlan, pattern_plan::PatternPlan},
 };
 
-pub struct ProgramPlan {
+pub struct ProgramPlan { // TODO: Update 'Program' to refer to the whole pipeline & to
     // TODO: krishnan: Revert pub
     pub entry: PatternPlan,
     pub entry_type_annotations: TypeAnnotations,
