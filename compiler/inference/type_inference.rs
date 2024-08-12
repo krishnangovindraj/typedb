@@ -17,14 +17,14 @@ use storage::snapshot::ReadableSnapshot;
 use super::pattern_type_inference::infer_types_for_block;
 use crate::inference::{
     annotated_functions::{AnnotatedUnindexedFunctions, IndexedAnnotatedFunctions},
-    type_annotations::{FunctionAnnotations, TypeAnnotations},
+    type_annotations::{FunctionAnnotations, PipelineAnnotations, TypeAnnotations},
     TypeInferenceError,
 };
 
 pub(crate) type VertexAnnotations = BTreeMap<Variable, BTreeSet<Type>>;
 
 // TODO: Deprecate
-pub fn infer_types<Snapshot: ReadableSnapshot>(
+pub fn TODO_DEPRECATE__infer_types<Snapshot: ReadableSnapshot>(
     entry: &FunctionalBlock,
     block_context: &MultiBlockContext,
     functions: Vec<Function>,
@@ -37,6 +37,7 @@ pub fn infer_types<Snapshot: ReadableSnapshot>(
         snapshot,
         &entry,
         block_context,
+        &PipelineAnnotations::new(),
         type_manager,
         &annotated_schema_functions,
         Some(&preamble_functions),
@@ -92,6 +93,7 @@ pub fn infer_types_for_function(
         snapshot,
         function.block(),
         function.context(),
+        &PipelineAnnotations::new(),
         type_manager,
         indexed_annotated_functions,
         local_functions,
@@ -99,6 +101,27 @@ pub fn infer_types_for_function(
     let body_annotations = TypeAnnotations::build(root_tig);
     let return_annotations = function.return_operation().output_annotations(body_annotations.variable_annotations());
     Ok(FunctionAnnotations { return_annotations, block_annotations: body_annotations })
+}
+
+pub fn infer_types_for_match_block(
+    match_block: &FunctionalBlock,
+    block_context: &MultiBlockContext,
+    upstream_annotations: &PipelineAnnotations,
+    snapshot: &impl ReadableSnapshot,
+    type_manager: &TypeManager,
+    annotated_schema_functions: &IndexedAnnotatedFunctions,
+    annotated_preamble_functions: &AnnotatedUnindexedFunctions,
+) -> Result<TypeAnnotations, TypeInferenceError> {
+    let root_tig = infer_types_for_block(
+        snapshot,
+        &match_block,
+        block_context,
+        upstream_annotations,
+        type_manager,
+        &annotated_schema_functions,
+        Some(&annotated_preamble_functions),
+    )?;
+    Ok(TypeAnnotations::build(root_tig))
 }
 
 #[cfg(test)]
@@ -140,8 +163,10 @@ pub mod tests {
             schema_consts::{setup_types, LABEL_CAT},
             setup_storage,
         },
-        type_annotations::{ConstraintTypeAnnotations, LeftRightAnnotations, LeftRightFilteredAnnotations},
-        type_inference::{infer_types, infer_types_for_function, TypeAnnotations},
+        type_annotations::{
+            ConstraintTypeAnnotations, LeftRightAnnotations, LeftRightFilteredAnnotations, PipelineAnnotations,
+        },
+        type_inference::{infer_types_for_function, TODO_DEPRECATE__infer_types, TypeAnnotations},
     };
 
     pub(crate) fn expected_left_right_annotation(
@@ -350,6 +375,7 @@ pub mod tests {
                     &snapshot,
                     &entry,
                     &entry_context,
+                    &PipelineAnnotations::new(),
                     &type_manager,
                     &IndexedAnnotatedFunctions::empty(),
                     None,
@@ -365,7 +391,7 @@ pub mod tests {
             // With schema cache
             let (entry, entry_context, f_ir) = with_local_cache;
             let var_animal = entry_context.get_variable("animal").unwrap();
-            let (entry_annotations, annotated_functions) = infer_types(
+            let (entry_annotations, annotated_functions) = TODO_DEPRECATE__infer_types(
                 &entry,
                 &entry_context,
                 vec![f_ir],
@@ -387,7 +413,8 @@ pub mod tests {
             let f_id = FunctionID::Schema(DefinitionKey::build(Prefix::DefinitionFunction, DefinitionID::build(0)));
             let schema_cache = IndexedAnnotatedFunctions::new(Box::new([Some(f_ir)]), Box::new([Some(f_annotations)]));
             let (entry_annotations, annotated_functions) =
-                infer_types(&entry, &entry_context, vec![], &snapshot, &type_manager, &schema_cache).unwrap();
+                TODO_DEPRECATE__infer_types(&entry, &entry_context, vec![], &snapshot, &type_manager, &schema_cache)
+                    .unwrap();
             assert_eq!(
                 *entry_annotations.variable_annotations(),
                 HashMap::from([(var_animal, Arc::new(HashSet::from([type_cat.clone()])))]),

@@ -20,7 +20,9 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::inference::{
     annotated_functions::{AnnotatedUnindexedFunctions, IndexedAnnotatedFunctions},
-    type_annotations::{ConstraintTypeAnnotations, LeftRightAnnotations, LeftRightFilteredAnnotations},
+    type_annotations::{
+        ConstraintTypeAnnotations, LeftRightAnnotations, LeftRightFilteredAnnotations, PipelineAnnotations,
+    },
     type_seeder::TypeSeeder,
     TypeInferenceError,
 };
@@ -31,12 +33,16 @@ pub(crate) fn infer_types_for_block<'graph>(
     snapshot: &impl ReadableSnapshot,
     block: &'graph FunctionalBlock,
     block_context: &MultiBlockContext,
+    upstream_annotations: &PipelineAnnotations,
     type_manager: &TypeManager,
     schema_functions: &IndexedAnnotatedFunctions,
     local_function_cache: Option<&AnnotatedUnindexedFunctions>,
 ) -> Result<TypeInferenceGraph<'graph>, TypeInferenceError> {
-    let mut tig = TypeSeeder::new(snapshot, type_manager, schema_functions, local_function_cache)
-        .seed_types(block_context, block.conjunction())?;
+    let mut tig = TypeSeeder::new(snapshot, type_manager, schema_functions, local_function_cache).seed_types(
+        block_context,
+        upstream_annotations,
+        block.conjunction(),
+    )?;
     run_type_inference(&mut tig);
     Ok(tig)
 }
@@ -306,6 +312,7 @@ pub mod tests {
             },
             setup_storage,
         },
+        type_annotations::PipelineAnnotations,
     };
 
     pub(crate) fn expected_edge(
@@ -366,6 +373,7 @@ pub mod tests {
                 &snapshot,
                 &block,
                 &context,
+                &PipelineAnnotations::new(),
                 &type_manager,
                 &IndexedAnnotatedFunctions::empty(),
                 None,
@@ -433,6 +441,7 @@ pub mod tests {
                 &snapshot,
                 &block,
                 &context,
+                &PipelineAnnotations::new(),
                 &type_manager,
                 &IndexedAnnotatedFunctions::empty(),
                 None,
@@ -498,6 +507,7 @@ pub mod tests {
                 &snapshot,
                 &block,
                 &context,
+                &PipelineAnnotations::new(),
                 &type_manager,
                 &IndexedAnnotatedFunctions::empty(),
                 None,
@@ -550,6 +560,7 @@ pub mod tests {
                 &snapshot,
                 &block,
                 &context,
+                &PipelineAnnotations::new(),
                 &type_manager,
                 &IndexedAnnotatedFunctions::empty(),
                 None,
@@ -654,6 +665,7 @@ pub mod tests {
                 &snapshot,
                 &block,
                 &context,
+                &PipelineAnnotations::new(),
                 &type_manager,
                 &IndexedAnnotatedFunctions::empty(),
                 None,
@@ -766,6 +778,7 @@ pub mod tests {
                 &snapshot,
                 &block,
                 &context,
+                &PipelineAnnotations::new(),
                 &type_manager,
                 &IndexedAnnotatedFunctions::empty(),
                 None,
@@ -855,6 +868,7 @@ pub mod tests {
                 &snapshot,
                 &block,
                 &context,
+                &PipelineAnnotations::new(),
                 &type_manager,
                 &IndexedAnnotatedFunctions::empty(),
                 None,

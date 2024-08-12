@@ -7,7 +7,7 @@
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use compiler::{
-    inference::{annotated_functions::IndexedAnnotatedFunctions, type_inference::infer_types},
+    inference::{annotated_functions::IndexedAnnotatedFunctions, type_inference::TODO_DEPRECATE__infer_types},
     instruction::constraint::instructions::{ConstraintInstruction, Inputs},
     planner::{
         pattern_plan::{IntersectionStep, PatternPlan, Step},
@@ -23,9 +23,7 @@ use encoding::value::{label::Label, value::Value, value_type::ValueType};
 use executor::{batch::ImmutableRow, program_executor::ProgramExecutor};
 use ir::{
     pattern::constraint::IsaKind,
-    program::{
-        block::{FunctionalBlock, MultiBlockContext},
-    },
+    program::block::{FunctionalBlock, MultiBlockContext},
 };
 use lending_iterator::LendingIterator;
 use storage::{
@@ -156,7 +154,15 @@ fn anonymous_vars_not_enumerated_or_counted() {
     let (entry_annotations, annotated_functions) = {
         let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
         let (type_manager, _) = load_managers(storage.clone());
-        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap()
+        TODO_DEPRECATE__infer_types(
+            &entry,
+            &context,
+            vec![],
+            &snapshot,
+            &type_manager,
+            &IndexedAnnotatedFunctions::empty(),
+        )
+        .unwrap()
     };
 
     // Plan
@@ -230,7 +236,15 @@ fn unselected_named_vars_counted() {
     let (entry_annotations, annotated_functions) = {
         let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
         let (type_manager, _) = load_managers(storage.clone());
-        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap()
+        TODO_DEPRECATE__infer_types(
+            &entry,
+            &context,
+            vec![],
+            &snapshot,
+            &type_manager,
+            &IndexedAnnotatedFunctions::empty(),
+        )
+        .unwrap()
     };
 
     // Plan
@@ -315,7 +329,15 @@ fn cartesian_named_counted_checked() {
     let (entry_annotations, annotated_functions) = {
         let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
         let (type_manager, _) = load_managers(storage.clone());
-        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap()
+        TODO_DEPRECATE__infer_types(
+            &entry,
+            &context,
+            vec![],
+            &snapshot,
+            &type_manager,
+            &IndexedAnnotatedFunctions::empty(),
+        )
+        .unwrap()
     };
 
     // Plan

@@ -15,14 +15,25 @@ use compiler::{
     },
 };
 use encoding::graph::definition::definition_key::DefinitionKey;
-use ir::{pattern::ScopeId, program::block::MultiBlockContext};
+use function::function_manager::ReadThroughFunctionSignatureIndex;
+use ir::{
+    pattern::ScopeId,
+    program::block::MultiBlockContext,
+    translation::{
+        match_::translate_match,
+        writes::{translate_delete, translate_insert},
+    },
+    PatternDefinitionError,
+};
+use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
+use typeql::query::stage::Stage;
 
 struct StageIndex(usize);
 
 // TODO: Where does this go?
 pub struct Pipeline {
     stages: Vec<NonTerminalStage>,
-    functions: HashMap<DefinitionKey<'static>, FunctionPlan>,
+    functions: HashMap<DefinitionKey<'static>, FunctionPlan>, // This should be in a program, but not in a pipeline
 
     variable_annotation_sources: HashMap<String, Vec<StageIndex>>, // The declaring block & any match blocks that mention it.
 }
@@ -50,4 +61,38 @@ pub enum NonTerminalStage {
     // Update(UpdateClause),
     // OperatorSelect(SelectOperator),
     // OperatorDistinct(DistinctOperator),
+}
+
+// TODO: This needing access to pipeline internals, yet being a translate method indicates that either:
+//  1. ir::translate should be in query     OR
+//  2. The pipeline data-structures should be in IR.
+fn translate_pipeline<Snapshot: WritableSnapshot>(
+    // TODO: Separate function for ReadSnapshot?
+    function_index: ReadThroughFunctionSignatureIndex<Snapshot>,
+    typeql_pipeline: &typeql::query::Pipeline,
+) -> Result<Pipeline, PatternDefinitionError> {
+    let mut context = MultiBlockContext::new();
+    for stage in &typeql_pipeline.stages {
+        match stage {
+            Stage::Match(match_) => {
+                translate_match(&mut context, &function_index, match_)?;
+                // todo
+            }
+            Stage::Insert(insert) => {
+                translate_insert(&mut context, insert)?;
+                // todo
+            }
+            Stage::Delete(delete) => {
+                translate_delete(&mut context, delete)?;
+                // todo
+            }
+            Stage::Put(_) => todo!(),
+            Stage::Update(_) => todo!(),
+            Stage::Fetch(_) => todo!(),
+            Stage::Reduce(_) => todo!(),
+            Stage::Modifier(_) => todo!(),
+        };
+    }
+    todo!()
+    // Ok(Pipeline { stages, functions,  })
 }

@@ -7,7 +7,7 @@
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use compiler::{
-    inference::{annotated_functions::IndexedAnnotatedFunctions, type_inference::infer_types},
+    inference::{annotated_functions::IndexedAnnotatedFunctions, type_inference::TODO_DEPRECATE__infer_types},
     instruction::constraint::instructions::{ConstraintInstruction, Inputs},
     planner::{
         pattern_plan::{IntersectionStep, PatternPlan, Step},
@@ -23,9 +23,7 @@ use encoding::value::{label::Label, value::Value, value_type::ValueType};
 use executor::{batch::ImmutableRow, program_executor::ProgramExecutor};
 use ir::{
     pattern::constraint::IsaKind,
-    program::{
-        block::{FunctionalBlock, MultiBlockContext},
-    },
+    program::block::{FunctionalBlock, MultiBlockContext},
 };
 use lending_iterator::LendingIterator;
 use storage::{
@@ -133,8 +131,15 @@ fn traverse_has_unbounded_sorted_from() {
     let (type_manager, thing_manager) = load_managers(storage.clone());
 
     let entry = block.finish();
-    let (entry_annotations, annotated_functions) =
-        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap();
+    let (entry_annotations, annotated_functions) = TODO_DEPRECATE__infer_types(
+        &entry,
+        &context,
+        vec![],
+        &snapshot,
+        &type_manager,
+        &IndexedAnnotatedFunctions::empty(),
+    )
+    .unwrap();
 
     // Plan
     let steps = vec![Step::Intersection(IntersectionStep::new(
@@ -199,8 +204,15 @@ fn traverse_has_bounded_sorted_from_chain_intersect() {
 
     let snapshot = storage.clone().open_snapshot_read();
     let entry = block.finish();
-    let (entry_annotations, annotated_functions) =
-        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap();
+    let (entry_annotations, annotated_functions) = TODO_DEPRECATE__infer_types(
+        &entry,
+        &context,
+        vec![],
+        &snapshot,
+        &type_manager,
+        &IndexedAnnotatedFunctions::empty(),
+    )
+    .unwrap();
 
     // Plan
     let steps = vec![
@@ -278,7 +290,15 @@ fn traverse_has_unbounded_sorted_from_intersect() {
     let (entry_annotations, annotated_functions) = {
         let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
         let (type_manager, _) = load_managers(storage.clone());
-        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap()
+        TODO_DEPRECATE__infer_types(
+            &entry,
+            &context,
+            vec![],
+            &snapshot,
+            &type_manager,
+            &IndexedAnnotatedFunctions::empty(),
+        )
+        .unwrap()
     };
 
     // Plan
@@ -338,7 +358,15 @@ fn traverse_has_unbounded_sorted_to_merged() {
     let (entry_annotations, annotated_functions) = {
         let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
         let (type_manager, _) = load_managers(storage.clone());
-        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap()
+        TODO_DEPRECATE__infer_types(
+            &entry,
+            &context,
+            vec![],
+            &snapshot,
+            &type_manager,
+            &IndexedAnnotatedFunctions::empty(),
+        )
+        .unwrap()
     };
 
     // Plan
@@ -417,7 +445,15 @@ fn traverse_has_reverse_unbounded_sorted_from() {
     let (entry_annotations, annotated_functions) = {
         let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
         let (type_manager, _) = load_managers(storage.clone());
-        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap()
+        TODO_DEPRECATE__infer_types(
+            &entry,
+            &context,
+            vec![],
+            &snapshot,
+            &type_manager,
+            &IndexedAnnotatedFunctions::empty(),
+        )
+        .unwrap()
     };
 
     // Plan

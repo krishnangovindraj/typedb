@@ -7,7 +7,7 @@
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use compiler::{
-    inference::{annotated_functions::IndexedAnnotatedFunctions, type_inference::infer_types},
+    inference::{annotated_functions::IndexedAnnotatedFunctions, type_inference::TODO_DEPRECATE__infer_types},
     instruction::constraint::instructions::{ConstraintInstruction, Inputs},
     planner::{
         pattern_plan::{IntersectionStep, PatternPlan, Step},
@@ -26,9 +26,7 @@ use encoding::value::{label::Label, value::Value, value_type::ValueType};
 use executor::{batch::ImmutableRow, program_executor::ProgramExecutor};
 use ir::{
     pattern::constraint::IsaKind,
-    program::{
-        block::{FunctionalBlock, MultiBlockContext},
-    },
+    program::block::{FunctionalBlock, MultiBlockContext},
 };
 use lending_iterator::LendingIterator;
 use storage::{
@@ -203,7 +201,15 @@ fn traverse_rp_unbounded_sorted_from() {
     let (entry_annotations, annotated_functions) = {
         let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
         let (type_manager, _) = load_managers(storage.clone());
-        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap()
+        TODO_DEPRECATE__infer_types(
+            &entry,
+            &context,
+            vec![],
+            &snapshot,
+            &type_manager,
+            &IndexedAnnotatedFunctions::empty(),
+        )
+        .unwrap()
     };
 
     // Plan
@@ -286,7 +292,15 @@ fn traverse_rp_unbounded_sorted_to() {
     let (entry_annotations, annotated_functions) = {
         let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
         let (type_manager, _) = load_managers(storage.clone());
-        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap()
+        TODO_DEPRECATE__infer_types(
+            &entry,
+            &context,
+            vec![],
+            &snapshot,
+            &type_manager,
+            &IndexedAnnotatedFunctions::empty(),
+        )
+        .unwrap()
     };
 
     // Plan
@@ -368,8 +382,15 @@ fn traverse_rp_bounded_relation() {
 
     let snapshot = storage.clone().open_snapshot_read();
     let (type_manager, thing_manager) = load_managers(storage.clone());
-    let (entry_annotations, _) =
-        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap();
+    let (entry_annotations, _) = TODO_DEPRECATE__infer_types(
+        &entry,
+        &context,
+        vec![],
+        &snapshot,
+        &type_manager,
+        &IndexedAnnotatedFunctions::empty(),
+    )
+    .unwrap();
 
     // Plan
     let steps = vec![
@@ -456,8 +477,15 @@ fn traverse_rp_bounded_relation_player() {
 
     let snapshot = storage.clone().open_snapshot_read();
     let (type_manager, thing_manager) = load_managers(storage.clone());
-    let (entry_annotations, _) =
-        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap();
+    let (entry_annotations, _) = TODO_DEPRECATE__infer_types(
+        &entry,
+        &context,
+        vec![],
+        &snapshot,
+        &type_manager,
+        &IndexedAnnotatedFunctions::empty(),
+    )
+    .unwrap();
 
     // Plan
     let steps = vec![
@@ -546,8 +574,15 @@ fn traverse_rp_reverse_unbounded_sorted_from() {
 
     let snapshot = storage.clone().open_snapshot_read();
     let (type_manager, thing_manager) = load_managers(storage.clone());
-    let (entry_annotations, _) =
-        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap();
+    let (entry_annotations, _) = TODO_DEPRECATE__infer_types(
+        &entry,
+        &context,
+        vec![],
+        &snapshot,
+        &type_manager,
+        &IndexedAnnotatedFunctions::empty(),
+    )
+    .unwrap();
 
     // Plan
     let steps = vec![Step::Intersection(IntersectionStep::new(
@@ -625,8 +660,15 @@ fn traverse_rp_reverse_unbounded_sorted_to() {
 
     let snapshot = storage.clone().open_snapshot_read();
     let (type_manager, thing_manager) = load_managers(storage.clone());
-    let (entry_annotations, _) =
-        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap();
+    let (entry_annotations, _) = TODO_DEPRECATE__infer_types(
+        &entry,
+        &context,
+        vec![],
+        &snapshot,
+        &type_manager,
+        &IndexedAnnotatedFunctions::empty(),
+    )
+    .unwrap();
 
     // Plan
     let steps = vec![Step::Intersection(IntersectionStep::new(
@@ -705,8 +747,15 @@ fn traverse_rp_reverse_bounded_player() {
 
     let snapshot = storage.clone().open_snapshot_read();
     let (type_manager, thing_manager) = load_managers(storage.clone());
-    let (entry_annotations, _) =
-        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap();
+    let (entry_annotations, _) = TODO_DEPRECATE__infer_types(
+        &entry,
+        &context,
+        vec![],
+        &snapshot,
+        &type_manager,
+        &IndexedAnnotatedFunctions::empty(),
+    )
+    .unwrap();
 
     // Plan
     let steps = vec![
@@ -793,8 +842,15 @@ fn traverse_rp_reverse_bounded_player_relation() {
 
     let snapshot = storage.clone().open_snapshot_read();
     let (type_manager, thing_manager) = load_managers(storage.clone());
-    let (entry_annotations, _) =
-        infer_types(&entry, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap();
+    let (entry_annotations, _) = TODO_DEPRECATE__infer_types(
+        &entry,
+        &context,
+        vec![],
+        &snapshot,
+        &type_manager,
+        &IndexedAnnotatedFunctions::empty(),
+    )
+    .unwrap();
 
     // Plan
     let steps = vec![

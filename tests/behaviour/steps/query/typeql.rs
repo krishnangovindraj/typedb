@@ -34,7 +34,7 @@ fn create_insert_plan(context: &mut Context, query_str: &str) -> Result<InsertPl
         let typeql_insert = typeql::parse_query(query_str).unwrap().into_pipeline().stages.pop().unwrap().into_insert();
         let mut block_context = MultiBlockContext::new();
         let block = ir::translation::writes::translate_insert(&mut block_context, &typeql_insert).unwrap().finish();
-        let (entry_annotations, _) = compiler::inference::type_inference::infer_types(
+        let (entry_annotations, _) = compiler::inference::type_inference::TODO_DEPRECATE__infer_types(
             &block,
             &block_context,
             vec![],

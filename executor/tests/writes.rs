@@ -88,7 +88,7 @@ fn execute_insert(
         .enumerate()
         .map(|(i, v)| (context.get_variable_named(v, block.scope_id()).unwrap().clone(), i))
         .collect::<HashMap<_, _>>();
-    let (entry_annotations, _) = compiler::inference::type_inference::infer_types(
+    let (entry_annotations, _) = compiler::inference::type_inference::TODO_DEPRECATE__infer_types(
         &block,
         &mut context,
         vec![],
@@ -154,7 +154,7 @@ fn execute_delete(
         )
         .unwrap()
         .finish();
-        compiler::inference::type_inference::infer_types(
+        compiler::inference::type_inference::TODO_DEPRECATE__infer_types(
             &block,
             &mut context,
             vec![],

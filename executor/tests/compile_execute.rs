@@ -7,7 +7,7 @@
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use compiler::{
-    inference::{annotated_functions::IndexedAnnotatedFunctions, type_inference::infer_types},
+    inference::{annotated_functions::IndexedAnnotatedFunctions, type_inference::TODO_DEPRECATE__infer_types},
     planner::{pattern_plan::PatternPlan, program_plan::ProgramPlan},
 };
 use concept::{
@@ -114,8 +114,15 @@ fn test_planning_traversal() {
     // Executor
     let snapshot = storage.clone().open_snapshot_read();
     let (type_manager, thing_manager) = load_managers(storage.clone());
-    let (entry_annotations, annotated_functions) =
-        infer_types(&block, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap();
+    let (entry_annotations, annotated_functions) = TODO_DEPRECATE__infer_types(
+        &block,
+        &context,
+        vec![],
+        &snapshot,
+        &type_manager,
+        &IndexedAnnotatedFunctions::empty(),
+    )
+    .unwrap();
     let pattern_plan = PatternPlan::from_block(&block, &context, &entry_annotations, &HashMap::new(), &statistics);
     let program_plan =
         ProgramPlan::new(context, pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());

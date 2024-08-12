@@ -89,7 +89,7 @@ pub mod tests {
     use crate::inference::{
         annotated_functions::{AnnotatedFunctions, IndexedAnnotatedFunctions},
         tests::{managers, schema_consts::setup_types, setup_storage},
-        type_inference::infer_types,
+        type_inference::TODO_DEPRECATE__infer_types,
     };
 
     #[test]
@@ -126,7 +126,8 @@ pub mod tests {
         let var_f_c = function.context().get_variable_named("c", function.block().scope_id()).unwrap().clone();
         let var_x = context.get_variable_named("x", entry.scope_id()).unwrap().clone();
         let (entry_annotations, function_annotations) =
-            infer_types(&entry, &context, vec![function], &snapshot, &type_manager, &empty_cache).unwrap();
+            TODO_DEPRECATE__infer_types(&entry, &context, vec![function], &snapshot, &type_manager, &empty_cache)
+                .unwrap();
         assert_eq!(
             &Arc::new(HashSet::from([type_cat.clone()])),
             function_annotations

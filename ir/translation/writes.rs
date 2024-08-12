@@ -32,14 +32,12 @@ pub fn translate_insert<'a>(
     }
     Ok(builder)
 }
-//
 
 pub fn translate_delete<'a>(
     context: &'a mut MultiBlockContext,
     delete: &typeql::query::stage::Delete,
 ) -> Result<(FunctionalBlockBuilder<'a>, Vec<Variable>), PatternDefinitionError> {
     let mut builder = FunctionalBlock::builder(context);
-    // let function_index = HashMapFunctionIndex::empty();
     let mut tmp_conjunction = builder.conjunction_mut();
     let mut constraints = tmp_conjunction.constraints_mut();
     let mut deleted_concepts = Vec::new();
@@ -60,11 +58,6 @@ pub fn translate_delete<'a>(
             }
         }
     }
-    deleted_concepts.iter().try_for_each(|variable| {
-        // We need a constraint to be able to set this:
-        // builder.context_mut().set_variable_category(variable.clone(), VariableCategory::Thing, <<HERE>>)?;
-        Ok(())
-    })?;
 
     Ok((builder, deleted_concepts))
 }
