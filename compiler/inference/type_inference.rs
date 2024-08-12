@@ -11,7 +11,6 @@ use concept::type_::type_manager::TypeManager;
 use ir::program::{
     block::{FunctionalBlock, MultiBlockContext},
     function::Function,
-    program::Program,
 };
 use storage::snapshot::ReadableSnapshot;
 
@@ -127,7 +126,6 @@ pub mod tests {
             block::{FunctionalBlock, MultiBlockContext},
             function::{Function, ReturnOperation},
             function_signature::{FunctionID, FunctionSignature},
-            program::Program,
         },
     };
     use itertools::Itertools;

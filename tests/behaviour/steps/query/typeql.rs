@@ -16,7 +16,7 @@ use executor::{
     batch::Row,
     write::insert_executor::{InsertExecutor, WriteError},
 };
-use ir::program::{block::MultiBlockContext, function_signature::HashMapFunctionSignatureIndex, program::Program};
+use ir::program::{block::MultiBlockContext, function_signature::HashMapFunctionSignatureIndex};
 use itertools::Itertools;
 use macro_rules_attribute::apply;
 use primitive::either::Either;

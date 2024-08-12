@@ -28,7 +28,6 @@ use ir::{
     pattern::constraint::IsaKind,
     program::{
         block::{FunctionalBlock, MultiBlockContext},
-        program::Program,
     },
 };
 use lending_iterator::LendingIterator;

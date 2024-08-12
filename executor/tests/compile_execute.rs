@@ -17,7 +17,7 @@ use concept::{
 use encoding::value::{label::Label, value::Value, value_type::ValueType};
 use executor::program_executor::ProgramExecutor;
 use ir::{
-    program::{block::MultiBlockContext, function_signature::HashMapFunctionSignatureIndex, program::Program},
+    program::{block::MultiBlockContext, function_signature::HashMapFunctionSignatureIndex},
     translation::match_::translate_match,
 };
 use itertools::Itertools;

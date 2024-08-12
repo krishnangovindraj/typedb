@@ -81,7 +81,6 @@ pub mod tests {
         program::{
             block::MultiBlockContext,
             function_signature::{FunctionID, HashMapFunctionSignatureIndex},
-            program::Program,
         },
         translation::{function::translate_function, match_::translate_match},
     };

@@ -17,7 +17,7 @@ use concept::{
         owns::OwnsAnnotation,
         plays::PlaysAnnotation,
         relates::RelatesAnnotation,
-        relation_type::{RelationType, RelationTypeAnnotation},
+        relation_type::RelationTypeAnnotation,
         type_manager::TypeManager,
         Ordering, OwnerAPI, PlayerAPI,
     },

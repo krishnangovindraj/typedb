@@ -18,7 +18,7 @@ use encoding::value::label::Label;
 use executor::{batch::ImmutableRow, program_executor::ProgramExecutor};
 use ir::{
     pattern::constraint::IsaKind,
-    program::{block::FunctionalBlock, program::Program},
+    program::{block::FunctionalBlock},
 };
 use ir::program::block::MultiBlockContext;
 use lending_iterator::LendingIterator;
