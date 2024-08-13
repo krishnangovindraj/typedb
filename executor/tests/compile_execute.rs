@@ -7,7 +7,7 @@
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use compiler::{
-    inference::{annotated_functions::IndexedAnnotatedFunctions, type_inference::infer_types},
+    inference::{annotated_functions::IndexedAnnotatedFunctions, type_inference::TODO_DEPRECATE__infer_types},
     planner::{pattern_plan::PatternPlan, program_plan::ProgramPlan},
 };
 use concept::{
@@ -20,7 +20,7 @@ use concept::{
 use encoding::value::{label::Label, value::Value, value_type::ValueType};
 use executor::program_executor::ProgramExecutor;
 use ir::{
-    program::{function_signature::HashMapFunctionSignatureIndex, program::Program},
+    program::{block::BlockContext, function_signature::HashMapFunctionSignatureIndex},
     translation::match_::translate_match,
 };
 use itertools::Itertools;
@@ -111,7 +111,8 @@ fn test_has_planning_traversal() {
 
     // IR
     let empty_function_index = HashMapFunctionSignatureIndex::empty();
-    let builder = translate_match(&empty_function_index, &match_).unwrap();
+    let mut context = BlockContext::new();
+    let builder = translate_match(&mut context, &empty_function_index, &match_).unwrap();
     // builder.add_limit(3);
     // builder.add_filter(vec!["person", "age"]).unwrap();
     let block = builder.finish();
@@ -119,10 +120,18 @@ fn test_has_planning_traversal() {
     // Executor
     let snapshot = storage.clone().open_snapshot_read();
     let (type_manager, thing_manager) = load_managers(storage.clone());
-    let (entry_annotations, annotated_functions) =
-        infer_types(&block, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap();
-    let pattern_plan = PatternPlan::from_block(&block, &entry_annotations, &HashMap::new(), &statistics);
-    let program_plan = ProgramPlan::new(pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
+    let (entry_annotations, annotated_functions) = TODO_DEPRECATE__infer_types(
+        &block,
+        &context,
+        vec![],
+        &snapshot,
+        &type_manager,
+        &IndexedAnnotatedFunctions::empty(),
+    )
+    .unwrap();
+    let pattern_plan = PatternPlan::from_block(&block, &context, &entry_annotations, &HashMap::new(), &statistics);
+    let program_plan =
+        ProgramPlan::new(context, pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
     let executor = ProgramExecutor::new(&program_plan, &snapshot, &thing_manager).unwrap();
     let iterator = executor.into_iterator(Arc::new(snapshot), Arc::new(thing_manager));
 
@@ -224,7 +233,8 @@ fn test_links_planning_traversal() {
 
     // IR
     let empty_function_index = HashMapFunctionSignatureIndex::empty();
-    let builder = translate_match(&empty_function_index, &match_).unwrap();
+    let mut context = BlockContext::new();
+    let builder = translate_match(&mut context, &empty_function_index, &match_).unwrap();
     // builder.add_limit(3);
     // builder.add_filter(vec!["person", "age"]).unwrap();
     let block = builder.finish();
@@ -233,9 +243,9 @@ fn test_links_planning_traversal() {
     let snapshot = storage.clone().open_snapshot_read();
     let (type_manager, thing_manager) = load_managers(storage.clone());
     let (entry_annotations, _) =
-        infer_types(&block, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap();
-    let pattern_plan = PatternPlan::from_block(&block, &entry_annotations, &HashMap::new(), &statistics);
-    let program_plan = ProgramPlan::new(pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
+        TODO_DEPRECATE__infer_types(&block, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap();
+    let pattern_plan = PatternPlan::from_block(&block, &context, &entry_annotations, &HashMap::new(), &statistics);
+    let program_plan = ProgramPlan::new(context, pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
     let executor = ProgramExecutor::new(&program_plan, &snapshot, &thing_manager).unwrap();
     let iterator = executor.into_iterator(Arc::new(snapshot), Arc::new(thing_manager));
 

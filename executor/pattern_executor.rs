@@ -40,11 +40,12 @@ pub(crate) struct PatternExecutor {
 impl PatternExecutor {
     pub(crate) fn new(
         plan: &PatternPlan,
+        context: &BlockContext,
         type_annotations: &TypeAnnotations,
         snapshot: &impl ReadableSnapshot,
         thing_manager: &ThingManager,
     ) -> Result<Self, ConceptReadError> {
-        let (steps, context) = (plan.steps(), plan.context());
+        let steps = plan.steps();
         let mut variable_positions = HashMap::new();
         let mut step_executors = Vec::with_capacity(steps.len());
         for step in steps {
@@ -232,12 +233,14 @@ impl StepExecutor {
                 todo!()
             }
             Step::Negation(NegationStep { negation: negation_plan, .. }) => {
-                let executor = PatternExecutor::new(negation_plan, type_annotations, snapshot, thing_manager)?;
+                let executor =
+                    PatternExecutor::new(negation_plan, block_context, type_annotations, snapshot, thing_manager)?;
                 // // TODO: add limit 1, filters if they aren't there already?
                 Ok(Self::Negation(NegationExecutor::new(executor, variable_positions)))
             }
             Step::Optional(OptionalStep { optional: optional_plan, .. }) => {
-                let pattern_executor = PatternExecutor::new(optional_plan, type_annotations, snapshot, thing_manager)?;
+                let pattern_executor =
+                    PatternExecutor::new(optional_plan, block_context, type_annotations, snapshot, thing_manager)?;
                 Ok(Self::Optional(OptionalExecutor::new(pattern_executor)))
             }
         }

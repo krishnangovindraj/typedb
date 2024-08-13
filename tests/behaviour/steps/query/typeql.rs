@@ -13,7 +13,7 @@ use compiler::{
 };
 use cucumber::gherkin::Step;
 use executor::{batch::Row, write::insert_executor::WriteError};
-use ir::program::{function_signature::HashMapFunctionSignatureIndex, program::Program};
+use ir::program::{block::BlockContext, function_signature::HashMapFunctionSignatureIndex};
 use itertools::Itertools;
 use macro_rules_attribute::apply;
 use primitive::either::Either;
@@ -29,9 +29,11 @@ use crate::{
 fn create_insert_plan(context: &mut Context, query_str: &str) -> Result<InsertPlan, WriteCompilationError> {
     with_write_tx!(context, |tx| {
         let typeql_insert = typeql::parse_query(query_str).unwrap().into_pipeline().stages.pop().unwrap().into_insert();
-        let block = ir::translation::writes::translate_insert(&typeql_insert).unwrap().finish();
-        let (entry_annotations, _) = compiler::inference::type_inference::infer_types(
+        let mut block_context = BlockContext::new();
+        let block = ir::translation::writes::translate_insert(&mut block_context, &typeql_insert).unwrap().finish();
+        let (entry_annotations, _) = compiler::inference::type_inference::TODO_DEPRECATE__infer_types(
             &block,
+            &block_context,
             vec![],
             &tx.snapshot,
             &tx.type_manager,

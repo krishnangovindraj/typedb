@@ -12,6 +12,7 @@ use encoding::{
     graph::definition::definition_key::DefinitionKey,
     value::value_type::{ValueType, ValueTypeCategory},
 };
+use ir::program::block::BlockContext;
 
 use crate::{
     expression::compiled_expression::{CompiledExpression, ExpressionValueType},
@@ -20,7 +21,9 @@ use crate::{
 };
 
 pub struct ProgramPlan {
+    // TODO: Update 'Program' to refer to the whole pipeline & to
     // TODO: krishnan: Revert pub
+    pub block_context: BlockContext,
     pub entry: PatternPlan,
     pub entry_type_annotations: TypeAnnotations,
     // TODO: this should have ValueType not ValueTypeCategory
@@ -30,6 +33,7 @@ pub struct ProgramPlan {
 
 impl ProgramPlan {
     pub fn new(
+        block_context: BlockContext,
         entry_plan: PatternPlan,
         entry_annotations: TypeAnnotations,
         entry_expressions: HashMap<Variable, CompiledExpression>,
@@ -41,6 +45,7 @@ impl ProgramPlan {
         }
 
         Self {
+            block_context,
             entry: entry_plan,
             entry_type_annotations: entry_annotations,
             entry_value_type_annotations: entry_value_type_annotations,
@@ -48,13 +53,13 @@ impl ProgramPlan {
         }
     }
 
-    pub fn from_program(program: AnnotatedProgram, statistics: &Statistics) -> Self {
-        let AnnotatedProgram { entry, entry_annotations, entry_expressions, schema_functions, preamble_functions } =
-            program;
-        let entry_plan = PatternPlan::from_block(&entry, &entry_annotations, &entry_expressions, &statistics);
-        // TODO: plan all premable functions and merge with schema functions
-        Self::new(entry_plan, entry_annotations, entry_expressions, HashMap::new())
-    }
+    // pub fn from_program(program: AnnotatedProgram, statistics: &Statistics) -> Self {
+    //     let AnnotatedProgram { entry, entry_annotations, entry_expressions, schema_functions, preamble_functions } =
+    //         program;
+    //     let entry_plan = PatternPlan::from_block(&entry, context, &entry_annotations, &entry_expressions, &statistics);
+    //     // TODO: plan all premable functions and merge with schema functions
+    //     Self::new(entry_plan, entry_annotations, entry_expressions, HashMap::new())
+    // }
 
     pub fn entry(&self) -> &PatternPlan {
         &self.entry
@@ -66,5 +71,9 @@ impl ProgramPlan {
 
     pub fn entry_value_type_annotations(&self) -> &HashMap<Variable, ExpressionValueType> {
         &self.entry_value_type_annotations
+    }
+
+    pub fn context(&self) -> &BlockContext {
+        &self.block_context
     }
 }

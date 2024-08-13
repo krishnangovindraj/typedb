@@ -171,20 +171,28 @@ pub mod tests {
 
     use crate::{
         pattern::expression::{Expression, Operation, Operator},
-        program::{block::FunctionalBlock, function_signature::HashMapFunctionSignatureIndex},
+        program::{
+            block::{BlockContext, FunctionalBlock},
+            function_signature::HashMapFunctionSignatureIndex,
+        },
         translation::match_::translate_match,
         PatternDefinitionError,
     };
 
-    fn parse_query_get_match(query_str: &str) -> Result<FunctionalBlock, PatternDefinitionError> {
+    fn parse_query_get_match(
+        context: &mut BlockContext,
+        query_str: &str,
+    ) -> Result<FunctionalBlock, PatternDefinitionError> {
         let mut query = typeql::parse_query(query_str).unwrap().into_pipeline();
         let match_ = query.stages.remove(0).into_match();
-        translate_match(&HashMapFunctionSignatureIndex::empty(), &match_).map(|builder| builder.finish())
+        translate_match(context, &HashMapFunctionSignatureIndex::empty(), &match_).map(|builder| builder.finish())
     }
 
     #[test]
     fn basic() {
+        let mut context = BlockContext::new();
         let block = parse_query_get_match(
+            &mut context,
             "
             match
                 $y = 5 + 9 * 6;
@@ -192,7 +200,7 @@ pub mod tests {
         ",
         )
         .unwrap();
-        let var_y = block.context().get_variable_named("y", block.scope_id()).unwrap();
+        let var_y = context.get_variable_named("y", block.scope_id()).unwrap();
 
         let lhs = block.conjunction().constraints()[0].as_expression_binding().unwrap().left();
         let rhs = block.conjunction().constraints()[0]

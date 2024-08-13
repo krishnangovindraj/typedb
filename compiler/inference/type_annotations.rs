@@ -186,3 +186,18 @@ impl FunctionAnnotations {
         &self.return_annotations
     }
 }
+
+#[derive(Debug)]
+pub struct PipelineAnnotations {
+    // TODO
+}
+
+impl PipelineAnnotations {
+    pub(crate) fn new() -> PipelineAnnotations {
+        Self {}
+    }
+
+    pub fn variable_annotations_of(&self, variable: Variable) -> Option<&HashSet<Type>> {
+        None // TODO
+    }
+}

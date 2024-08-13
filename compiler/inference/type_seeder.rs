@@ -38,7 +38,7 @@ use crate::inference::{
     pattern_type_inference::{
         NestedTypeInferenceGraphDisjunction, TypeInferenceEdge, TypeInferenceGraph, VertexAnnotations,
     },
-    type_annotations::FunctionAnnotations,
+    type_annotations::{FunctionAnnotations, PipelineAnnotations},
     TypeInferenceError,
 };
 
@@ -82,9 +82,21 @@ impl<'this, Snapshot: ReadableSnapshot> TypeSeeder<'this, Snapshot> {
     pub(crate) fn seed_types<'graph>(
         &self,
         context: &BlockContext,
+        upstream_annotations: &PipelineAnnotations,
         conjunction: &'graph Conjunction,
     ) -> Result<TypeInferenceGraph<'graph>, TypeInferenceError> {
         let mut tig = self.build_recursive(context, conjunction);
+        // Pre-seed with upstream variable annotations.
+        // Advanced TODO: Copying upstream binary constraints as schema constraints.
+        for (_, variable) in context.named_variable_mapping() {
+            if let Some(annotations) = upstream_annotations.variable_annotations_of(variable.clone()) {
+                Self::add_or_intersect(
+                    &mut tig.vertices,
+                    variable.clone(),
+                    Cow::Owned(annotations.iter().map(|x| x.clone()).collect()),
+                );
+            }
+        }
         self.seed_types_impl(&mut tig, context, &BTreeMap::new())?;
         Ok(tig)
     }
@@ -101,6 +113,7 @@ impl<'this, Snapshot: ReadableSnapshot> TypeSeeder<'this, Snapshot> {
             }
         });
 
+        // Seed vertices in root & disjunctions
         self.seed_vertex_annotations_from_type_and_function_return(tig)?;
         let mut some_vertex_was_directly_annotated = true;
         while some_vertex_was_directly_annotated {
@@ -114,6 +127,10 @@ impl<'this, Snapshot: ReadableSnapshot> TypeSeeder<'this, Snapshot> {
                 .annotate_some_unannotated_vertex(tig, context)
                 .map_err(|source| TypeInferenceError::ConceptRead { source })?;
         }
+
+        // Apply any restrictions
+
+        // Seed edges in root & disjunctions
         self.seed_edges(tig).map_err(|source| TypeInferenceError::ConceptRead { source })?;
 
         // Now we recurse into the nested negations & optionals
@@ -1243,7 +1260,10 @@ pub mod tests {
 
     use answer::Type as TypeAnnotation;
     use encoding::value::{label::Label, value_type::ValueType};
-    use ir::{pattern::constraint::IsaKind, program::block::FunctionalBlock};
+    use ir::{
+        pattern::constraint::IsaKind,
+        program::block::{BlockContext, FunctionalBlock},
+    };
     use storage::snapshot::CommittableSnapshot;
 
     use crate::inference::{
@@ -1254,6 +1274,7 @@ pub mod tests {
             schema_consts::{setup_types, LABEL_CAT, LABEL_NAME},
             setup_storage,
         },
+        type_annotations::PipelineAnnotations,
         type_seeder::TypeSeeder,
     };
 
@@ -1271,7 +1292,8 @@ pub mod tests {
 
         {
             // Case 1: $a isa cat, has animal-name $n;
-            let mut builder = FunctionalBlock::builder();
+            let mut context = BlockContext::new();
+            let mut builder = FunctionalBlock::builder(&mut context);
             let mut conjunction = builder.conjunction_mut();
             let var_animal = conjunction.get_or_declare_variable("animal").unwrap();
             let var_name = conjunction.get_or_declare_variable("name").unwrap();
@@ -1338,7 +1360,7 @@ pub mod tests {
             let snapshot = storage.clone().open_snapshot_write();
             let empty_function_cache = IndexedAnnotatedFunctions::empty();
             let seeder = TypeSeeder::new(&snapshot, &type_manager, &empty_function_cache, None);
-            let tig = seeder.seed_types(block.context(), conjunction).unwrap();
+            let tig = seeder.seed_types(&context, &PipelineAnnotations::new(), conjunction).unwrap();
             assert_eq!(expected_tig, tig);
         }
     }
@@ -1355,7 +1377,8 @@ pub mod tests {
 
         {
             // // Case 1: $a has $n;
-            let mut builder = FunctionalBlock::builder();
+            let mut context = BlockContext::new();
+            let mut builder = FunctionalBlock::builder(&mut context);
             let mut conjunction = builder.conjunction_mut();
             let var_animal = conjunction.get_or_declare_variable("animal").unwrap();
             let var_name = conjunction.get_or_declare_variable("name").unwrap();
@@ -1394,7 +1417,7 @@ pub mod tests {
             let snapshot = storage.clone().open_snapshot_write();
             let empty_function_cache = IndexedAnnotatedFunctions::empty();
             let seeder = TypeSeeder::new(&snapshot, &type_manager, &empty_function_cache, None);
-            let tig = seeder.seed_types(block.context(), conjunction).unwrap();
+            let tig = seeder.seed_types(&context, &PipelineAnnotations::new(), conjunction).unwrap();
             if expected_tig != tig {
                 // We need this because of non-determinism
                 expected_tig.vertices.get_mut(&var_animal).unwrap().insert(type_fears.clone());
@@ -1405,6 +1428,7 @@ pub mod tests {
 
     #[test]
     fn test_comparison() {
+        let mut context = BlockContext::new();
         let (_tmp_dir, storage) = setup_storage();
         let (type_manager, thing_manager) = managers();
 
@@ -1419,7 +1443,7 @@ pub mod tests {
         };
         {
             // // Case 1: $a > $b;
-            let mut builder = FunctionalBlock::builder();
+            let mut builder = FunctionalBlock::builder(&mut context);
             let mut conjunction = builder.conjunction_mut();
             let var_a = conjunction.get_or_declare_variable("a").unwrap();
             let var_b = conjunction.get_or_declare_variable("b").unwrap();
@@ -1467,7 +1491,7 @@ pub mod tests {
             let snapshot = storage.clone().open_snapshot_write();
             let empty_function_cache = IndexedAnnotatedFunctions::empty();
             let seeder = TypeSeeder::new(&snapshot, &type_manager, &empty_function_cache, None);
-            let tig = seeder.seed_types(block.context(), conjunction).unwrap();
+            let tig = seeder.seed_types(&context, &PipelineAnnotations::new(), conjunction).unwrap();
             assert_eq!(expected_tig.vertices, tig.vertices);
             assert_eq!(expected_tig, tig);
         }

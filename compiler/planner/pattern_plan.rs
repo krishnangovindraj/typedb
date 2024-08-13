@@ -29,7 +29,6 @@ use crate::{
 
 pub struct PatternPlan {
     pub(crate) steps: Vec<Step>,
-    pub(crate) context: BlockContext,
 }
 
 /*
@@ -44,12 +43,13 @@ If we know this we can:
  */
 
 impl PatternPlan {
-    pub fn new(steps: Vec<Step>, context: BlockContext) -> Self {
-        Self { steps, context }
+    pub fn new(steps: Vec<Step>) -> Self {
+        Self { steps }
     }
 
     pub fn from_block(
         block: &FunctionalBlock,
+        block_context: &BlockContext,
         type_annotations: &TypeAnnotations,
         expressions: &HashMap<Variable, CompiledExpression>,
         statistics: &Statistics,
@@ -63,8 +63,7 @@ impl PatternPlan {
         let mut elements = Vec::new();
         let mut adjacency: HashMap<usize, HashSet<usize>> = HashMap::new();
 
-        let context = block.context();
-        for (variable, category) in context.variable_categories() {
+        for (variable, category) in block_context.variable_categories() {
             match category {
                 VariableCategory::Type | VariableCategory::ThingType => (), // ignore for now
                 VariableCategory::RoleType => {
@@ -255,7 +254,7 @@ impl PatternPlan {
             }
         }
         steps.reverse();
-        Self { steps, context: context.clone() }
+        Self { steps }
     }
 
     pub fn steps(&self) -> &[Step] {
@@ -268,10 +267,6 @@ impl PatternPlan {
 
     pub(crate) fn into_steps(self) -> impl Iterator<Item = Step> {
         self.steps.into_iter()
-    }
-
-    pub fn context(&self) -> &BlockContext {
-        &self.context
     }
 }
 
