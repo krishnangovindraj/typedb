@@ -23,7 +23,7 @@ use encoding::value::{label::Label, value::Value, value_type::ValueType};
 use executor::{batch::ImmutableRow, program_executor::ProgramExecutor};
 use ir::{
     pattern::constraint::IsaKind,
-    program::block::{FunctionalBlock, MultiBlockContext},
+    program::block::{FunctionalBlock, BlockContext},
 };
 use lending_iterator::LendingIterator;
 use storage::{
@@ -109,7 +109,7 @@ fn traverse_has_unbounded_sorted_from() {
     //    $person isa person, has age $age;
 
     // IR
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     let mut block = FunctionalBlock::builder(&mut context);
     let mut conjunction = block.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();
@@ -180,7 +180,7 @@ fn traverse_has_bounded_sorted_from_chain_intersect() {
     //    $person-2 has name $name; # reverse!
 
     // IR
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     let mut block = FunctionalBlock::builder(&mut context);
     let mut conjunction = block.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();
@@ -262,7 +262,7 @@ fn traverse_has_unbounded_sorted_from_intersect() {
     //    $person has name $name, has age $age;
 
     // IR
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     let mut builder = FunctionalBlock::builder(&mut context);
     let mut conjunction = builder.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();
@@ -344,7 +344,7 @@ fn traverse_has_unbounded_sorted_to_merged() {
     //    $person has $attribute;
 
     // IR
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     let mut builder = FunctionalBlock::builder(&mut context);
     let mut conjunction = builder.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();
@@ -424,7 +424,7 @@ fn traverse_has_reverse_unbounded_sorted_from() {
     //    $person has age $age;
 
     // IR
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     let mut builder = FunctionalBlock::builder(&mut context);
     let mut conjunction = builder.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();

@@ -26,7 +26,7 @@ use encoding::value::{label::Label, value::Value, value_type::ValueType};
 use executor::{batch::ImmutableRow, program_executor::ProgramExecutor};
 use ir::{
     pattern::constraint::IsaKind,
-    program::block::{FunctionalBlock, MultiBlockContext},
+    program::block::{FunctionalBlock, BlockContext},
 };
 use lending_iterator::LendingIterator;
 use storage::{
@@ -158,7 +158,7 @@ fn traverse_rp_unbounded_sorted_from() {
     //
 
     // IR
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     let mut builder = FunctionalBlock::builder(&mut context);
     let mut conjunction = builder.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();
@@ -254,7 +254,7 @@ fn traverse_rp_unbounded_sorted_to() {
     //
 
     // IR
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     let mut builder = FunctionalBlock::builder(&mut context);
     let mut conjunction = builder.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();
@@ -343,7 +343,7 @@ fn traverse_rp_bounded_relation() {
     //
 
     // IR
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     let mut block = FunctionalBlock::builder(&mut context);
     let mut conjunction = block.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();
@@ -437,7 +437,7 @@ fn traverse_rp_bounded_relation_player() {
     //
 
     // IR
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     let mut block = FunctionalBlock::builder(&mut context);
     let mut conjunction = block.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();
@@ -536,7 +536,7 @@ fn traverse_rp_reverse_unbounded_sorted_from() {
     //
 
     // IR
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     let mut block = FunctionalBlock::builder(&mut context);
     let mut conjunction = block.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();
@@ -622,7 +622,7 @@ fn traverse_rp_reverse_unbounded_sorted_to() {
     //
 
     // IR
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     let mut block = FunctionalBlock::builder(&mut context);
     let mut conjunction = block.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();
@@ -708,7 +708,7 @@ fn traverse_rp_reverse_bounded_player() {
     //
 
     // IR
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     let mut block = FunctionalBlock::builder(&mut context);
     let mut conjunction = block.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();
@@ -802,7 +802,7 @@ fn traverse_rp_reverse_bounded_player_relation() {
     //
 
     // IR
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     let mut block = FunctionalBlock::builder(&mut context);
     let mut conjunction = block.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();

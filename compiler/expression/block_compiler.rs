@@ -13,7 +13,7 @@ use ir::{
         conjunction::Conjunction, expression::ExpressionTree, nested_pattern::NestedPattern,
         variable_category::VariableCategory,
     },
-    program::block::{FunctionalBlock, MultiBlockContext},
+    program::block::{FunctionalBlock, BlockContext},
 };
 use itertools::Itertools;
 use storage::snapshot::ReadableSnapshot;
@@ -29,7 +29,7 @@ use crate::{
 
 struct BlockExpressionsCompilationContext<'block, Snapshot: ReadableSnapshot> {
     block: &'block FunctionalBlock,
-    block_context: &'block MultiBlockContext,
+    block_context: &'block BlockContext,
     snapshot: &'block Snapshot,
     type_manager: &'block TypeManager,
     type_annotations: &'block TypeAnnotations,
@@ -43,7 +43,7 @@ pub fn compile_expressions<'block, Snapshot: ReadableSnapshot>(
     snapshot: &'block Snapshot,
     type_manager: &'block TypeManager,
     block: &'block FunctionalBlock,
-    block_context: &'block MultiBlockContext,
+    block_context: &'block BlockContext,
     type_annotations: &'block TypeAnnotations,
 ) -> Result<HashMap<Variable, CompiledExpression>, ExpressionCompileError> {
     let mut expression_index = HashMap::new();

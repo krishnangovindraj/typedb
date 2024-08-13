@@ -10,7 +10,7 @@ use answer::variable::Variable;
 use compiler::planner::program_plan::ProgramPlan;
 use concept::{error::ConceptReadError, thing::thing_manager::ThingManager};
 use encoding::graph::definition::definition_key::DefinitionKey;
-use ir::program::block::MultiBlockContext;
+use ir::program::block::BlockContext;
 use lending_iterator::LendingIterator;
 use storage::snapshot::ReadableSnapshot;
 

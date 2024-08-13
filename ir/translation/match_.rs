@@ -7,7 +7,7 @@
 use crate::{
     pattern::conjunction::ConjunctionBuilder,
     program::{
-        block::{FunctionalBlock, FunctionalBlockBuilder, MultiBlockContext},
+        block::{FunctionalBlock, FunctionalBlockBuilder, BlockContext},
         function_signature::FunctionSignatureIndex,
     },
     translation::constraints::add_statement,
@@ -15,7 +15,7 @@ use crate::{
 };
 
 pub fn translate_match<'a>(
-    context: &'a mut MultiBlockContext,
+    context: &'a mut BlockContext,
     function_index: &impl FunctionSignatureIndex,
     match_: &typeql::query::stage::Match,
 ) -> Result<FunctionalBlockBuilder<'a>, PatternDefinitionError> {

@@ -23,7 +23,7 @@ use encoding::value::{label::Label, value::Value, value_type::ValueType};
 use executor::{batch::ImmutableRow, program_executor::ProgramExecutor};
 use ir::{
     pattern::constraint::IsaKind,
-    program::block::{FunctionalBlock, MultiBlockContext},
+    program::block::{FunctionalBlock, BlockContext},
 };
 use lending_iterator::LendingIterator;
 use storage::{
@@ -138,7 +138,7 @@ fn anonymous_vars_not_enumerated_or_counted() {
     //    $person has $_;
 
     // IR
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     let mut block = FunctionalBlock::builder(&mut context);
     let mut conjunction = block.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();
@@ -220,7 +220,7 @@ fn unselected_named_vars_counted() {
     //   select $person;
 
     // IR
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     let mut builder = FunctionalBlock::builder(&mut context);
     let mut conjunction = builder.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();
@@ -302,7 +302,7 @@ fn cartesian_named_counted_checked() {
     //   select $person, $name;
 
     // IR
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     let mut builder = FunctionalBlock::builder(&mut context);
     let mut conjunction = builder.conjunction_mut();
     let var_person_type = conjunction.get_or_declare_variable("person_type").unwrap();

@@ -13,7 +13,7 @@ use ir::{
         constraint::{Constraint, ExpressionBinding},
         variable_category::VariableCategory,
     },
-    program::block::{FunctionalBlock, MultiBlockContext},
+    program::block::{FunctionalBlock, BlockContext},
 };
 use itertools::Itertools;
 
@@ -46,7 +46,7 @@ impl PatternPlan {
 
     pub fn from_block(
         block: &FunctionalBlock,
-        block_context: &MultiBlockContext,
+        block_context: &BlockContext,
         type_annotations: &TypeAnnotations,
         expressions: &HashMap<Variable, CompiledExpression>,
         statistics: &Statistics,

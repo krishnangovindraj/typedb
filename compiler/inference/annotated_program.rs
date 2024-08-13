@@ -79,7 +79,7 @@ pub mod tests {
 
     use ir::{
         program::{
-            block::MultiBlockContext,
+            block::BlockContext,
             function_signature::{FunctionID, HashMapFunctionSignatureIndex},
         },
         translation::{function::translate_function, match_::translate_match},
@@ -114,7 +114,7 @@ pub mod tests {
         let function_index =
             HashMapFunctionSignatureIndex::build([(FunctionID::Preamble(0), &typeql_function)].into_iter());
         let function = translate_function(&function_index, &typeql_function).unwrap();
-        let mut context = MultiBlockContext::new();
+        let mut context = BlockContext::new();
         let entry = translate_match(&mut context, &function_index, &typeql_match).unwrap().finish();
         let (_tmp_dir, storage) = setup_storage();
         let (type_manager, _) = managers();

@@ -174,7 +174,7 @@ pub mod tests {
     use crate::{
         pattern::expression::{Expression, Operation, Operator},
         program::{
-            block::{FunctionalBlock, MultiBlockContext},
+            block::{FunctionalBlock, BlockContext},
             function_signature::HashMapFunctionSignatureIndex,
         },
         translation::match_::translate_match,
@@ -182,7 +182,7 @@ pub mod tests {
     };
 
     fn parse_query_get_match(
-        context: &mut MultiBlockContext,
+        context: &mut BlockContext,
         query_str: &str,
     ) -> Result<FunctionalBlock, PatternDefinitionError> {
         let mut query = typeql::parse_query(query_str).unwrap().into_pipeline();
@@ -192,7 +192,7 @@ pub mod tests {
 
     #[test]
     fn basic() {
-        let mut context = MultiBlockContext::new();
+        let mut context = BlockContext::new();
         let block = parse_query_get_match(
             &mut context,
             "

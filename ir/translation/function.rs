@@ -13,7 +13,7 @@ use typeql::{
 use crate::{
     pattern::variable_category::{VariableCategory, VariableOptionality},
     program::{
-        block::{FunctionalBlock, MultiBlockContext},
+        block::{FunctionalBlock, BlockContext},
         function::{Function, Reducer, ReturnOperation},
         function_signature::{FunctionID, FunctionSignature, FunctionSignatureIndex},
         FunctionDefinitionError,
@@ -25,7 +25,7 @@ pub fn translate_function(
     function_index: &impl FunctionSignatureIndex,
     function: &typeql::Function,
 ) -> Result<Function, FunctionDefinitionError> {
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     let block = translate_match(&mut context, function_index, &function.body)
         .map_err(|source| FunctionDefinitionError::PatternDefinition { source })?
         .finish();
@@ -77,7 +77,7 @@ fn type_any_to_category_and_optionality(type_any: &TypeRefAny) -> (VariableCateg
 }
 
 fn build_return_stream(
-    context: &MultiBlockContext,
+    context: &BlockContext,
     block: &FunctionalBlock,
     stream: &ReturnStream,
 ) -> Result<ReturnOperation, FunctionDefinitionError> {
@@ -94,7 +94,7 @@ fn build_return_stream(
 }
 
 fn build_return_single(
-    context: &MultiBlockContext,
+    context: &BlockContext,
     block: &FunctionalBlock,
     single: &ReturnSingle,
 ) -> Result<ReturnOperation, FunctionDefinitionError> {
@@ -107,7 +107,7 @@ fn build_return_single(
 }
 
 fn build_return_single_output(
-    context: &MultiBlockContext,
+    context: &BlockContext,
     block: &FunctionalBlock,
     single_output: &SingleOutput,
 ) -> Result<Reducer, FunctionDefinitionError> {
@@ -115,7 +115,7 @@ fn build_return_single_output(
 }
 
 fn get_variable_in_block<F>(
-    context: &MultiBlockContext,
+    context: &BlockContext,
     block: &FunctionalBlock,
     typeql_var: &typeql::Variable,
     err: F,

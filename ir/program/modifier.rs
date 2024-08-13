@@ -8,7 +8,7 @@ use std::{collections::HashSet, error::Error, fmt};
 
 use answer::variable::Variable;
 
-use crate::program::block::MultiBlockContext;
+use crate::program::block::BlockContext;
 
 #[derive(Debug, Clone)]
 pub enum Modifier {
@@ -24,7 +24,7 @@ pub struct Filter {
 }
 
 impl Filter {
-    pub(crate) fn new(variables: Vec<&str>, context: &MultiBlockContext) -> Result<Self, ModifierDefinitionError> {
+    pub(crate) fn new(variables: Vec<&str>, context: &BlockContext) -> Result<Self, ModifierDefinitionError> {
         use ModifierDefinitionError::FilterVariableNotAvailable;
         let mut filter_variables = HashSet::with_capacity(variables.len());
         for name in variables {
@@ -45,7 +45,7 @@ pub struct Sort {
 impl Sort {
     pub(crate) fn new(
         variables: Vec<(&str, bool)>,
-        context: &MultiBlockContext,
+        context: &BlockContext,
     ) -> Result<Self, ModifierDefinitionError> {
         use ModifierDefinitionError::SortVariableNotAvailable;
         let mut sort_variables = Vec::with_capacity(variables.len());

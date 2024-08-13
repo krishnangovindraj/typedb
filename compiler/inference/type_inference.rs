@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use answer::{variable::Variable, Type};
 use concept::type_::type_manager::TypeManager;
 use ir::program::{
-    block::{FunctionalBlock, MultiBlockContext},
+    block::{FunctionalBlock, BlockContext},
     function::Function,
 };
 use storage::snapshot::ReadableSnapshot;
@@ -26,7 +26,7 @@ pub(crate) type VertexAnnotations = BTreeMap<Variable, BTreeSet<Type>>;
 // TODO: Deprecate
 pub fn TODO_DEPRECATE__infer_types<Snapshot: ReadableSnapshot>(
     entry: &FunctionalBlock,
-    block_context: &MultiBlockContext,
+    block_context: &BlockContext,
     functions: Vec<Function>,
     snapshot: &Snapshot,
     type_manager: &TypeManager,
@@ -105,7 +105,7 @@ pub fn infer_types_for_function(
 
 pub fn infer_types_for_match_block(
     match_block: &FunctionalBlock,
-    block_context: &MultiBlockContext,
+    block_context: &BlockContext,
     upstream_annotations: &PipelineAnnotations,
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
@@ -146,7 +146,7 @@ pub mod tests {
             variable_category::{VariableCategory, VariableOptionality},
         },
         program::{
-            block::{FunctionalBlock, MultiBlockContext},
+            block::{FunctionalBlock, BlockContext},
             function::{Function, ReturnOperation},
             function_signature::{FunctionID, FunctionSignature},
         },
@@ -198,7 +198,7 @@ pub mod tests {
         let type_player_0 = Type::Entity(EntityType::build_from_type_id(TypeID::build(0)));
         let type_player_1 = Type::Relation(RelationType::build_from_type_id(TypeID::build(2)));
 
-        let dummy = FunctionalBlock::builder(&mut MultiBlockContext::new()).finish();
+        let dummy = FunctionalBlock::builder(&mut BlockContext::new()).finish();
         let constraint1 = Constraint::RolePlayer(RolePlayer::new(var_relation, var_player, var_role_type));
         let constraint2 = Constraint::RolePlayer(RolePlayer::new(var_relation, var_player, var_role_type));
         let nested1 = TypeInferenceGraph {
@@ -315,7 +315,7 @@ pub mod tests {
         ]
         .iter()
         .map(|function_id| {
-            let mut context = MultiBlockContext::new();
+            let mut context = BlockContext::new();
             let mut builder = FunctionalBlock::builder(&mut context);
             let mut f_conjunction = builder.conjunction_mut();
             let f_var_animal = f_conjunction.get_or_declare_variable("called_animal").unwrap();
@@ -326,10 +326,10 @@ pub mod tests {
             f_conjunction.constraints_mut().add_has(f_var_animal, f_var_name).unwrap();
             let f_ir = Function::new(builder.finish(), context, vec![], ReturnOperation::Stream(vec![f_var_animal]));
 
-            let mut entry_context = MultiBlockContext::new();
+            let mut entry_context = BlockContext::new();
             let mut builder = FunctionalBlock::builder(&mut entry_context);
             let mut conjunction = builder.conjunction_mut();
-            let context = MultiBlockContext::new();
+            let context = BlockContext::new();
             let var_animal = conjunction.get_or_declare_variable("animal").unwrap();
 
             let callee_signature = FunctionSignature::new(

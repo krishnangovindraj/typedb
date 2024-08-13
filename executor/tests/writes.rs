@@ -22,7 +22,7 @@ use executor::{
     batch::Row,
     write::insert_executor::{InsertExecutor, WriteError},
 };
-use ir::program::{block::MultiBlockContext, function_signature::HashMapFunctionSignatureIndex};
+use ir::program::{block::BlockContext, function_signature::HashMapFunctionSignatureIndex};
 use lending_iterator::LendingIterator;
 use storage::{
     durability_client::WALClient,
@@ -80,7 +80,7 @@ fn execute_insert(
     input_row_var_names: &Vec<&str>,
     input_rows: Vec<Vec<VariableValue<'static>>>,
 ) -> Result<Vec<Vec<VariableValue<'static>>>, WriteError> {
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     let typeql_insert = typeql::parse_query(query_str).unwrap().into_pipeline().stages.pop().unwrap().into_insert();
     let block = ir::translation::writes::translate_insert(&mut context, &typeql_insert).unwrap().finish();
     let input_row_format = input_row_var_names
@@ -137,7 +137,7 @@ fn execute_delete(
     input_row_var_names: &Vec<&str>,
     input_rows: Vec<Vec<VariableValue<'static>>>,
 ) -> Result<Vec<Vec<VariableValue<'static>>>, WriteError> {
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     let (entry_annotations, _) = {
         let typeql_match = typeql::parse_query(mock_match_string_for_annotations)
             .unwrap()
@@ -146,7 +146,7 @@ fn execute_delete(
             .pop()
             .unwrap()
             .into_match();
-        let mut context = MultiBlockContext::new();
+        let mut context = BlockContext::new();
         let block = ir::translation::match_::translate_match(
             &mut context,
             &HashMapFunctionSignatureIndex::empty(),

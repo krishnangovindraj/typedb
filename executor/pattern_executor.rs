@@ -16,7 +16,7 @@ use compiler::{
     },
 };
 use concept::{error::ConceptReadError, thing::thing_manager::ThingManager};
-use ir::program::block::MultiBlockContext;
+use ir::program::block::BlockContext;
 use itertools::Itertools;
 use lending_iterator::{AsLendingIterator, LendingIterator, Peekable};
 use storage::snapshot::ReadableSnapshot;
@@ -40,7 +40,7 @@ pub(crate) struct PatternExecutor {
 impl PatternExecutor {
     pub(crate) fn new(
         plan: &PatternPlan,
-        context: &MultiBlockContext,
+        context: &BlockContext,
         type_annotations: &TypeAnnotations,
         snapshot: &impl ReadableSnapshot,
         thing_manager: &ThingManager,
@@ -193,7 +193,7 @@ enum StepExecutor {
 impl StepExecutor {
     fn new(
         step: &Step,
-        block_context: &MultiBlockContext,
+        block_context: &BlockContext,
         variable_positions: &HashMap<Variable, VariablePosition>,
         type_annotations: &TypeAnnotations,
         snapshot: &impl ReadableSnapshot,

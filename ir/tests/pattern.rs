@@ -5,7 +5,7 @@
  */
 
 use ir::{
-    program::{block::MultiBlockContext, function_signature::HashMapFunctionSignatureIndex},
+    program::{block::BlockContext, function_signature::HashMapFunctionSignatureIndex},
     translation::match_::translate_match,
     PatternDefinitionError,
 };
@@ -23,7 +23,7 @@ fn build_conjunction_constraints() {
     eprintln!("{:#}\n", match_); // TODO
     eprintln!(
         "{}\n",
-        translate_match(&mut MultiBlockContext::new(), &empty_function_index, match_).unwrap().finish().conjunction()
+        translate_match(&mut BlockContext::new(), &empty_function_index, match_).unwrap().finish().conjunction()
     );
 
     let query = "match
@@ -38,7 +38,7 @@ fn build_conjunction_constraints() {
     eprintln!("{:#}\n", match_); // TODO
     eprintln!(
         "{}\n",
-        translate_match(&mut MultiBlockContext::new(), &empty_function_index, match_).unwrap().finish().conjunction()
+        translate_match(&mut BlockContext::new(), &empty_function_index, match_).unwrap().finish().conjunction()
     );
 
     let query = "match
@@ -55,7 +55,7 @@ fn build_conjunction_constraints() {
     eprintln!("{:#}\n", match_); // TODO
     eprintln!(
         "{}\n",
-        translate_match(&mut MultiBlockContext::new(), &empty_function_index, match_).unwrap().finish().conjunction()
+        translate_match(&mut BlockContext::new(), &empty_function_index, match_).unwrap().finish().conjunction()
     );
 
     // let mut block = FunctionalBlock::new();
@@ -85,7 +85,7 @@ fn variable_category_mismatch() {
     let typeql::Query::Pipeline(typeql::query::Pipeline { stages, .. }) = parsed else { unreachable!() };
     let Stage::Match(match_) = stages.first().unwrap() else { unreachable!() };
     assert!(matches!(
-        translate_match(&mut MultiBlockContext::new(), &empty_function_index, match_),
+        translate_match(&mut BlockContext::new(), &empty_function_index, match_),
         Err(PatternDefinitionError::VariableCategoryMismatch { .. })
     ));
 
@@ -119,7 +119,7 @@ fn variable_category_narrowing() {
     let Stage::Match(match_) = stages.first().unwrap() else { unreachable!() };
     eprintln!("{}\n", match_); // TODO
     eprintln!("{:#}\n", match_); // TODO
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     eprintln!("{}\n", translate_match(&mut context, &empty_function_index, match_).unwrap().finish().conjunction());
 
     // let mut block = FunctionalBlock::new();

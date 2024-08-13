@@ -16,7 +16,7 @@ use crate::{
         variable_category::VariableCategory,
         IrID, ScopeId,
     },
-    program::{block::MultiBlockContext, function_signature::FunctionSignature},
+    program::{block::BlockContext, function_signature::FunctionSignature},
     PatternDefinitionError,
     PatternDefinitionError::FunctionCallArgumentCountMismatch,
 };
@@ -75,12 +75,12 @@ impl fmt::Display for Constraints {
 }
 
 pub struct ConstraintsBuilder<'cx> {
-    context: &'cx mut MultiBlockContext,
+    context: &'cx mut BlockContext,
     constraints: &'cx mut Constraints,
 }
 
 impl<'cx> ConstraintsBuilder<'cx> {
-    pub fn new(context: &'cx mut MultiBlockContext, constraints: &'cx mut Constraints) -> Self {
+    pub fn new(context: &'cx mut BlockContext, constraints: &'cx mut Constraints) -> Self {
         Self { context, constraints }
     }
 
@@ -753,7 +753,7 @@ impl ExpressionBinding<Variable> {
         &self.expression
     }
 
-    pub(crate) fn validate(&self, context: &mut MultiBlockContext) -> Result<(), ExpressionDefinitionError> {
+    pub(crate) fn validate(&self, context: &mut BlockContext) -> Result<(), ExpressionDefinitionError> {
         if self.expression().is_empty() {
             Err(ExpressionDefinitionError::EmptyExpressionTree {})
         } else {

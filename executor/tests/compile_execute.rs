@@ -17,7 +17,7 @@ use concept::{
 use encoding::value::{label::Label, value::Value, value_type::ValueType};
 use executor::program_executor::ProgramExecutor;
 use ir::{
-    program::{block::MultiBlockContext, function_signature::HashMapFunctionSignatureIndex},
+    program::{block::BlockContext, function_signature::HashMapFunctionSignatureIndex},
     translation::match_::translate_match,
 };
 use itertools::Itertools;
@@ -105,7 +105,7 @@ fn test_planning_traversal() {
 
     // IR
     let empty_function_index = HashMapFunctionSignatureIndex::empty();
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     let builder = translate_match(&mut context, &empty_function_index, &match_).unwrap();
     // builder.add_limit(3);
     // builder.add_filter(vec!["person", "age"]).unwrap();

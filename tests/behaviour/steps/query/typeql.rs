@@ -16,7 +16,7 @@ use executor::{
     batch::Row,
     write::insert_executor::{InsertExecutor, WriteError},
 };
-use ir::program::{block::MultiBlockContext, function_signature::HashMapFunctionSignatureIndex};
+use ir::program::{block::BlockContext, function_signature::HashMapFunctionSignatureIndex};
 use itertools::Itertools;
 use macro_rules_attribute::apply;
 use primitive::either::Either;
@@ -32,7 +32,7 @@ use crate::{
 fn create_insert_plan(context: &mut Context, query_str: &str) -> Result<InsertPlan, WriteCompilationError> {
     with_write_tx!(context, |tx| {
         let typeql_insert = typeql::parse_query(query_str).unwrap().into_pipeline().stages.pop().unwrap().into_insert();
-        let mut block_context = MultiBlockContext::new();
+        let mut block_context = BlockContext::new();
         let block = ir::translation::writes::translate_insert(&mut block_context, &typeql_insert).unwrap().finish();
         let (entry_annotations, _) = compiler::inference::type_inference::TODO_DEPRECATE__infer_types(
             &block,

@@ -171,7 +171,7 @@ pub mod tests {
 
     use crate::{
         pattern::expression::Expression,
-        program::{block::MultiBlockContext, function_signature::HashMapFunctionSignatureIndex},
+        program::{block::BlockContext, function_signature::HashMapFunctionSignatureIndex},
         translation::match_::translate_match,
         PatternDefinitionError,
     };
@@ -181,7 +181,7 @@ pub mod tests {
         if let Stage::Match(match_) =
             typeql::parse_query(query.as_str()).unwrap().into_pipeline().stages.get(0).unwrap()
         {
-            let mut context = MultiBlockContext::new();
+            let mut context = BlockContext::new();
             let block = translate_match(&mut context, &HashMapFunctionSignatureIndex::empty(), &match_)?.finish();
             let x = &block.conjunction().constraints()[0].as_expression_binding().unwrap().expression().get_root();
             match x {

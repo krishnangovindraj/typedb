@@ -18,7 +18,7 @@ use encoding::graph::definition::definition_key::DefinitionKey;
 use function::function_manager::ReadThroughFunctionSignatureIndex;
 use ir::{
     pattern::ScopeId,
-    program::block::MultiBlockContext,
+    program::block::BlockContext,
     translation::{
         match_::translate_match,
         writes::{translate_delete, translate_insert},
@@ -71,7 +71,7 @@ fn translate_pipeline<Snapshot: WritableSnapshot>(
     function_index: ReadThroughFunctionSignatureIndex<Snapshot>,
     typeql_pipeline: &typeql::query::Pipeline,
 ) -> Result<Pipeline, PatternDefinitionError> {
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     for stage in &typeql_pipeline.stages {
         match stage {
             Stage::Match(match_) => {

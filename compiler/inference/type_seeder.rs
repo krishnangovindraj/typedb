@@ -25,7 +25,7 @@ use ir::{
         variable_category::VariableCategory,
         Scope, ScopeId,
     },
-    program::{block::MultiBlockContext, function::Function, function_signature::FunctionID},
+    program::{block::BlockContext, function::Function, function_signature::FunctionID},
 };
 use itertools::Itertools;
 use storage::snapshot::ReadableSnapshot;
@@ -78,7 +78,7 @@ impl<'this, Snapshot: ReadableSnapshot> TypeSeeder<'this, Snapshot> {
 
     pub(crate) fn seed_types<'graph>(
         &self,
-        context: &MultiBlockContext,
+        context: &BlockContext,
         upstream_annotations: &PipelineAnnotations,
         conjunction: &'graph Conjunction,
     ) -> Result<TypeInferenceGraph<'graph>, TypeInferenceError> {
@@ -101,7 +101,7 @@ impl<'this, Snapshot: ReadableSnapshot> TypeSeeder<'this, Snapshot> {
     pub(crate) fn seed_types_impl(
         &self,
         tig: &mut TypeInferenceGraph<'_>,
-        context: &MultiBlockContext,
+        context: &BlockContext,
         parent_vertices: &VertexAnnotations,
     ) -> Result<(), TypeInferenceError> {
         self.get_local_variables(context, tig.conjunction.scope_id()).for_each(|v| {
@@ -143,7 +143,7 @@ impl<'this, Snapshot: ReadableSnapshot> TypeSeeder<'this, Snapshot> {
 
     fn build_recursive<'conj>(
         &self,
-        context: &MultiBlockContext,
+        context: &BlockContext,
         conjunction: &'conj Conjunction,
     ) -> TypeInferenceGraph<'conj> {
         let mut nested_disjunctions = Vec::new();
@@ -175,7 +175,7 @@ impl<'this, Snapshot: ReadableSnapshot> TypeSeeder<'this, Snapshot> {
 
     fn build_disjunction_recursive<'conj>(
         &self,
-        context: &MultiBlockContext,
+        context: &BlockContext,
         parent_conjunction: &'conj Conjunction,
         disjunction: &'conj Disjunction,
     ) -> NestedTypeInferenceGraphDisjunction<'conj> {
@@ -226,7 +226,7 @@ impl<'this, Snapshot: ReadableSnapshot> TypeSeeder<'this, Snapshot> {
 
     fn get_local_variables<'a>(
         &'a self,
-        context: &'a MultiBlockContext,
+        context: &'a BlockContext,
         conjunction_scope_id: ScopeId,
     ) -> impl Iterator<Item = Variable> + '_ {
         context.get_variable_scopes().filter(move |(v, scope)| **scope == conjunction_scope_id).map(|(v, _)| *v)
@@ -235,7 +235,7 @@ impl<'this, Snapshot: ReadableSnapshot> TypeSeeder<'this, Snapshot> {
     fn annotate_some_unannotated_vertex(
         &self,
         tig: &mut TypeInferenceGraph<'_>,
-        context: &MultiBlockContext,
+        context: &BlockContext,
     ) -> Result<bool, ConceptReadError> {
         let unannotated_vars =
             self.get_local_variables(context, tig.conjunction.scope_id()).find(|v| !tig.vertices.contains_key(v));
@@ -1074,7 +1074,7 @@ pub mod tests {
     use encoding::value::{label::Label, value_type::ValueType};
     use ir::{
         pattern::constraint::IsaKind,
-        program::block::{FunctionalBlock, MultiBlockContext},
+        program::block::{FunctionalBlock, BlockContext},
     };
     use storage::snapshot::CommittableSnapshot;
 
@@ -1104,7 +1104,7 @@ pub mod tests {
 
         {
             // Case 1: $a isa cat, has animal-name $n;
-            let mut context = MultiBlockContext::new();
+            let mut context = BlockContext::new();
             let mut builder = FunctionalBlock::builder(&mut context);
             let mut conjunction = builder.conjunction_mut();
             let var_animal = conjunction.get_or_declare_variable("animal").unwrap();
@@ -1189,7 +1189,7 @@ pub mod tests {
 
         {
             // // Case 1: $a has $n;
-            let mut context = MultiBlockContext::new();
+            let mut context = BlockContext::new();
             let mut builder = FunctionalBlock::builder(&mut context);
             let mut conjunction = builder.conjunction_mut();
             let var_animal = conjunction.get_or_declare_variable("animal").unwrap();
@@ -1240,7 +1240,7 @@ pub mod tests {
 
     #[test]
     fn test_comparison() {
-        let mut context = MultiBlockContext::new();
+        let mut context = BlockContext::new();
         let (_tmp_dir, storage) = setup_storage();
         let (type_manager, thing_manager) = managers();
 

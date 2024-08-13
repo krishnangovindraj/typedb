@@ -14,7 +14,7 @@ use crate::{
         ScopeId,
     },
     program::{
-        block::{FunctionalBlock, FunctionalBlockBuilder, MultiBlockContext},
+        block::{FunctionalBlock, FunctionalBlockBuilder, BlockContext},
         function_signature::HashMapFunctionSignatureIndex,
     },
     translation::constraints::{add_statement, add_typeql_relation, register_typeql_var},
@@ -22,7 +22,7 @@ use crate::{
 };
 
 pub fn translate_insert<'a>(
-    context: &'a mut MultiBlockContext,
+    context: &'a mut BlockContext,
     insert: &typeql::query::stage::Insert,
 ) -> Result<FunctionalBlockBuilder<'a>, PatternDefinitionError> {
     let mut builder = FunctionalBlock::builder(context);
@@ -34,7 +34,7 @@ pub fn translate_insert<'a>(
 }
 
 pub fn translate_delete<'a>(
-    context: &'a mut MultiBlockContext,
+    context: &'a mut BlockContext,
     delete: &typeql::query::stage::Delete,
 ) -> Result<(FunctionalBlockBuilder<'a>, Vec<Variable>), PatternDefinitionError> {
     let mut builder = FunctionalBlock::builder(context);

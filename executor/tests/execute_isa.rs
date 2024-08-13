@@ -20,7 +20,7 @@ use ir::{
     pattern::constraint::IsaKind,
     program::{block::FunctionalBlock},
 };
-use ir::program::block::MultiBlockContext;
+use ir::program::block::BlockContext;
 use lending_iterator::LendingIterator;
 use storage::{
     durability_client::WALClient,
@@ -69,7 +69,7 @@ fn traverse_isa_unbounded_sorted_thing() {
     //   match $x isa $t; $t label dog;
 
     // IR
-    let mut context = MultiBlockContext::new();
+    let mut context = BlockContext::new();
     let mut builder = FunctionalBlock::builder(&mut context);
     let mut conjunction = builder.conjunction_mut();
     let var_dog_type = conjunction.get_or_declare_variable("dog_type").unwrap();

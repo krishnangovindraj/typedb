@@ -11,7 +11,7 @@ use crate::{
         conjunction::{Conjunction, ConjunctionBuilder},
         Scope, ScopeId,
     },
-    program::block::MultiBlockContext,
+    program::block::BlockContext,
 };
 
 #[derive(Debug, Clone)]
@@ -25,7 +25,7 @@ impl Negation {
     }
 
     pub(super) fn new_builder<'cx>(
-        context: &'cx mut MultiBlockContext,
+        context: &'cx mut BlockContext,
         negation: &'cx mut Negation,
     ) -> ConjunctionBuilder<'cx> {
         ConjunctionBuilder::new(context, &mut negation.conjunction)

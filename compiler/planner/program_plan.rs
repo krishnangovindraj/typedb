@@ -12,7 +12,7 @@ use encoding::{
     graph::definition::definition_key::DefinitionKey,
     value::value_type::{ValueType, ValueTypeCategory},
 };
-use ir::program::block::MultiBlockContext;
+use ir::program::block::BlockContext;
 
 use crate::{
     expression::compiled_expression::{CompiledExpression, ExpressionValueType},
@@ -23,7 +23,7 @@ use crate::{
 pub struct ProgramPlan {
     // TODO: Update 'Program' to refer to the whole pipeline & to
     // TODO: krishnan: Revert pub
-    pub block_context: MultiBlockContext,
+    pub block_context: BlockContext,
     pub entry: PatternPlan,
     pub entry_type_annotations: TypeAnnotations,
     // TODO: this should have ValueType not ValueTypeCategory
@@ -33,7 +33,7 @@ pub struct ProgramPlan {
 
 impl ProgramPlan {
     pub fn new(
-        block_context: MultiBlockContext,
+        block_context: BlockContext,
         entry_plan: PatternPlan,
         entry_annotations: TypeAnnotations,
         entry_expressions: HashMap<Variable, CompiledExpression>,
@@ -73,7 +73,7 @@ impl ProgramPlan {
         &self.entry_value_type_annotations
     }
 
-    pub fn context(&self) -> &MultiBlockContext {
+    pub fn context(&self) -> &BlockContext {
         &self.block_context
     }
 }

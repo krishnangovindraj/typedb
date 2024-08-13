@@ -32,7 +32,7 @@ pub struct FunctionalBlock {
 }
 
 impl FunctionalBlock {
-    pub fn builder<'a>(context: &'a mut MultiBlockContext) -> FunctionalBlockBuilder<'a> {
+    pub fn builder<'a>(context: &'a mut BlockContext) -> FunctionalBlockBuilder<'a> {
         FunctionalBlockBuilder::new(context)
     }
 
@@ -56,13 +56,13 @@ impl Scope for FunctionalBlock {
 }
 
 pub struct FunctionalBlockBuilder<'a> {
-    context: &'a mut MultiBlockContext,
+    context: &'a mut BlockContext,
     conjunction: Conjunction,
     modifiers: Vec<Modifier>,
 }
 
 impl<'a> FunctionalBlockBuilder<'a> {
-    fn new(context: &'a mut MultiBlockContext) -> Self {
+    fn new(context: &'a mut BlockContext) -> Self {
         Self { conjunction: Conjunction::new(ScopeId::ROOT), modifiers: Vec::new(), context }
     }
 
@@ -75,7 +75,7 @@ impl<'a> FunctionalBlockBuilder<'a> {
         ConjunctionBuilder::new(&mut self.context, &mut self.conjunction)
     }
 
-    pub fn context_mut(&mut self) -> &mut MultiBlockContext {
+    pub fn context_mut(&mut self) -> &mut BlockContext {
         &mut self.context
     }
 
@@ -100,8 +100,9 @@ impl<'a> FunctionalBlockBuilder<'a> {
     }
 }
 
+
 #[derive(Debug, Clone)]
-pub struct MultiBlockContext {
+pub struct BlockContext {
     variable_names: HashMap<Variable, String>,
     variable_declaration: HashMap<Variable, ScopeId>,
     variable_names_index: HashMap<String, Variable>,
@@ -114,8 +115,8 @@ pub struct MultiBlockContext {
     variable_optionality: HashMap<Variable, VariableOptionality>,
 }
 
-impl MultiBlockContext {
-    pub fn new() -> MultiBlockContext {
+impl BlockContext {
+    pub fn new() -> BlockContext {
         Self {
             variable_names: HashMap::new(),
             variable_declaration: HashMap::new(),
@@ -281,13 +282,13 @@ fn is_child_scope(parents: &HashMap<ScopeId, ScopeId>, scope: ScopeId, maybe_chi
     parents.get(&maybe_child).is_some_and(|&c| c == scope || is_child_scope(parents, scope, c))
 }
 
-impl Default for MultiBlockContext {
+impl Default for BlockContext {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Display for MultiBlockContext {
+impl Display for BlockContext {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Named variables:")?;
         for var in self.variable_names.keys().sorted_unstable() {
@@ -304,3 +305,218 @@ impl Display for MultiBlockContext {
         Ok(())
     }
 }
+
+//
+//
+//
+// impl crate::program::block::PipelineContext {
+//     pub fn new() -> crate::program::block::PipelineContext {
+//         Self {
+//             variable_declaration: HashMap::new(),
+//             variable_names: HashMap::new(),
+//             variable_id_allocator: 0,
+//             scope_id_allocator: 1, // `0` is reserved for ROOT
+//             scope_parents: HashMap::new(),
+//             variable_categories: HashMap::new(),
+//             variable_optionality: HashMap::new(),
+//         }
+//     }
+//
+//     pub fn get_variables_named(&self) -> &HashMap<Variable, String> {
+//         &self.variable_names
+//     }
+//
+//     pub(crate) fn create_anonymous_variable(&mut self, scope: ScopeId) -> Result<Variable, PatternDefinitionError> {
+//         let variable = self.allocate_variable();
+//         self.variable_declaration.insert(variable, scope);
+//         Ok(variable)
+//     }
+//
+//     pub fn variables(&self) -> impl Iterator<Item = Variable> + '_ {
+//         self.variable_declaration.keys().cloned()
+//     }
+//
+//     pub fn variable_categories(&self) -> impl Iterator<Item = (Variable, VariableCategory)> + '_ {
+//         self.variable_categories.iter().map(|(&variable, &(category, _))| (variable, category))
+//     }
+//
+//     pub fn get_variable_scopes(&self) -> impl Iterator<Item = (&Variable, &ScopeId)> + '_ {
+//         self.variable_declaration.iter()
+//     }
+//
+//     pub fn named_variable_mapping(&self) -> &HashMap<String, Variable> {
+//         &self.variable_names_index
+//     }
+//
+//     fn allocate_variable(&mut self) -> Variable {
+//         let variable = Variable::new(self.variable_id_allocator);
+//         self.variable_id_allocator += 1;
+//         variable
+//     }
+//
+//     pub fn is_variable_available(&self, scope: ScopeId, variable: Variable) -> bool {
+//         let variable_scope = self.variable_declaration.get(&variable);
+//         match variable_scope {
+//             None => false,
+//             Some(variable_scope) => is_equal_or_parent_scope(&self.scope_parents, scope, *variable_scope),
+//         }
+//     }
+//
+//     pub(crate) fn create_child_scope(&mut self, parent: ScopeId) -> ScopeId {
+//         let scope = ScopeId::new(self.scope_id_allocator);
+//         debug_assert_ne!(scope, ScopeId::ROOT);
+//         self.scope_id_allocator += 1;
+//         self.scope_parents.insert(scope, parent);
+//         scope
+//     }
+//
+//     pub fn get_variable_category(&self, variable: Variable) -> Option<VariableCategory> {
+//         self.variable_categories.get(&variable).map(|(category, _constraint)| *category)
+//     }
+//
+//     pub fn get_variable_optionality(&self, variable: Variable) -> Option<VariableOptionality> {
+//         self.variable_optionality.get(&variable).cloned()
+//     }
+//
+//     pub(crate) fn set_variable_category(
+//         &mut self,
+//         variable: Variable,
+//         category: VariableCategory,
+//         source: Constraint<Variable>,
+//     ) -> Result<(), PatternDefinitionError> {
+//         let existing_category = self.variable_categories.get_mut(&variable);
+//         match existing_category {
+//             None => {
+//                 self.variable_categories.insert(variable, (category, source));
+//                 Ok(())
+//             }
+//             Some((existing_category, existing_source)) => {
+//                 let narrowest = existing_category.narrowest(category);
+//                 match narrowest {
+//                     None => Err(PatternDefinitionError::VariableCategoryMismatch {
+//                         variable,
+//                         variable_name: self.variable_names.get(&variable).cloned(),
+//                         category_1: category,
+//                         category_1_source: source,
+//                         category_2: *existing_category,
+//                         category_2_source: existing_source.clone(),
+//                     }),
+//                     Some(narrowed) => {
+//                         if narrowed == *existing_category {
+//                             Ok(())
+//                         } else {
+//                             *existing_category = narrowed;
+//                             *existing_source = source;
+//                             Ok(())
+//                         }
+//                     }
+//                 }
+//             }
+//         }
+//     }
+//
+//     pub(crate) fn set_variable_is_optional(&mut self, variable: Variable, optional: bool) {
+//         match optional {
+//             true => self.variable_optionality.insert(variable, VariableOptionality::Optional),
+//             false => self.variable_optionality.remove(&variable),
+//         };
+//     }
+//
+//     pub(crate) fn is_variable_optional(&self, variable: Variable) -> bool {
+//         match self.variable_optionality.get(&variable).unwrap_or(&VariableOptionality::Required) {
+//             VariableOptionality::Required => false,
+//             VariableOptionality::Optional => true,
+//         }
+//     }
+// }
+//
+//
+// #[derive(Debug, Clone)]
+// pub struct BlockContext<'a> {
+//     variable_names_index: HashMap<String, Variable>,
+//     pipeline_context: &'a mut crate::program::block::PipelineContext,
+// }
+//
+// impl<'a> crate::program::block::BlockContext<'a> {
+//     pub fn new(&'a mut crate::program::block::PipelineContext) -> crate::program::block::BlockContext<'a> {
+//         Self {
+//             variable_names_index: HashMap::new(),
+//             pipeline_context
+//         }
+//     }
+//
+//     pub fn get_variable_named(&self, name: &str, scope: ScopeId) -> Option<&Variable> {
+//         self.variable_names_index.get(name)
+//     }
+//
+//     pub(crate) fn get_or_declare_variable(
+//         &mut self,
+//         name: &str,
+//         scope: ScopeId,
+//     ) -> Result<Variable, PatternDefinitionError> {
+//         match self.variable_names_index.get(name) {
+//             None => {
+//                 let variable = self.allocate_variable();
+//                 self.variable_names.insert(variable, name.to_string());
+//                 self.variable_declaration.insert(variable, scope);
+//                 self.variable_names_index.insert(name.to_string(), variable);
+//                 Ok(variable)
+//             }
+//             Some(existing_variable) => {
+//                 let existing_scope = self.variable_declaration.get_mut(existing_variable).unwrap();
+//                 if is_equal_or_parent_scope(&self.scope_parents, scope, *existing_scope) {
+//                     // Parent defines same name: ok, reuse the variable
+//                     Ok(*existing_variable)
+//                 } else if is_child_scope(&self.scope_parents, scope, *existing_scope) {
+//                     // Child defines the same name: ok, reuse the variable, and change the declaration scope to the current one
+//                     *existing_scope = scope;
+//                     Ok(*existing_variable)
+//                 } else {
+//                     Err(PatternDefinitionError::DisjointVariableReuse { variable_name: name.to_string() })
+//                 }
+//             }
+//         }
+//     }
+//
+//     pub fn get_variable(&self, name: &str) -> Option<Variable> {
+//         self.variable_names_index.get(name).cloned()
+//     }
+//
+//     pub(crate) fn create_anonymous_variable(&mut self, scope: ScopeId) -> Result<Variable, PatternDefinitionError> {
+//         self.pipeline_context.create_anonymous_variable(scope)
+//     }
+//
+//
+//     pub fn variables(&self) -> impl Iterator<Item = Variable> + '_ {
+//         self.pipeline_context.variables()
+//     }
+//
+//     pub fn variable_categories(&self) -> impl Iterator<Item = (Variable, VariableCategory)> + '_ {
+//         self.pipeline_context.variable_categories()
+//     }
+//
+//     pub fn named_variable_mapping(&self) -> &HashMap<String, Variable> {
+//         &self.variable_names_index
+//     }
+//
+//     pub fn is_variable_available(&self, scope: ScopeId, variable: Variable) -> bool {
+//         self.pipeline_context.is_variable_available(scope, variable)
+//     }
+//
+//     pub(crate) fn create_child_scope(&mut self, parent: ScopeId) -> ScopeId {
+//         self.pipeline_context.create_child_scope(parent)
+//     }
+//
+//     pub(crate) fn set_variable_category(
+//         &mut self,
+//         variable: Variable,
+//         category: VariableCategory,
+//         source: Constraint<Variable>,
+//     ) -> Result<(), PatternDefinitionError> {
+//         self.pipeline_context.set_variable_category(variable, category, source)
+//     }
+//
+//     pub(crate) fn set_variable_is_optional(&mut self, variable: Variable, optional: bool) {
+//         self.pipeline_context.set_variable_is_optional(variable, optional)
+//     }
+// }
