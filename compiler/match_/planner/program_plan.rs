@@ -16,8 +16,10 @@ use ir::program::block::BlockContext;
 
 use crate::{
     expression::compiled_expression::{CompiledExpression, ExpressionValueType},
-    inference::{annotated_program::AnnotatedProgram, type_annotations::TypeAnnotations},
-    planner::{function_plan::FunctionPlan, pattern_plan::PatternPlan},
+    match_::{
+        inference::{annotated_program::AnnotatedProgram, type_annotations::TypeAnnotations},
+        planner::{function_plan::FunctionPlan, pattern_plan::PatternPlan},
+    },
 };
 
 pub struct ProgramPlan {

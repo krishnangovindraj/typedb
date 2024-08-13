@@ -7,7 +7,7 @@
 use answer::variable::Variable;
 use encoding::value::{value::Value, value_type::ValueTypeCategory};
 
-use crate::instruction::expression::op_codes::ExpressionOpCode;
+use crate::expression::instruction::op_codes::ExpressionOpCode;
 
 pub struct CompiledExpression {
     pub(super) instructions: Vec<ExpressionOpCode>,

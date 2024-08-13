@@ -7,8 +7,8 @@
 use std::collections::HashMap;
 
 use answer::variable::Variable;
-use compiler::{
-    inference::type_annotations::TypeAnnotations, instruction::constraint::instructions::ConstraintInstruction,
+use compiler::match_::{
+    inference::type_annotations::TypeAnnotations, instructions::ConstraintInstruction,
     planner::pattern_plan::InstructionAPI,
 };
 use concept::{error::ConceptReadError, thing::thing_manager::ThingManager};

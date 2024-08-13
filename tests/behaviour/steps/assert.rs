@@ -11,10 +11,10 @@ macro_rules! assert_matches {
                 $pattern $(if $guard)? => (),
                 expr => panic!(
                     concat!(
-                        "assertion `matches!(expression, ",
+                        "assertion `matches!(instruction, ",
                         stringify!($pattern $(if $guard)?),
                         ")` failed\n",
-                        "expression evaluated to: {:?}"
+                        "instruction evaluated to: {:?}"
                     ),
                     expr
                 )

@@ -11,7 +11,7 @@ use ir::program::{block::FunctionalBlock, function::Function, function_signature
 
 use crate::{
     expression::compiled_expression::CompiledExpression,
-    inference::{
+    match_::inference::{
         annotated_functions::{AnnotatedFunctions, AnnotatedUnindexedFunctions, IndexedAnnotatedFunctions},
         type_annotations::{FunctionAnnotations, TypeAnnotations},
     },
@@ -86,7 +86,7 @@ pub mod tests {
     };
     use typeql::query::Pipeline;
 
-    use crate::inference::{
+    use crate::match_::inference::{
         annotated_functions::{AnnotatedFunctions, IndexedAnnotatedFunctions},
         tests::{managers, schema_consts::setup_types, setup_storage},
         type_inference::TODO_DEPRECATE__infer_types,

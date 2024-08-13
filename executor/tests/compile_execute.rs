@@ -6,7 +6,7 @@
 
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
-use compiler::{
+use compiler::match_::{
     inference::{annotated_functions::IndexedAnnotatedFunctions, type_inference::TODO_DEPRECATE__infer_types},
     planner::{pattern_plan::PatternPlan, program_plan::ProgramPlan},
 };
@@ -242,10 +242,18 @@ fn test_links_planning_traversal() {
     // Executor
     let snapshot = storage.clone().open_snapshot_read();
     let (type_manager, thing_manager) = load_managers(storage.clone());
-    let (entry_annotations, _) =
-        TODO_DEPRECATE__infer_types(&block, &context, vec![], &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty()).unwrap();
+    let (entry_annotations, _) = TODO_DEPRECATE__infer_types(
+        &block,
+        &context,
+        vec![],
+        &snapshot,
+        &type_manager,
+        &IndexedAnnotatedFunctions::empty(),
+    )
+    .unwrap();
     let pattern_plan = PatternPlan::from_block(&block, &context, &entry_annotations, &HashMap::new(), &statistics);
-    let program_plan = ProgramPlan::new(context, pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
+    let program_plan =
+        ProgramPlan::new(context, pattern_plan, entry_annotations.clone(), HashMap::new(), HashMap::new());
     let executor = ProgramExecutor::new(&program_plan, &snapshot, &thing_manager).unwrap();
     let iterator = executor.into_iterator(Arc::new(snapshot), Arc::new(thing_manager));
 

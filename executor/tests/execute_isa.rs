@@ -5,27 +5,27 @@
  */
 
 use std::{collections::HashMap, sync::Arc};
-use compiler::{
+use compiler::match_::{
     inference::{annotated_functions::IndexedAnnotatedFunctions, type_inference::TODO_DEPRECATE__infer_types},
-    instruction::constraint::instructions::{ConstraintInstruction, Inputs, IsaReverseInstruction},
     planner::{
         pattern_plan::{IntersectionStep, PatternPlan, Step},
         program_plan::ProgramPlan,
     },
 };
+use compiler::match_::instructions::{ConstraintInstruction, Inputs, IsaReverseInstruction};
 use concept::error::ConceptReadError;
 use encoding::value::label::Label;
 use executor::{batch::ImmutableRow, program_executor::ProgramExecutor};
 use ir::{
     pattern::constraint::IsaKind,
-    program::{block::FunctionalBlock},
+    program::block::FunctionalBlock,
 };
 use ir::program::block::BlockContext;
 use lending_iterator::LendingIterator;
 use storage::{
     durability_client::WALClient,
-    snapshot::{CommittableSnapshot, ReadSnapshot, WriteSnapshot},
     MVCCStorage,
+    snapshot::{CommittableSnapshot, ReadSnapshot, WriteSnapshot},
 };
 
 use crate::common::{load_managers, setup_storage};

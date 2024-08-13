@@ -11,13 +11,10 @@ rust_library(
     crate_root = "lib.rs",
     srcs = glob([
         "*.rs",
+        "match_/**/*.rs",
+        "insert/**/*.rs",
+        "delete/**/*.rs",
         "expression/**/*.rs",
-        "inference/**/*.rs",
-        "instruction/**/*.rs",
-        "instruction/expressions/**/*.rs",
-        "planner/**/*.rs",
-        "optimisation/**/*.rs",
-        "write/*.rs",
     ]),
     deps = [
         "//answer",
@@ -49,7 +46,7 @@ checkstyle_test(
         "inference/*.rs",
         "instruction/**/*.rs",
         "planner/**/*.rs",
-        "expression/**/*.rs",
+        "instruction/**/*.rs",
         "optimisation/**/*.rs",
         "write/*.rs"
     ]),

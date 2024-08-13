@@ -6,8 +6,15 @@
 
 use encoding::value::value::Value;
 
-use crate::write::{ThingSource, TypeSource, ValueSource};
+use super::{ThingSource, TypeSource, ValueSource};
 
+#[derive(Debug)]
+pub enum InsertInstruction {
+    PutObject(PutObject),
+    PutAttribute(PutAttribute),
+    Has(Has),               // TODO: Ordering
+    RolePlayer(RolePlayer), // TODO: Ordering
+}
 #[derive(Debug)]
 pub struct PutObject {
     pub type_: TypeSource,
@@ -17,11 +24,6 @@ pub struct PutObject {
 pub struct PutAttribute {
     pub type_: TypeSource,
     pub value: ValueSource,
-}
-
-#[derive(Debug)]
-pub struct DeleteThing {
-    pub thing: ThingSource,
 }
 
 #[derive(Debug)]

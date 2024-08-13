@@ -12,7 +12,7 @@ use std::{
 use answer::{variable::Variable, Type};
 use ir::pattern::constraint::Constraint;
 
-use crate::inference::pattern_type_inference::TypeInferenceGraph;
+use crate::match_::inference::pattern_type_inference::TypeInferenceGraph;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypeAnnotations {

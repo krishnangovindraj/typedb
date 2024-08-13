@@ -11,14 +11,14 @@ use concept::thing::statistics::Statistics;
 use ir::pattern::constraint::{Has, Links};
 use itertools::Itertools;
 
-use crate::inference::type_annotations::TypeAnnotations;
+use crate::match_::inference::type_annotations::TypeAnnotations;
 
 const OPEN_ITERATOR_RELATIVE_COST: f64 = 5.0;
 const ADVANCE_ITERATOR_RELATIVE_COST: f64 = 1.0;
 
 // FIXME name
 #[derive(Debug)]
-pub(super) enum PlannerVertex {
+pub(crate) enum PlannerVertex {
     Thing(ThingPlanner),
     Has(HasPlanner),
     Links(LinksPlanner),
@@ -32,14 +32,14 @@ impl PlannerVertex {
         }
     }
 
-    pub(super) fn as_has(&self) -> Option<&HasPlanner> {
+    pub(crate) fn as_has(&self) -> Option<&HasPlanner> {
         match self {
             Self::Has(v) => Some(v),
             _ => None,
         }
     }
 
-    pub(super) fn as_links(&self) -> Option<&LinksPlanner> {
+    pub(crate) fn as_links(&self) -> Option<&LinksPlanner> {
         match self {
             Self::Links(v) => Some(v),
             _ => None,
@@ -48,13 +48,13 @@ impl PlannerVertex {
 }
 
 #[derive(Debug)]
-pub(super) struct VertexCost {
+pub(crate) struct VertexCost {
     pub per_input: f64,
     pub per_output: f64,
     pub branching_factor: f64,
 }
 
-pub(super) trait Costed {
+pub(crate) trait Costed {
     fn cost(&self, inputs: &[usize], elements: &[PlannerVertex]) -> VertexCost;
 }
 
@@ -70,12 +70,12 @@ impl Costed for PlannerVertex {
 }
 
 #[derive(Debug)]
-pub(super) struct ThingPlanner {
+pub(crate) struct ThingPlanner {
     expected_size: f64,
 }
 
 impl ThingPlanner {
-    pub(super) fn from_variable(
+    pub(crate) fn from_variable(
         variable: Variable,
         type_annotations: &TypeAnnotations,
         statistics: &Statistics,
@@ -116,7 +116,7 @@ impl Costed for ThingPlanner {
 }
 
 #[derive(Debug)]
-pub(super) struct HasPlanner {
+pub(crate) struct HasPlanner {
     pub owner: usize,
     pub attribute: usize,
     expected_size: f64,
@@ -196,7 +196,7 @@ impl Costed for HasPlanner {
 }
 
 #[derive(Debug)]
-pub(super) struct LinksPlanner {
+pub(crate) struct LinksPlanner {
     pub relation: usize,
     pub player: usize,
     pub role: usize,

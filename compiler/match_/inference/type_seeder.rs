@@ -33,7 +33,7 @@ use ir::{
 use itertools::Itertools;
 use storage::snapshot::ReadableSnapshot;
 
-use crate::inference::{
+use crate::match_::inference::{
     annotated_functions::{AnnotatedFunctions, AnnotatedUnindexedFunctions, IndexedAnnotatedFunctions},
     pattern_type_inference::{
         NestedTypeInferenceGraphDisjunction, TypeInferenceEdge, TypeInferenceGraph, VertexAnnotations,
@@ -1266,7 +1266,7 @@ pub mod tests {
     };
     use storage::snapshot::CommittableSnapshot;
 
-    use crate::inference::{
+    use crate::match_::inference::{
         annotated_functions::IndexedAnnotatedFunctions,
         pattern_type_inference::{tests::expected_edge, TypeInferenceGraph},
         tests::{

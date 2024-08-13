@@ -15,7 +15,7 @@ use ir::program::{
 use storage::snapshot::ReadableSnapshot;
 
 use super::pattern_type_inference::infer_types_for_block;
-use crate::inference::{
+use crate::match_::inference::{
     annotated_functions::{AnnotatedUnindexedFunctions, IndexedAnnotatedFunctions},
     type_annotations::{FunctionAnnotations, PipelineAnnotations, TypeAnnotations},
     TypeInferenceError,
@@ -153,7 +153,7 @@ pub mod tests {
     };
     use itertools::Itertools;
 
-    use crate::inference::{
+    use crate::match_::inference::{
         annotated_functions::IndexedAnnotatedFunctions,
         pattern_type_inference::{
             infer_types_for_block, tests::expected_edge, NestedTypeInferenceGraphDisjunction, TypeInferenceGraph,

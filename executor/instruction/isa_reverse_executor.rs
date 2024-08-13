@@ -10,7 +10,7 @@ use std::{
 };
 
 use answer::Type;
-use compiler::instruction::constraint::instructions::IsaReverseInstruction;
+use compiler::match_::instructions::IsaReverseInstruction;
 use concept::{
     error::ConceptReadError,
     iterator::InstanceIterator,

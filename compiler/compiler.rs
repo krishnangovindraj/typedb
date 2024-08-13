@@ -10,10 +10,10 @@
 // use ir::program::program::Program;
 // use storage::snapshot::ReadableSnapshot;
 // use crate::CompileError;
-// use crate::expression::block_compiler::compile_expressions;
-// use crate::inference::annotated_functions::{IndexedAnnotatedFunctions};
-// use crate::inference::annotated_program::AnnotatedProgram;
-// use crate::inference::type_inference::infer_types;
+// use crate::instruction::block_compiler::compile_expressions;
+// use crate::match_::inference::annotated_functions::{IndexedAnnotatedFunctions};
+// use crate::match_::inference::annotated_program::AnnotatedProgram;
+// use crate::match_::inference::type_inference::infer_types;
 // use crate::planner::program_plan::ProgramPlan;
 //
 // pub fn compile(
@@ -33,7 +33,7 @@
 //         .map_err(|err| CompileError::ExpressionCompile { source: err })?;
 //
 //     // TODO: at this point, we should finish setting all the variable categories in the entry BlockContext!
-//     //       notably, we have determined all expression output types
+//     //       notably, we have determined all instruction output types
 //     //       we can also fully determine the variable
 //
 //     let annotated_program = AnnotatedProgram::new(

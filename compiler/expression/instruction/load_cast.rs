@@ -14,11 +14,10 @@ use std::marker::PhantomData;
 
 use encoding::value::{value::DBValue, value_type::ValueTypeCategory};
 
-use crate::{
-    expression::{expression_compiler::ExpressionCompilationContext, ExpressionCompileError},
-    instruction::expression::{
-        op_codes::ExpressionOpCode, CompilableExpression, ExpressionEvaluationError, ExpressionInstruction,
-    },
+use crate::expression::{
+    expression_compiler::ExpressionCompilationContext,
+    instruction::{op_codes::ExpressionOpCode, CompilableExpression, ExpressionEvaluationError, ExpressionInstruction},
+    ExpressionCompileError,
 };
 
 // Declarations

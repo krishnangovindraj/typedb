@@ -110,7 +110,7 @@ pub mod tests {
     use storage::{durability_client::WALClient, MVCCStorage};
     use test_utils::{create_tmp_dir, init_logging, TempDir};
 
-    use crate::inference::pattern_type_inference::{
+    use crate::match_::inference::pattern_type_inference::{
         NestedTypeInferenceGraphDisjunction, TypeInferenceEdge, TypeInferenceGraph,
     };
 

@@ -4,4 +4,16 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::{
+    error::Error,
+    fmt::{Display, Formatter},
+};
+
+use answer::variable::Variable;
+use ir::pattern::constraint::Isa;
+use itertools::Itertools;
+
+use crate::insert::{ThingSource, TypeSource};
+
+pub mod delete;
 pub mod instructions;

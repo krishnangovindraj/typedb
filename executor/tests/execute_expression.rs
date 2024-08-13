@@ -73,7 +73,7 @@ macro_rules! as_value {
     ($actual:expr) => {
         match $actual {
             ExpressionValue::Single(value) => value,
-            _ => panic!("Called as_value on an expression that was a list"),
+            _ => panic!("Called as_value on an instruction that was a list"),
         }
     };
 }
@@ -82,7 +82,7 @@ macro_rules! as_list {
     ($actual:expr) => {
         match $actual {
             ExpressionValue::List(list) => list,
-            _ => panic!("Called as_value on an expression that was a list"),
+            _ => panic!("Called as_value on an instruction that was a list"),
         }
     };
 }

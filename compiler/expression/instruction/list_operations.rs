@@ -10,7 +10,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use crate::instruction::expression::{op_codes::ExpressionOpCode, ExpressionInstruction};
+use crate::expression::instruction::{op_codes::ExpressionOpCode, ExpressionInstruction};
 
 pub struct ListConstructor {}
 pub struct ListIndex {}

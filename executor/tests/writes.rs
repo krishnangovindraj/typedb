@@ -7,7 +7,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use answer::{variable::Variable, variable_value::VariableValue};
-use compiler::{inference::annotated_functions::IndexedAnnotatedFunctions, write::delete::build_delete_plan};
+use compiler::{delete::delete::build_delete_plan, match_::inference::annotated_functions::IndexedAnnotatedFunctions};
 use concept::{
     thing::{object::ObjectAPI, relation::Relation, thing_manager::ThingManager},
     type_::{object_type::ObjectType, type_manager::TypeManager, Ordering, OwnerAPI, PlayerAPI},
@@ -80,7 +80,7 @@ fn execute_insert(
         .enumerate()
         .map(|(i, v)| (context.get_variable_named(v, block.scope_id()).unwrap().clone(), i))
         .collect::<HashMap<_, _>>();
-    let (entry_annotations, _) = compiler::inference::type_inference::TODO_DEPRECATE__infer_types(
+    let (entry_annotations, _) = compiler::match_::inference::type_inference::TODO_DEPRECATE__infer_types(
         &block,
         &mut context,
         vec![],
@@ -89,7 +89,7 @@ fn execute_insert(
         &IndexedAnnotatedFunctions::empty(),
     )
     .unwrap();
-    let insert_plan = compiler::write::insert::build_insert_plan(
+    let insert_plan = compiler::insert::insert::build_insert_plan(
         block.conjunction().constraints(),
         &input_row_format,
         &entry_annotations,
@@ -97,10 +97,7 @@ fn execute_insert(
     .unwrap();
 
     println!("{:?}", &insert_plan.instructions);
-    insert_plan
-        .debug_info
-        .iter()
-        .for_each(|(k, v)| println!("{:?} -> {:?}", k, context.get_variables_named().get(v)));
+    insert_plan.debug_info.iter().for_each(|(k, v)| println!("{:?} -> {:?}", k, context.get_variables_named().get(v)));
 
     let mut output_rows = Vec::with_capacity(input_rows.len());
     for mut input_row in input_rows {
@@ -149,7 +146,7 @@ fn execute_delete(
         )
         .unwrap()
         .finish();
-        compiler::inference::type_inference::TODO_DEPRECATE__infer_types(
+        compiler::match_::inference::type_inference::TODO_DEPRECATE__infer_types(
             &block,
             &mut context,
             vec![],

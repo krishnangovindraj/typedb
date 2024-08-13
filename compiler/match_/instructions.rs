@@ -17,7 +17,7 @@ use ir::pattern::{
 };
 use itertools::Itertools;
 
-use crate::{inference::type_annotations::TypeAnnotations, planner::pattern_plan::InstructionAPI};
+use crate::match_::{inference::type_annotations::TypeAnnotations, planner::pattern_plan::InstructionAPI};
 
 #[derive(Debug, Clone)]
 pub enum ConstraintInstruction {

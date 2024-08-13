@@ -11,22 +11,13 @@ use encoding::graph::type_::Kind;
 use ir::pattern::constraint::Constraint;
 
 use crate::{
-    inference::type_annotations::TypeAnnotations,
-    write::{
-        get_kinds_from_annotations, get_thing_source,
-        insert::{collect_role_type_bindings, WriteCompilationError},
-        write_instructions::{DeleteThing, Has, PutAttribute, RolePlayer},
-        ThingSource, TypeSource, VariableSource,
+    delete::instructions::{DeleteInstruction, DeleteThing, Has, RolePlayer},
+    insert::{
+        get_thing_source, insert::collect_role_type_bindings, ThingSource, TypeSource, VariableSource,
+        WriteCompilationError,
     },
+    match_::inference::type_annotations::TypeAnnotations,
 };
-
-#[derive(Debug)]
-pub enum DeleteInstruction {
-    // TODO: Just replace this with regular `Constraint`s and use a mapped-row?
-    Thing(DeleteThing),
-    Has(Has),               // TODO: Ordering
-    RolePlayer(RolePlayer), // TODO: Ordering
-}
 
 pub struct DeletePlan {
     pub instructions: Vec<DeleteInstruction>,
@@ -41,7 +32,7 @@ pub fn build_delete_plan(
     deleted_concepts: &[Variable],
 ) -> Result<DeletePlan, WriteCompilationError> {
     // TODO: Maybe unify all WriteCompilation errors?
-    let named_role_types = collect_role_type_bindings(constraints, type_annotations)?;
+    let named_role_types = collect_role_type_bindings(constraints, type_annotations).map_err(|source| todo!())?;
     let mut instructions = Vec::new();
     let inserted_things = HashMap::new();
     for constraint in constraints {
@@ -89,9 +80,12 @@ pub fn build_delete_plan(
     }
     for variable in deleted_concepts {
         let thing = ThingSource::InputVariable(*input_variables.get(variable).unwrap() as u32);
-        let annotations = type_annotations.variable_annotations_of(variable.clone()).unwrap();
-        let kind = get_kinds_from_annotations(annotations);
-        if kind.contains(&Kind::Role) {
+        if type_annotations
+            .variable_annotations_of(variable.clone())
+            .unwrap()
+            .iter()
+            .any(|type_| type_.kind() == Kind::Role)
+        {
             Err(WriteCompilationError::IllegalRoleDelete { variable: variable.clone() })?;
         } else {
             instructions.push(DeleteInstruction::Thing(DeleteThing { thing }));

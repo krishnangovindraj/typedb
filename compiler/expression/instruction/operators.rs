@@ -4,7 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use crate::instruction::expression::{
+use crate::expression::instruction::{
     binary::{binary_instruction, Binary, BinaryExpression},
     check_operation,
     op_codes::ExpressionOpCode,

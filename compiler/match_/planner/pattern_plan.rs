@@ -19,12 +19,14 @@ use itertools::Itertools;
 
 use crate::{
     expression::compiled_expression::CompiledExpression,
-    inference::type_annotations::TypeAnnotations,
-    instruction::constraint::instructions::{
-        ConstraintInstruction, HasInstruction, HasReverseInstruction, Inputs, IsaReverseInstruction, LinksInstruction,
-        LinksReverseInstruction,
+    match_::{
+        inference::type_annotations::TypeAnnotations,
+        instructions::{
+            ConstraintInstruction, HasInstruction, HasReverseInstruction, Inputs, IsaReverseInstruction,
+            LinksInstruction, LinksReverseInstruction,
+        },
+        planner::vertex::{Costed, HasPlanner, LinksPlanner, PlannerVertex, ThingPlanner, VertexCost},
     },
-    planner::vertex::{Costed, HasPlanner, LinksPlanner, PlannerVertex, ThingPlanner, VertexCost},
 };
 
 pub struct PatternPlan {

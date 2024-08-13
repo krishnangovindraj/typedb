@@ -71,7 +71,7 @@ build:
 #      command: |
 #        bazel run @vaticle_dependencies//tool/bazelinstall:remote_cache_setup.sh
 #        bazel test //test/behaviour/query/language/match/... --test_output=streamed
-#        bazel test //test/behaviour/query/language/expression/... --test_output=streamed
+#        bazel test //test/behaviour/query/language/instruction/... --test_output=streamed
 #        bazel test //test/behaviour/query/language/modifiers/... --test_output=streamed
 #        bazel test //test/behaviour/query/language/get/... --test_output=streamed
 #        bazel test //test/behaviour/query/language/fetch/... --test_output=streamed

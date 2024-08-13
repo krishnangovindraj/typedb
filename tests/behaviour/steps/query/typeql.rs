@@ -8,8 +8,8 @@ use std::{collections::HashMap, sync::Arc};
 
 use answer::variable_value::VariableValue;
 use compiler::{
-    inference::annotated_functions::IndexedAnnotatedFunctions,
-    write::insert::{InsertPlan, WriteCompilationError},
+    insert::{insert::InsertPlan, WriteCompilationError},
+    match_::inference::annotated_functions::IndexedAnnotatedFunctions,
 };
 use cucumber::gherkin::Step;
 use executor::{batch::Row, write::insert_executor::WriteError};
@@ -31,7 +31,7 @@ fn create_insert_plan(context: &mut Context, query_str: &str) -> Result<InsertPl
         let typeql_insert = typeql::parse_query(query_str).unwrap().into_pipeline().stages.pop().unwrap().into_insert();
         let mut block_context = BlockContext::new();
         let block = ir::translation::writes::translate_insert(&mut block_context, &typeql_insert).unwrap().finish();
-        let (entry_annotations, _) = compiler::inference::type_inference::TODO_DEPRECATE__infer_types(
+        let (entry_annotations, _) = compiler::match_::inference::type_inference::TODO_DEPRECATE__infer_types(
             &block,
             &block_context,
             vec![],
@@ -40,7 +40,7 @@ fn create_insert_plan(context: &mut Context, query_str: &str) -> Result<InsertPl
             &IndexedAnnotatedFunctions::empty(),
         )
         .unwrap();
-        compiler::write::insert::build_insert_plan(
+        compiler::insert::insert::build_insert_plan(
             block.conjunction().constraints(),
             &HashMap::new(),
             &entry_annotations,

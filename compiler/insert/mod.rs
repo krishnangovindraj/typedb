@@ -4,17 +4,19 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+    fmt::{Display, Formatter},
+};
 
 use answer::{variable::Variable, Type};
 use encoding::{graph::type_::Kind, value::value::Value};
+use ir::pattern::constraint::Isa;
 use itertools::Itertools;
 
-use crate::write::insert::WriteCompilationError;
-
-pub mod delete;
 pub mod insert;
-pub mod write_instructions;
+pub mod instructions;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum VariableSource {
@@ -41,7 +43,7 @@ pub enum ThingSource {
     InsertedThing(usize),
 }
 
-fn get_thing_source(
+pub(crate) fn get_thing_source(
     input_variables: &HashMap<Variable, usize>,
     inserted_concepts: &HashMap<Variable, usize>,
     variable: Variable,
@@ -57,3 +59,27 @@ fn get_thing_source(
 pub(crate) fn get_kinds_from_annotations(annotations: &HashSet<Type>) -> Vec<Kind> {
     annotations.iter().map(|annotation| annotation.kind().clone()).dedup().collect::<Vec<_>>()
 }
+
+#[derive(Debug, Clone)]
+pub enum WriteCompilationError {
+    VariableIsBothInsertedAndInput { variable: Variable },
+    IsaStatementForRoleType { isa: Isa<Variable> },
+    IsaTypeMayBeAttributeOrObject { isa: Isa<Variable> },
+    CouldNotDetermineTypeOfInsertedVariable { variable: Variable },
+    CouldNotDetermineValueOfInsertedAttribute { variable: Variable },
+    CouldNotDetermineThingVariableSource { variable: Variable },
+    CouldNotUniquelyResolveRoleTypeFromName { variable: Variable },
+    CouldNotUniquelyDetermineRoleType { variable: Variable },
+
+    IllegalRoleDelete { variable: Variable },
+    DeleteHasMultipleKinds { isa: Isa<Variable> },
+    IllegalInsertForRole { isa: Isa<Variable> },
+}
+
+impl Display for WriteCompilationError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        todo!()
+    }
+}
+
+impl Error for WriteCompilationError {}

@@ -9,7 +9,7 @@
 // use answer::Type;
 // use answer::variable::Variable;
 // use compiler::compiler::compile;
-// use compiler::expression::compiled_expression::ExpressionValueType;
+// use compiler::instruction::compiled_expression::ExpressionValueType;
 // use compiler::inference::type_inference::infer_types;
 // use compiler::planner::pattern_plan::PatternPlan;
 // use compiler::planner::program_plan::ProgramPlan;

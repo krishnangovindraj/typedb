@@ -7,11 +7,7 @@
 // jk there's no planning to be done here, just execution.
 // There is a need to construct the executor though.
 
-use std::{
-    collections::{BTreeSet, HashMap, HashSet},
-    error::Error,
-    fmt::{Display, Formatter},
-};
+use std::{collections::HashMap, fmt::Display};
 
 use answer::{variable::Variable, Type};
 use encoding::{graph::type_::Kind, value::value::Value};
@@ -23,27 +19,18 @@ use itertools::Itertools;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 
 use crate::{
-    inference::type_annotations::TypeAnnotations,
-    write::{
+    insert::{
         get_kinds_from_annotations, get_thing_source,
-        insert::WriteCompilationError::IsaTypeMayBeAttributeOrObject,
-        write_instructions::{Has, PutAttribute, PutObject, RolePlayer},
-        TypeSource, ValueSource, VariableSource,
+        instructions::{Has, InsertInstruction, PutAttribute, PutObject, RolePlayer},
+        TypeSource, ValueSource, VariableSource, WriteCompilationError,
     },
+    match_::inference::type_annotations::TypeAnnotations,
 };
 
 macro_rules! filter_variants {
     ($variant:path : $iterable:expr) => {
         $iterable.iter().filter_map(|item| if let $variant(inner) = item { Some(inner) } else { None })
     };
-}
-
-#[derive(Debug)]
-pub enum InsertInstruction {
-    PutObject(PutObject),
-    PutAttribute(PutAttribute),
-    Has(Has),               // TODO: Ordering
-    RolePlayer(RolePlayer), // TODO: Ordering
 }
 
 pub struct InsertPlan {
@@ -112,7 +99,7 @@ fn add_inserted_concepts(
             if is_role {
                 Err(WriteCompilationError::IllegalInsertForRole { isa: isa.clone() })?;
             } else if is_attribute && is_object {
-                Err(IsaTypeMayBeAttributeOrObject { isa: isa.clone() })?;
+                Err(WriteCompilationError::IsaTypeMayBeAttributeOrObject { isa: isa.clone() })?;
             }
             is_object
         };
@@ -259,27 +246,3 @@ pub(crate) fn collect_role_type_bindings(
     })?;
     Ok(type_bindings)
 }
-
-#[derive(Debug, Clone)]
-pub enum WriteCompilationError {
-    VariableIsBothInsertedAndInput { variable: Variable },
-    IsaStatementForRoleType { isa: Isa<Variable> },
-    IsaTypeMayBeAttributeOrObject { isa: Isa<Variable> },
-    CouldNotDetermineTypeOfInsertedVariable { variable: Variable },
-    CouldNotDetermineValueOfInsertedAttribute { variable: Variable },
-    CouldNotDetermineThingVariableSource { variable: Variable },
-    CouldNotUniquelyResolveRoleTypeFromName { variable: Variable },
-    CouldNotUniquelyDetermineRoleType { variable: Variable },
-
-    IllegalRoleDelete { variable: Variable },
-    DeleteHasMultipleKinds { isa: Isa<Variable> },
-    IllegalInsertForRole { isa: Isa<Variable> },
-}
-
-impl Display for WriteCompilationError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        todo!()
-    }
-}
-
-impl Error for WriteCompilationError {}

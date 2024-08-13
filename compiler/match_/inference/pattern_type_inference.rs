@@ -18,7 +18,7 @@ use ir::{
 use itertools::chain;
 use storage::snapshot::ReadableSnapshot;
 
-use crate::inference::{
+use crate::match_::inference::{
     annotated_functions::{AnnotatedUnindexedFunctions, IndexedAnnotatedFunctions},
     type_annotations::{
         ConstraintTypeAnnotations, LeftRightAnnotations, LeftRightFilteredAnnotations, PipelineAnnotations,
@@ -300,7 +300,7 @@ pub mod tests {
     };
     use itertools::Itertools;
 
-    use crate::inference::{
+    use crate::match_::inference::{
         annotated_functions::IndexedAnnotatedFunctions,
         pattern_type_inference::{
             infer_types_for_block, NestedTypeInferenceGraphDisjunction, TypeInferenceEdge, TypeInferenceGraph,

@@ -14,9 +14,8 @@ use encoding::value::{value::DBValue, value_type::ValueTypeCategory};
 use load_cast::ImplicitCast;
 use unary::UnaryExpression;
 
-use crate::{
-    expression::{expression_compiler::ExpressionCompilationContext, ExpressionCompileError},
-    instruction::expression::op_codes::ExpressionOpCode,
+use crate::expression::{
+    expression_compiler::ExpressionCompilationContext, instruction::op_codes::ExpressionOpCode, ExpressionCompileError,
 };
 
 pub mod binary;
