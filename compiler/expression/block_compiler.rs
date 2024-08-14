@@ -13,7 +13,7 @@ use ir::{
         conjunction::Conjunction, expression::ExpressionTree, nested_pattern::NestedPattern,
         variable_category::VariableCategory,
     },
-    program::block::FunctionalBlock,
+    program::block::{FunctionalBlock, VariableRegistry},
 };
 use itertools::Itertools;
 use storage::snapshot::ReadableSnapshot;
@@ -29,6 +29,7 @@ use crate::{
 
 struct BlockExpressionsCompilationContext<'block, Snapshot: ReadableSnapshot> {
     block: &'block FunctionalBlock,
+    variable_registry: &'block VariableRegistry,
     snapshot: &'block Snapshot,
     type_manager: &'block TypeManager,
     type_annotations: &'block TypeAnnotations,
@@ -42,6 +43,7 @@ pub fn compile_expressions<'block, Snapshot: ReadableSnapshot>(
     snapshot: &'block Snapshot,
     type_manager: &'block TypeManager,
     block: &'block FunctionalBlock,
+    variable_registry: &'block VariableRegistry,
     type_annotations: &'block TypeAnnotations,
 ) -> Result<HashMap<Variable, CompiledExpression>, ExpressionCompileError> {
     let mut expression_index = HashMap::new();
@@ -49,6 +51,7 @@ pub fn compile_expressions<'block, Snapshot: ReadableSnapshot>(
     let assigned_variables = expression_index.keys().cloned().collect_vec();
     let mut context = BlockExpressionsCompilationContext {
         block,
+        variable_registry,
         snapshot,
         type_manager,
         type_annotations,
@@ -142,7 +145,7 @@ fn resolve_type_for_variable<'a, Snapshot: ReadableSnapshot>(
         if vec.len() != 1 {
             Err(ExpressionCompileError::VariableDidNotHaveSingleValueType { variable })
         } else if let Some(value_type) = &vec.iter().find(|_| true).unwrap() {
-            let variable_category = context.block.context().get_variable_category(variable).unwrap();
+            let variable_category = context.variable_registry.get_variable_category(variable).unwrap();
             match variable_category {
                 VariableCategory::Attribute | VariableCategory::Value => {
                     context.variable_value_types.insert(variable, ExpressionValueType::Single(value_type.category()));

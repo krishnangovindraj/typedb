@@ -13,7 +13,7 @@ use ir::{
         constraint::{Constraint, ExpressionBinding},
         variable_category::VariableCategory,
     },
-    program::block::{BlockContext, FunctionalBlock},
+    program::block::{BlockContext, FunctionalBlock, VariableRegistry},
 };
 use itertools::Itertools;
 
@@ -31,7 +31,7 @@ use crate::{
 
 pub struct PatternPlan {
     pub(crate) steps: Vec<Step>,
-    pub(crate) context: BlockContext,
+    pub(crate) context: VariableRegistry,
 }
 
 /*
@@ -46,13 +46,14 @@ If we know this we can:
  */
 
 impl PatternPlan {
-    pub fn new(steps: Vec<Step>, context: BlockContext) -> Self {
+    pub fn new(steps: Vec<Step>, context: VariableRegistry) -> Self {
         Self { steps, context }
     }
 
     pub fn from_block(
         block: &FunctionalBlock,
         type_annotations: &TypeAnnotations,
+        variable_registry: &VariableRegistry,
         expressions: &HashMap<Variable, CompiledExpression>,
         statistics: &Statistics,
     ) -> Self {
@@ -65,8 +66,7 @@ impl PatternPlan {
         let mut elements = Vec::new();
         let mut adjacency: HashMap<usize, HashSet<usize>> = HashMap::new();
 
-        let context = block.context();
-        for (variable, category) in context.variable_categories() {
+        for (variable, category) in variable_registry.variable_categories() {
             match category {
                 VariableCategory::Type | VariableCategory::ThingType => (), // ignore for now
                 VariableCategory::RoleType => {
@@ -257,7 +257,7 @@ impl PatternPlan {
             }
         }
         steps.reverse();
-        Self { steps, context: context.clone() }
+        Self { steps, context: variable_registry.clone() }
     }
 
     pub fn steps(&self) -> &[Step] {
@@ -272,7 +272,7 @@ impl PatternPlan {
         self.steps.into_iter()
     }
 
-    pub fn context(&self) -> &BlockContext {
+    pub fn variable_registry(&self) -> &VariableRegistry {
         &self.context
     }
 }

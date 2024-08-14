@@ -43,7 +43,7 @@ impl PatternExecutor {
         snapshot: &impl ReadableSnapshot,
         thing_manager: &ThingManager,
     ) -> Result<Self, ConceptReadError> {
-        let (steps, context) = (plan.steps(), plan.context());
+        let (steps, context) = (plan.steps(), plan.variable_registry());
         let mut variable_positions = HashMap::new();
         let mut step_executors = Vec::with_capacity(steps.len());
         for step in steps {
