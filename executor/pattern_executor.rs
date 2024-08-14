@@ -16,7 +16,7 @@ use compiler::match_::{
     },
 };
 use concept::{error::ConceptReadError, thing::thing_manager::ThingManager};
-use ir::program::block::BlockContext;
+use ir::program::block::{BlockContext, VariableRegistry};
 use itertools::Itertools;
 use lending_iterator::{AsLendingIterator, LendingIterator, Peekable};
 use storage::snapshot::ReadableSnapshot;
@@ -190,7 +190,7 @@ enum StepExecutor {
 impl StepExecutor {
     fn new(
         step: &Step,
-        block_context: &BlockContext,
+        variable_registry: &VariableRegistry,
         variable_positions: &HashMap<Variable, VariablePosition>,
         snapshot: &impl ReadableSnapshot,
         thing_manager: &ThingManager,
@@ -203,7 +203,7 @@ impl StepExecutor {
                     instructions.clone(),
                     row_width,
                     selected_variables.clone(),
-                    block_context.get_variables_named(),
+                    variable_registry.get_variables_named(),
                     variable_positions,
                     snapshot,
                     thing_manager,
