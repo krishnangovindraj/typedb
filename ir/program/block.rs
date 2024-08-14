@@ -243,9 +243,13 @@ impl<'a> BlockContext<'a> {
         variable_registry: &'a mut VariableRegistry,
         variable_names_index: &'a mut HashMap<String, Variable>,
     ) -> BlockContext<'a> {
+        let mut variable_declaration = HashMap::new();
+        variable_names_index.values().for_each(|v| {
+            variable_declaration.insert(v.clone(), ScopeId::ROOT);
+        });
         Self {
             variable_registry,
-            variable_declaration: HashMap::new(),
+            variable_declaration,
             variable_names_index,
             scope_id_allocator: 1, // `0` is reserved for ROOT
             scope_parents: HashMap::new(),
