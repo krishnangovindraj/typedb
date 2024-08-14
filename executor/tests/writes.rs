@@ -14,8 +14,7 @@ use concept::{
 };
 use encoding::value::{label::Label, value::Value, value_type::ValueType};
 use executor::{batch::Row, write::insert_executor::WriteError};
-use ir::program::function_signature::HashMapFunctionSignatureIndex;
-use ir::translation::TranslationContext;
+use ir::{program::function_signature::HashMapFunctionSignatureIndex, translation::TranslationContext};
 use lending_iterator::LendingIterator;
 use storage::{
     durability_client::WALClient,
@@ -37,7 +36,7 @@ const NAME_LABEL: Label = Label::new_static("name");
 
 fn setup_schema(storage: Arc<MVCCStorage<WALClient>>) {
     let mut snapshot: WriteSnapshot<WALClient> = storage.clone().open_snapshot_write();
-    let (type_manager, thing_manager) = load_managers(storage.clone());
+    let (type_manager, _) = load_managers(storage.clone());
 
     let person_type = type_manager.create_entity_type(&mut snapshot, &PERSON_LABEL).unwrap();
     let group_type = type_manager.create_entity_type(&mut snapshot, &GROUP_LABEL).unwrap();
@@ -87,7 +86,7 @@ fn execute_insert(
         snapshot,
         &type_manager,
         &IndexedAnnotatedFunctions::empty(),
-        &translation_context.variable_registry
+        &translation_context.variable_registry,
     )
     .unwrap();
     let insert_plan = compiler::insert::insert::build_insert_plan(
@@ -98,10 +97,9 @@ fn execute_insert(
     .unwrap();
 
     println!("{:?}", &insert_plan.instructions);
-    insert_plan
-        .debug_info
-        .iter()
-        .for_each(|(k, v)| println!("{:?} -> {:?}", k, translation_context.variable_registry.get_variables_named().get(v)));
+    insert_plan.debug_info.iter().for_each(|(k, v)| {
+        println!("{:?} -> {:?}", k, translation_context.variable_registry.get_variables_named().get(v))
+    });
 
     let mut output_rows = Vec::with_capacity(input_rows.len());
     for mut input_row in input_rows {
@@ -142,16 +140,20 @@ fn execute_delete(
             .pop()
             .unwrap()
             .into_match();
-        let block = ir::translation::match_::translate_match(&mut translation_context, &HashMapFunctionSignatureIndex::empty(), &typeql_match)
-            .unwrap()
-            .finish();
+        let block = ir::translation::match_::translate_match(
+            &mut translation_context,
+            &HashMapFunctionSignatureIndex::empty(),
+            &typeql_match,
+        )
+        .unwrap()
+        .finish();
         compiler::match_::inference::type_inference::infer_types(
             &block,
             vec![],
             snapshot,
             &type_manager,
             &IndexedAnnotatedFunctions::empty(),
-            &translation_context.variable_registry
+            &translation_context.variable_registry,
         )
         .unwrap()
     };
@@ -206,7 +208,6 @@ fn has() {
 
     {
         let snapshot = storage.clone().open_snapshot_read();
-        let person_type = type_manager.get_entity_type(&snapshot, &PERSON_LABEL).unwrap().unwrap();
         let age_type = type_manager.get_attribute_type(&snapshot, &AGE_LABEL).unwrap().unwrap();
         let attr_age_10 =
             thing_manager.get_attribute_with_value(&snapshot, age_type, Value::Long(10)).unwrap().unwrap();

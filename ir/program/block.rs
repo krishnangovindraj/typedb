@@ -5,7 +5,7 @@
  */
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fmt::{Display, Formatter},
 };
 
@@ -347,12 +347,6 @@ fn is_equal_or_parent_scope(parents: &HashMap<ScopeId, ScopeId>, scope: ScopeId,
 fn is_child_scope(parents: &HashMap<ScopeId, ScopeId>, scope: ScopeId, maybe_child: ScopeId) -> bool {
     parents.get(&maybe_child).is_some_and(|&c| c == scope || is_child_scope(parents, scope, c))
 }
-
-// impl<'a> Default for BlockContext<'a> {
-//     fn default() -> Self {
-//         Self::new()
-//     }
-// }
 
 impl Display for VariableRegistry {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
