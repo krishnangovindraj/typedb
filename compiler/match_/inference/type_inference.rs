@@ -50,6 +50,7 @@ pub fn infer_types<Snapshot: ReadableSnapshot>(
         &entry,
         variable_registry,
         type_manager,
+        &HashMap::new(),
         &annotated_schema_functions,
         Some(&preamble_functions),
     )?;
@@ -105,6 +106,7 @@ pub fn infer_types_for_function(
         function.block(),
         function.variable_registry(),
         type_manager,
+        &HashMap::new(),
         indexed_annotated_functions,
         local_functions,
     )?;
@@ -118,6 +120,7 @@ pub fn infer_types_for_match_block(
     variable_registry: &VariableRegistry,
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
+    previous_stage_variable_annotations: &HashMap<Variable, Arc<HashSet<answer::Type>>>,
     annotated_schema_functions: &IndexedAnnotatedFunctions,
     annotated_preamble_functions: &AnnotatedUnindexedFunctions,
 ) -> Result<TypeAnnotations, TypeInferenceError> {
@@ -126,31 +129,11 @@ pub fn infer_types_for_match_block(
         &match_block,
         variable_registry,
         type_manager,
+        previous_stage_variable_annotations,
         &annotated_schema_functions,
         Some(&annotated_preamble_functions),
     )?;
     Ok(TypeAnnotations::build(root_tig))
-}
-
-pub fn collect_types_for_label_constraints<Snapshot: ReadableSnapshot>(
-    snapshot: &Snapshot,
-    type_manager: &TypeManager,
-    constraints: &Constraints,
-) -> Result<HashMap<Variable, answer::Type>, TypeInferenceError> {
-    let mut inserted_types_annotations = HashMap::new();
-    filter_variants!(Constraint::Label : constraints.constraints()).try_for_each(|label| {
-        if let Some(type_) =
-            get_type_annotation_from_label(snapshot, type_manager, &Label::parse_from(label.type_label()))
-                .map_err(|source| TypeInferenceError::ConceptRead { source })?
-        {
-            let existing = inserted_types_annotations.insert(label.left(), type_);
-            if existing.is_some() {
-                Err(TypeInferenceError::MultipleLabelsForSingleTypeVariable { variable: label.left() })?;
-            }
-        }
-        Ok(())
-    })?;
-    Ok(inserted_types_annotations)
 }
 
 #[cfg(test)]
@@ -409,6 +392,7 @@ pub mod tests {
                     &entry,
                     &entry_context.variable_registry,
                     &type_manager,
+                    &HashMap::new(),
                     &IndexedAnnotatedFunctions::empty(),
                     None,
                 )

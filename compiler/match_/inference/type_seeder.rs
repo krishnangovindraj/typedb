@@ -9,6 +9,8 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     iter::zip,
 };
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use answer::{variable::Variable, Type as TypeAnnotation};
 use concept::{
@@ -88,9 +90,21 @@ impl<'this, Snapshot: ReadableSnapshot> TypeSeeder<'this, Snapshot> {
     pub(crate) fn seed_types<'graph>(
         &self,
         context: &ScopeContext,
+        upstream_annotations: &HashMap<Variable, Arc<HashSet<TypeAnnotation>>>,
         conjunction: &'graph Conjunction,
     ) -> Result<TypeInferenceGraph<'graph>, TypeInferenceError> {
         let mut tig = self.build_recursive(context, conjunction);
+        // Pre-seed with upstream variable annotations.
+        for (variable, _) in context.get_variable_scopes() {
+            if let Some(annotations) = upstream_annotations.get(variable) {
+                Self::add_or_intersect(
+                    &mut tig.vertices,
+                    variable.clone(),
+                    Cow::Owned(annotations.iter().map(|x| x.clone()).collect()),
+                );
+            }
+        }
+        // Advanced TODO: Copying upstream binary constraints as schema constraints.
         self.seed_types_impl(&mut tig, context, &BTreeMap::new())?;
         Ok(tig)
     }
@@ -484,7 +498,7 @@ trait UnaryConstraint {
     ) -> Result<(), TypeInferenceError>;
 }
 
-pub(super) fn get_type_annotation_from_label<Snapshot: ReadableSnapshot>(
+pub(crate) fn get_type_annotation_from_label<Snapshot: ReadableSnapshot>(
     snapshot: &Snapshot,
     type_manager: &TypeManager,
     label_value: &encoding::value::label::Label<'static>,
@@ -1251,7 +1265,7 @@ impl BinaryConstraint for Relates<Variable> {
 
 #[cfg(test)]
 pub mod tests {
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::{BTreeMap, BTreeSet, HashMap};
 
     use answer::Type as TypeAnnotation;
     use encoding::value::{label::Label, value_type::ValueType};
@@ -1361,7 +1375,7 @@ pub mod tests {
                 None,
                 &translation_context.variable_registry,
             );
-            let tig = seeder.seed_types(block.scope_context(), conjunction).unwrap();
+            let tig = seeder.seed_types(block.scope_context(), &HashMap::new(), conjunction).unwrap();
             assert_eq!(expected_tig, tig);
         }
     }
@@ -1424,7 +1438,7 @@ pub mod tests {
                 None,
                 &translation_context.variable_registry,
             );
-            let tig = seeder.seed_types(block.scope_context(), conjunction).unwrap();
+            let tig = seeder.seed_types(block.scope_context(), &HashMap::new(), conjunction).unwrap();
             if expected_tig != tig {
                 // We need this because of non-determinism
                 expected_tig.vertices.get_mut(&var_animal).unwrap().insert(type_fears.clone());
@@ -1504,7 +1518,7 @@ pub mod tests {
                 None,
                 &translation_context.variable_registry,
             );
-            let tig = seeder.seed_types(block.scope_context(), conjunction).unwrap();
+            let tig = seeder.seed_types(block.scope_context(), &HashMap::new(), conjunction).unwrap();
             assert_eq!(expected_tig.vertices, tig.vertices);
             assert_eq!(expected_tig, tig);
         }

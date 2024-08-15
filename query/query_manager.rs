@@ -14,11 +14,10 @@ use compiler::match_::inference::{
     annotated_functions::{AnnotatedUnindexedFunctions, IndexedAnnotatedFunctions},
     type_annotations::TypeAnnotations,
     type_inference::{
-        collect_types_for_label_constraints, infer_types, infer_types_for_functions, infer_types_for_match_block,
+        collect_non_input_types_for_write, infer_types, infer_types_for_functions, infer_types_for_match_block,
     },
 };
-use concept::{error::ConceptReadError, type_::type_manager::TypeManager};
-use executor::batch::ImmutableRow;
+use concept::{type_::type_manager::TypeManager};
 use function::{
     function::Function,
     function_manager::{FunctionManager, ReadThroughFunctionSignatureIndex},
@@ -40,6 +39,10 @@ use ir::{
 use lending_iterator::LendingIterator;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 use typeql::query::{stage::Stage as TypeQLStage, SchemaQuery};
+use compiler::delete::delete::DeletePlan;
+use compiler::insert::insert::{build_insert_plan, InsertPlan};
+use compiler::match_::planner::pattern_plan::PatternPlan;
+use executor::VariablePosition;
 
 use crate::{define, error::QueryError};
 
@@ -99,13 +102,13 @@ impl QueryManager {
             let translated = translate_stage(&mut translation_context, &all_function_signatures, typeql_stage)?;
             translated_stages.push(translated);
         }
+        // TODO: Do we optimise here or after type-inference?
 
         // 2: Annotate
         let preamble_function_annotations =
             infer_types_for_functions(preamble_functions, snapshot, type_manager, schema_function_annotations)
                 .map_err(|source| QueryError::TypeInference { source })?;
 
-        // TODO: This would look nice in the inference package
         let mut running_variable_annotations: HashMap<Variable, Arc<HashSet<answer::Type>>> = HashMap::new();
         let mut annotated_stages = Vec::with_capacity(translated_stages.len());
         for stage in translated_stages {
@@ -117,10 +120,15 @@ impl QueryManager {
                 schema_function_annotations,
                 &preamble_function_annotations,
                 stage,
-            );
+            )?;
             annotated_stages.push(annotated_stage);
         }
+
         // 3: Compile
+        for stage in annotated_stages {
+            let compiled_stage = compile_stage(stage);
+        }
+
 
         todo!()
     }
@@ -134,6 +142,13 @@ impl QueryManager {
         // let conjunction = Conjunction::new();
         // ... build conjunction...
     }
+}
+
+
+enum QueryReturn {
+    MapStream,
+    JSONStream,
+    Aggregate,
 }
 
 enum TranslatedStage {
@@ -161,13 +176,14 @@ fn translate_stage(
         }
         TypeQLStage::Delete(delete) => translate_delete(translation_context, delete)
             .map(|(constraints, deleted_variables)| TranslatedStage::Delete { constraints, deleted_variables }),
-        _ => todo!(), // Stage::Put(_) => {}
-                      // Stage::Update(_) => {}
-                      // Stage::Fetch(_) => {}
-                      // Stage::Reduce(_) => {}
-                      // TypeQLStage::Modifier(modifier) => {
-                      //     translate_modifier(modifier).map(|modifier| TranslatedStage::Modifier(modifier))
-                      // }
+        _ => todo!(),
+        // TypeQLStage::Put(_) => {}
+        // TypeQLStage::Update(_) => {}
+        // TypeQLStage::Fetch(_) => {}
+        // TypeQLStage::Reduce(_) => {}
+        // TypeQLStage::Modifier(modifier) => {
+        //     translate_modifier(modifier).map(|modifier| TranslatedStage::Modifier(modifier))
+        // }
     }
     .map_err(|source| QueryError::PatternDefinition { source })
 }
@@ -199,6 +215,7 @@ fn annotate_stage(
                 &variable_registry,
                 snapshot,
                 &type_manager,
+                &running_variable_annotations,
                 schema_function_annotations,
                 &preamble_function_annotations,
             )
@@ -209,7 +226,7 @@ fn annotate_stage(
             Ok(AnnotatedStage::Match { block, block_annotations })
         }
         TranslatedStage::Insert { constraints } => {
-            let explicitly_labelled_types = collect_types_for_label_constraints(snapshot, type_manager, &constraints)
+            let explicitly_labelled_types = collect_non_input_types_for_write(snapshot, type_manager, &constraints)
                 .map_err(|source| QueryError::TypeInference { source })?;
             explicitly_labelled_types.iter().for_each(|(variable, type_)| {
                 running_variable_annotations.insert(variable.clone(), Arc::new(HashSet::from([type_.clone()])));
@@ -226,23 +243,23 @@ fn annotate_stage(
     }
 }
 
-enum Stage {
-    Match,
-    Insert,
-    Delete,
-    Put,
-    Fetch,
-    Assert,
-    Select,
-    Sort,
-    Offset,
-    Limit,
+enum CompiledStage {
+    Match(PatternPlan),
+    Insert(InsertPlan),
+    Delete(DeletePlan),
 }
 
-trait PipelineStage {}
-
-enum QueryReturn {
-    MapStream,
-    JSONStream,
-    Aggregate,
+fn compile_stage(input_variables: HashMap<Variable, VariablePosition>, annotated_stage: AnnotatedStage) -> Result<CompiledStage, QueryError> {
+    match annotated_stage {
+        AnnotatedStage::Match { .. } => todo!(),
+        AnnotatedStage::Insert { constraints, explicit_labels } => {
+            build_insert_plan(constraints, input_variables, )
+        }
+        AnnotatedStage::Delete { .. } => {}
+        _ => todo!(),
+        // AnnotatedStage::Filter(_) => {}
+        // AnnotatedStage::Sort(_) => {}
+        // AnnotatedStage::Offset(_) => {}
+        // AnnotatedStage::Limit(_) => {}
+    };
 }

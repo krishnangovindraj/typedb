@@ -32,12 +32,12 @@ pub(crate) fn infer_types_for_block<'graph>(
     block: &'graph FunctionalBlock,
     variable_registry: &VariableRegistry,
     type_manager: &TypeManager,
-    // previous_stage_variable_annotations: &HashMap<Variable, Arc<HashSet<TypeAnnotation>>>,
+    previous_stage_variable_annotations: &HashMap<Variable, Arc<HashSet<TypeAnnotation>>>,
     schema_functions: &IndexedAnnotatedFunctions,
     local_function_cache: Option<&AnnotatedUnindexedFunctions>,
 ) -> Result<TypeInferenceGraph<'graph>, TypeInferenceError> {
     let mut tig = TypeSeeder::new(snapshot, type_manager, schema_functions, local_function_cache, variable_registry)
-        .seed_types(block.scope_context(), block.conjunction())?;
+        .seed_types(block.scope_context(), previous_stage_variable_annotations, block.conjunction())?;
     run_type_inference(&mut tig);
     Ok(tig)
 }
@@ -369,6 +369,7 @@ pub mod tests {
                 &block,
                 &translation_context.variable_registry,
                 &type_manager,
+                &HashMap::new(),
                 &IndexedAnnotatedFunctions::empty(),
                 None,
             )
@@ -436,6 +437,7 @@ pub mod tests {
                 &block,
                 &translation_context.variable_registry,
                 &type_manager,
+                &HashMap::new(),
                 &IndexedAnnotatedFunctions::empty(),
                 None,
             )
@@ -501,6 +503,7 @@ pub mod tests {
                 &block,
                 &translation_context.variable_registry,
                 &type_manager,
+                &HashMap::new(),
                 &IndexedAnnotatedFunctions::empty(),
                 None,
             )
@@ -553,6 +556,7 @@ pub mod tests {
                 &block,
                 &translation_context.variable_registry,
                 &type_manager,
+                &HashMap::new(),
                 &IndexedAnnotatedFunctions::empty(),
                 None,
             )
@@ -656,6 +660,7 @@ pub mod tests {
                 &block,
                 &translation_context.variable_registry,
                 &type_manager,
+                &HashMap::new(),
                 &IndexedAnnotatedFunctions::empty(),
                 None,
             )
@@ -768,6 +773,7 @@ pub mod tests {
                 &block,
                 &translation_context.variable_registry,
                 &type_manager,
+                &HashMap::new(),
                 &IndexedAnnotatedFunctions::empty(),
                 None,
             )
@@ -856,6 +862,7 @@ pub mod tests {
                 &block,
                 &translation_context.variable_registry,
                 &type_manager,
+                &HashMap::new(),
                 &IndexedAnnotatedFunctions::empty(),
                 None,
             )
@@ -967,6 +974,7 @@ pub mod tests {
                 &block,
                 &translation_context.variable_registry,
                 &type_manager,
+                &HashMap::new(),
                 &IndexedAnnotatedFunctions::empty(),
                 None,
             )
@@ -1034,6 +1042,7 @@ pub mod tests {
                 &block,
                 &translation_context.variable_registry,
                 &type_manager,
+                &HashMap::new(),
                 &IndexedAnnotatedFunctions::empty(),
                 None,
             )
@@ -1099,6 +1108,7 @@ pub mod tests {
                 &block,
                 &translation_context.variable_registry,
                 &type_manager,
+                &HashMap::new(),
                 &IndexedAnnotatedFunctions::empty(),
                 None,
             )
@@ -1149,6 +1159,7 @@ pub mod tests {
                 &block,
                 &translation_context.variable_registry,
                 &type_manager,
+                &HashMap::new(),
                 &IndexedAnnotatedFunctions::empty(),
                 None,
             )
