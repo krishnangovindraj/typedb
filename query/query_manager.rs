@@ -14,7 +14,7 @@ use compiler::match_::inference::{
     annotated_functions::{AnnotatedUnindexedFunctions, IndexedAnnotatedFunctions},
     type_annotations::TypeAnnotations,
     type_inference::{
-        collect_non_input_types_for_write, infer_types, infer_types_for_functions, infer_types_for_match_block,
+        infer_types, infer_types_for_functions, infer_types_for_match_block,
     },
 };
 use concept::{type_::type_manager::TypeManager};
@@ -124,10 +124,10 @@ impl QueryManager {
             annotated_stages.push(annotated_stage);
         }
 
-        // 3: Compile
-        for stage in annotated_stages {
-            let compiled_stage = compile_stage(stage);
-        }
+        // // 3: Compile
+        // for stage in annotated_stages {
+        //     let compiled_stage = compile_stage(stage);
+        // }
 
 
         todo!()
@@ -153,8 +153,8 @@ enum QueryReturn {
 
 enum TranslatedStage {
     Match { block: FunctionalBlock },
-    Insert { constraints: Constraints },
-    Delete { constraints: Constraints, deleted_variables: Vec<Variable> },
+    Insert { block: FunctionalBlock },
+    Delete { block: FunctionalBlock, deleted_variables: Vec<Variable> },
 
     // ...
     Filter(Filter),
@@ -172,10 +172,10 @@ fn translate_stage(
         TypeQLStage::Match(match_) => translate_match(translation_context, all_function_signatures, match_)
             .map(|builder| TranslatedStage::Match { block: builder.finish() }),
         TypeQLStage::Insert(insert) => {
-            translate_insert(translation_context, insert).map(|constraints| TranslatedStage::Insert { constraints })
+            translate_insert(translation_context, insert).map(|block| TranslatedStage::Insert { block })
         }
         TypeQLStage::Delete(delete) => translate_delete(translation_context, delete)
-            .map(|(constraints, deleted_variables)| TranslatedStage::Delete { constraints, deleted_variables }),
+            .map(|(block, deleted_variables)| TranslatedStage::Delete { block, deleted_variables }),
         _ => todo!(),
         // TypeQLStage::Put(_) => {}
         // TypeQLStage::Update(_) => {}
@@ -190,8 +190,8 @@ fn translate_stage(
 
 enum AnnotatedStage {
     Match { block: FunctionalBlock, block_annotations: TypeAnnotations },
-    Insert { constraints: Constraints, explicit_labels: HashMap<Variable, answer::Type> },
-    Delete { constraints: Constraints, deleted_variables: Vec<Variable> },
+    Insert { block: FunctionalBlock, annotations: TypeAnnotations },
+    Delete { block: FunctionalBlock, deleted_variables: Vec<Variable> },
     // ...
     Filter(Filter),
     Sort(Sort),
@@ -225,19 +225,18 @@ fn annotate_stage(
             });
             Ok(AnnotatedStage::Match { block, block_annotations })
         }
-        TranslatedStage::Insert { constraints } => {
-            let explicitly_labelled_types = collect_non_input_types_for_write(snapshot, type_manager, &constraints)
+        TranslatedStage::Insert { block } => {
+            let (annotations, _) = infer_types(&block, vec![], snapshot, type_manager, &IndexedAnnotatedFunctions::empty(), &variable_registry)
                 .map_err(|source| QueryError::TypeInference { source })?;
-            explicitly_labelled_types.iter().for_each(|(variable, type_)| {
-                running_variable_annotations.insert(variable.clone(), Arc::new(HashSet::from([type_.clone()])));
-            });
-            Ok(AnnotatedStage::Insert { constraints, explicit_labels: explicitly_labelled_types })
+            validate_insertable();
+
+            Ok(AnnotatedStage::Insert { block, annotations })
         }
-        TranslatedStage::Delete { constraints, deleted_variables } => {
+        TranslatedStage::Delete { block, deleted_variables } => {
             deleted_variables.iter().for_each(|v| {
                 running_variable_annotations.remove(v);
             });
-            Ok(AnnotatedStage::Delete { constraints, deleted_variables })
+            Ok(AnnotatedStage::Delete { block, deleted_variables })
         }
         _ => todo!(),
     }
@@ -252,8 +251,8 @@ enum CompiledStage {
 fn compile_stage(input_variables: HashMap<Variable, VariablePosition>, annotated_stage: AnnotatedStage) -> Result<CompiledStage, QueryError> {
     match annotated_stage {
         AnnotatedStage::Match { .. } => todo!(),
-        AnnotatedStage::Insert { constraints, explicit_labels } => {
-            build_insert_plan(constraints, input_variables, )
+        AnnotatedStage::Insert { block, explicit_labels } => {
+            build_insert_plan(block, input_variables, )
         }
         AnnotatedStage::Delete { .. } => {}
         _ => todo!(),

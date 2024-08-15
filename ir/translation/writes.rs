@@ -8,10 +8,6 @@ use answer::variable::Variable;
 use typeql::query::stage::delete::DeletableKind;
 
 use crate::{
-    pattern::{
-        constraint::{Constraints, ConstraintsBuilder},
-        ScopeId,
-    },
     program::{
         block::{BlockContext, FunctionalBlock, FunctionalBlockBuilder},
         function_signature::HashMapFunctionSignatureIndex,
@@ -23,45 +19,43 @@ use crate::{
     PatternDefinitionError,
 };
 
-pub fn translate_insert<'a>(
-    context: &'a mut TranslationContext,
+pub fn translate_insert(
+    context: &mut TranslationContext,
     insert: &typeql::query::stage::Insert,
-) -> Result<Constraints, PatternDefinitionError> {
-    let block_context = &mut context.next_block_context();
-    let mut constraints = Constraints::new(ScopeId::ROOT);
-    let mut builder = ConstraintsBuilder::new(block_context, &mut constraints);
+) -> Result<FunctionalBlock, PatternDefinitionError> {
+    let mut builder = FunctionalBlock::builder(context.next_block_context());
     let function_index = HashMapFunctionSignatureIndex::empty();
     for statement in &insert.statements {
-        add_statement(&function_index, &mut builder, statement)?;
+        add_statement(&function_index, &mut builder.conjunction_mut().constraints_mut(), statement)?;
     }
-    Ok(constraints)
+    Ok(builder.finish())
 }
 
-pub fn translate_delete<'a>(
-    context: &'a mut TranslationContext,
+pub fn translate_delete(
+    context: &mut TranslationContext,
     delete: &typeql::query::stage::Delete,
-) -> Result<(Constraints, Vec<Variable>), PatternDefinitionError> {
-    let block_context = &mut context.next_block_context();
-    let mut constraints = Constraints::new(ScopeId::ROOT);
-    let mut builder = ConstraintsBuilder::new(block_context, &mut constraints);
+) -> Result<(FunctionalBlock, Vec<Variable>), PatternDefinitionError> {
+    let mut builder = FunctionalBlock::builder(context.next_block_context());
+    let mut tmp_conjunction = builder.conjunction_mut();
+    let mut constraints = tmp_conjunction.constraints_mut();
     let mut deleted_concepts = Vec::new();
     for deletable in &delete.deletables {
         match &deletable.kind {
             DeletableKind::Has { attribute, owner } => {
-                let translated_owner = register_typeql_var(&mut builder, owner)?;
-                let translated_attribute = register_typeql_var(&mut builder, attribute)?;
-                builder.add_has(translated_owner, translated_attribute)?;
+                let translated_owner = register_typeql_var(&mut constraints, owner)?;
+                let translated_attribute = register_typeql_var(&mut constraints, attribute)?;
+                constraints.add_has(translated_owner, translated_attribute)?;
             }
             DeletableKind::Links { players, relation } => {
-                let translated_relation = register_typeql_var(&mut builder, relation)?;
-                add_typeql_relation(&mut builder, translated_relation, players)?;
+                let translated_relation = register_typeql_var(&mut constraints, relation)?;
+                add_typeql_relation(&mut constraints, translated_relation, players)?;
             }
             DeletableKind::Concept { variable } => {
-                let translated_variable = builder.get_or_declare_variable(variable.name().unwrap())?;
+                let translated_variable = constraints.get_or_declare_variable(variable.name().unwrap())?;
                 deleted_concepts.push(translated_variable);
             }
         }
     }
 
-    Ok((constraints, deleted_concepts))
+    Ok((builder.finish(), deleted_concepts))
 }
