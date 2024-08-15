@@ -10,3 +10,10 @@ pub mod delete;
 pub mod expression;
 pub mod insert;
 pub mod match_;
+
+macro_rules! filter_variants {
+    ($variant:path : $iterable:expr) => {
+        $iterable.iter().filter_map(|item| if let $variant(inner) = item { Some(inner) } else { None })
+    };
+}
+pub(crate) use filter_variants;

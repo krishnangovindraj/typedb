@@ -14,8 +14,10 @@ use concept::{
 };
 use encoding::value::{label::Label, value::Value, value_type::ValueType};
 use executor::{batch::Row, write::insert_executor::WriteError};
-use ir::{program::function_signature::HashMapFunctionSignatureIndex, translation::TranslationContext};
-use ir::translation::match_::translate_match;
+use ir::{
+    program::function_signature::HashMapFunctionSignatureIndex,
+    translation::{match_::translate_match, TranslationContext},
+};
 use lending_iterator::LendingIterator;
 use storage::{
     durability_client::WALClient,
@@ -83,9 +85,21 @@ fn execute_insert(
         .collect::<HashMap<_, _>>();
 
     let mock_annotations = {
-        let mut dummy_for_annotations = query_str.clone().replace("insert", "match" );
+        let mut dummy_for_annotations = query_str.clone().replace("insert", "match");
         let mut ctx = TranslationContext::new();
-        let block = translate_match(&mut ctx, &HashMapFunctionSignatureIndex::empty(), &typeql::parse_query(dummy_for_annotations.as_str()).unwrap().into_pipeline().stages.pop().unwrap().into_match()).unwrap().finish();
+        let block = translate_match(
+            &mut ctx,
+            &HashMapFunctionSignatureIndex::empty(),
+            &typeql::parse_query(dummy_for_annotations.as_str())
+                .unwrap()
+                .into_pipeline()
+                .stages
+                .pop()
+                .unwrap()
+                .into_match(),
+        )
+        .unwrap()
+        .finish();
         compiler::match_::inference::type_inference::infer_types(
             &block,
             vec![],
@@ -93,15 +107,14 @@ fn execute_insert(
             &type_manager,
             &IndexedAnnotatedFunctions::empty(),
             &translation_context.variable_registry,
-        ).unwrap().0
+        )
+        .unwrap()
+        .0
     };
 
-    let insert_plan = compiler::insert::insert::build_insert_plan(
-        constraints.constraints(),
-        &input_row_format,
-        &mock_annotations,
-    )
-    .unwrap();
+    let insert_plan =
+        compiler::insert::insert::build_insert_plan(constraints.constraints(), &input_row_format, &mock_annotations)
+            .unwrap();
 
     println!("{:?}", &insert_plan.instructions);
     insert_plan.debug_info.iter().for_each(|(k, v)| {
@@ -175,8 +188,7 @@ fn execute_delete(
         .collect::<HashMap<_, _>>();
 
     let delete_plan =
-        build_delete_plan(&input_row_format, &entry_annotations, constraints.constraints(), &deleted_concepts)
-            .unwrap();
+        build_delete_plan(&input_row_format, &entry_annotations, constraints.constraints(), &deleted_concepts).unwrap();
     let mut output_rows = Vec::with_capacity(input_rows.len());
     for mut input_row in input_rows {
         let mut output_vec = (0..delete_plan.output_row_plan.len()).map(|_| VariableValue::Empty).collect::<Vec<_>>();

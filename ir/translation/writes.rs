@@ -8,6 +8,10 @@ use answer::variable::Variable;
 use typeql::query::stage::delete::DeletableKind;
 
 use crate::{
+    pattern::{
+        constraint::{Constraints, ConstraintsBuilder},
+        ScopeId,
+    },
     program::{
         block::{BlockContext, FunctionalBlock, FunctionalBlockBuilder},
         function_signature::HashMapFunctionSignatureIndex,
@@ -18,8 +22,6 @@ use crate::{
     },
     PatternDefinitionError,
 };
-use crate::pattern::constraint::{Constraints, ConstraintsBuilder};
-use crate::pattern::ScopeId;
 
 pub fn translate_insert<'a>(
     context: &'a mut TranslationContext,

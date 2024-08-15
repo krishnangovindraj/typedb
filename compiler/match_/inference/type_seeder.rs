@@ -484,12 +484,11 @@ trait UnaryConstraint {
     ) -> Result<(), TypeInferenceError>;
 }
 
-fn get_type_annotation_from_label<Snapshot: ReadableSnapshot>(
-    seeder: &TypeSeeder<'_, Snapshot>,
+pub(super) fn get_type_annotation_from_label<Snapshot: ReadableSnapshot>(
+    snapshot: &Snapshot,
+    type_manager: &TypeManager,
     label_value: &encoding::value::label::Label<'static>,
 ) -> Result<Option<TypeAnnotation>, ConceptReadError> {
-    let type_manager = &seeder.type_manager;
-    let snapshot = seeder.snapshot;
     if let Some(t) = type_manager.get_attribute_type(snapshot, label_value)?.map(TypeAnnotation::Attribute) {
         Ok(Some(t))
     } else if let Some(t) = type_manager.get_entity_type(snapshot, label_value)?.map(TypeAnnotation::Entity) {
@@ -509,9 +508,12 @@ impl UnaryConstraint for Label<Variable> {
         seeder: &TypeSeeder<'_, Snapshot>,
         tig_vertices: &mut VertexAnnotations,
     ) -> Result<(), TypeInferenceError> {
-        let annotation_opt =
-            get_type_annotation_from_label(seeder, &encoding::value::label::Label::parse_from(self.type_label()))
-                .map_err(|source| TypeInferenceError::ConceptRead { source })?;
+        let annotation_opt = get_type_annotation_from_label(
+            seeder.snapshot,
+            seeder.type_manager,
+            &encoding::value::label::Label::parse_from(self.type_label()),
+        )
+        .map_err(|source| TypeInferenceError::ConceptRead { source })?;
         if let Some(annotation) = annotation_opt {
             TypeSeeder::<Snapshot>::add_or_intersect(
                 tig_vertices,

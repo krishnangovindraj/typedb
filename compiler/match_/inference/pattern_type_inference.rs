@@ -32,6 +32,7 @@ pub(crate) fn infer_types_for_block<'graph>(
     block: &'graph FunctionalBlock,
     variable_registry: &VariableRegistry,
     type_manager: &TypeManager,
+    // previous_stage_variable_annotations: &HashMap<Variable, Arc<HashSet<TypeAnnotation>>>,
     schema_functions: &IndexedAnnotatedFunctions,
     local_function_cache: Option<&AnnotatedUnindexedFunctions>,
 ) -> Result<TypeInferenceGraph<'graph>, TypeInferenceError> {

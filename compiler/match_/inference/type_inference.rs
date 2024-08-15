@@ -4,21 +4,33 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    sync::Arc,
+};
 
 use answer::{variable::Variable, Type};
 use concept::type_::type_manager::TypeManager;
-use ir::program::{
-    block::{BlockContext, FunctionalBlock, VariableRegistry},
-    function::Function,
+use encoding::value::label::Label;
+use ir::{
+    pattern::constraint::{Constraint, Constraints},
+    program::{
+        block::{BlockContext, FunctionalBlock, VariableRegistry},
+        function::Function,
+    },
 };
 use storage::snapshot::ReadableSnapshot;
 
 use super::pattern_type_inference::infer_types_for_block;
-use crate::match_::inference::{
-    annotated_functions::{AnnotatedUnindexedFunctions, IndexedAnnotatedFunctions},
-    type_annotations::{FunctionAnnotations, TypeAnnotations},
-    TypeInferenceError,
+use crate::{
+    filter_variants,
+    insert::WriteCompilationError,
+    match_::inference::{
+        annotated_functions::{AnnotatedUnindexedFunctions, IndexedAnnotatedFunctions},
+        type_annotations::{FunctionAnnotations, TypeAnnotations},
+        type_seeder::get_type_annotation_from_label,
+        TypeInferenceError,
+    },
 };
 
 pub(crate) type VertexAnnotations = BTreeMap<Variable, BTreeSet<Type>>;
@@ -118,6 +130,27 @@ pub fn infer_types_for_match_block(
         Some(&annotated_preamble_functions),
     )?;
     Ok(TypeAnnotations::build(root_tig))
+}
+
+pub fn collect_types_for_label_constraints<Snapshot: ReadableSnapshot>(
+    snapshot: &Snapshot,
+    type_manager: &TypeManager,
+    constraints: &Constraints,
+) -> Result<HashMap<Variable, answer::Type>, TypeInferenceError> {
+    let mut inserted_types_annotations = HashMap::new();
+    filter_variants!(Constraint::Label : constraints.constraints()).try_for_each(|label| {
+        if let Some(type_) =
+            get_type_annotation_from_label(snapshot, type_manager, &Label::parse_from(label.type_label()))
+                .map_err(|source| TypeInferenceError::ConceptRead { source })?
+        {
+            let existing = inserted_types_annotations.insert(label.left(), type_);
+            if existing.is_some() {
+                Err(TypeInferenceError::MultipleLabelsForSingleTypeVariable { variable: label.left() })?;
+            }
+        }
+        Ok(())
+    })?;
+    Ok(inserted_types_annotations)
 }
 
 #[cfg(test)]

@@ -19,6 +19,7 @@ use itertools::Itertools;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 
 use crate::{
+    filter_variants,
     insert::{
         get_kinds_from_annotations, get_thing_source,
         instructions::{Has, InsertInstruction, PutAttribute, PutObject, RolePlayer},
@@ -26,12 +27,6 @@ use crate::{
     },
     match_::inference::type_annotations::TypeAnnotations,
 };
-
-macro_rules! filter_variants {
-    ($variant:path : $iterable:expr) => {
-        $iterable.iter().filter_map(|item| if let $variant(inner) = item { Some(inner) } else { None })
-    };
-}
 
 pub struct InsertPlan {
     pub instructions: Vec<InsertInstruction>,

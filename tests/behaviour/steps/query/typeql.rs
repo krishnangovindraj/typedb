@@ -13,7 +13,10 @@ use compiler::{
 };
 use cucumber::gherkin::Step;
 use executor::{batch::Row, write::insert_executor::WriteError};
-use ir::{program::function_signature::HashMapFunctionSignatureIndex, translation::TranslationContext};
+use ir::{
+    program::function_signature::HashMapFunctionSignatureIndex,
+    translation::{match_::translate_match, TranslationContext},
+};
 use itertools::Itertools;
 use macro_rules_attribute::apply;
 use primitive::either::Either;
@@ -30,22 +33,35 @@ fn create_insert_plan(context: &mut Context, query_str: &str) -> Result<InsertPl
     with_write_tx!(context, |tx| {
         let typeql_insert = typeql::parse_query(query_str).unwrap().into_pipeline().stages.pop().unwrap().into_insert();
         let mut translation_context = TranslationContext::new();
-        let block =
-            ir::translation::writes::translate_insert(&mut translation_context, &typeql_insert).unwrap().finish();
-        let (entry_annotations, _) = compiler::match_::inference::type_inference::infer_types(
-            &block,
-            vec![],
-            &tx.snapshot,
-            &tx.type_manager,
-            &IndexedAnnotatedFunctions::empty(),
-            &translation_context.variable_registry,
-        )
-        .unwrap();
-        compiler::insert::insert::build_insert_plan(
-            block.conjunction().constraints(),
-            &HashMap::new(),
-            &entry_annotations,
-        )
+        let constraints = ir::translation::writes::translate_insert(&mut translation_context, &typeql_insert).unwrap();
+        let mock_annotations = {
+            let mut dummy_for_annotations = query_str.clone().replace("insert", "match");
+            let mut ctx = TranslationContext::new();
+            let block = translate_match(
+                &mut ctx,
+                &HashMapFunctionSignatureIndex::empty(),
+                &typeql::parse_query(dummy_for_annotations.as_str())
+                    .unwrap()
+                    .into_pipeline()
+                    .stages
+                    .pop()
+                    .unwrap()
+                    .into_match(),
+            )
+            .unwrap()
+            .finish();
+            compiler::match_::inference::type_inference::infer_types(
+                &block,
+                vec![],
+                &tx.snapshot,
+                &tx.type_manager,
+                &IndexedAnnotatedFunctions::empty(),
+                &translation_context.variable_registry,
+            )
+            .unwrap()
+            .0
+        };
+        compiler::insert::insert::build_insert_plan(constraints.constraints(), &HashMap::new(), &mock_annotations)
     })
 }
 

@@ -69,6 +69,7 @@ pub enum TypeInferenceError {
     ExpressionCompilation { source: ExpressionCompileError },
     VariableInExpressionMustBeValueOrAttribute { variable: Variable, actual_category: VariableCategory },
     RoleNameNotResolved(String),
+    MultipleLabelsForSingleTypeVariable { variable: Variable },
 }
 
 impl Display for TypeInferenceError {
@@ -90,6 +91,7 @@ impl Error for TypeInferenceError {
             TypeInferenceError::ExpressionVariableDidNotHaveSingleValueType { .. } => None,
             TypeInferenceError::ExpressionVariableHasNoValueType { .. } => None,
             TypeInferenceError::VariableInExpressionMustBeValueOrAttribute { .. } => None,
+            TypeInferenceError::MultipleLabelsForSingleTypeVariable { .. } => None,
         }
     }
 }
