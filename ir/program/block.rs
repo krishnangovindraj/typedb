@@ -27,7 +27,7 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct FunctionalBlock {
-    scope_context: ScopeContext,
+    scope_context: ScopeContext, // TODO: We only need this for type annotations
     conjunction: Conjunction,
     modifiers: Vec<Modifier>,
 }

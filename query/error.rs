@@ -5,6 +5,7 @@
  */
 
 use std::{error::Error, fmt};
+use ir::program::FunctionDefinitionError;
 
 use crate::define::DefineError;
 
@@ -12,6 +13,7 @@ use crate::define::DefineError;
 pub enum QueryError {
     ParseError { typeql_query: String, source: typeql::common::Error },
     Define { source: DefineError },
+    FunctionDefinition { source: FunctionDefinitionError },
 }
 
 impl fmt::Display for QueryError {
@@ -25,6 +27,7 @@ impl Error for QueryError {
         match self {
             QueryError::ParseError { source, .. } => Some(source),
             QueryError::Define { source, .. } => Some(source),
+            QueryError::FunctionDefinition { source, .. } => Some(source),
         }
     }
 }
