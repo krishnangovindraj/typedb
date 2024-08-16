@@ -5,6 +5,7 @@
  */
 
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::Arc;
 
 use answer::{variable::Variable, Type};
 use ir::{
@@ -16,6 +17,7 @@ use crate::{
     insert::WriteCompilationError,
     match_::inference::{type_annotations::TypeAnnotations, TypeInferenceError},
 };
+use crate::match_::inference::type_annotations::ConstraintTypeAnnotations;
 
 pub enum ValidCombinations<'a> {
     Has(&'a BTreeMap<answer::Type, Vec<answer::Type>>),
@@ -32,8 +34,9 @@ impl<'a> ValidCombinations<'a> {
 }
 
 pub fn validate_insertable(
-    block: FunctionalBlock,
-    input_annotations: &TypeAnnotations,
+    block: &FunctionalBlock,
+    input_annotations_for_vertices: &HashMap<Variable, Arc<HashSet<answer::Type>>>,
+    input_annotations_for_constraints: &HashMap<Constraint<Variable>, ConstraintTypeAnnotations>,
     insert_annotations: &TypeAnnotations,
 ) -> Result<(), TypeInferenceError> {
     for constraint in block.conjunction().constraints() {
@@ -47,7 +50,8 @@ pub fn validate_insertable(
                     .left_to_right();
                 validate_input_combinations_insertable(
                     constraint,
-                    input_annotations,
+                    input_annotations_for_vertices,
+                    input_annotations_for_constraints,
                     has.owner(),
                     has.attribute(),
                     &ValidCombinations::Has(&valid_combinations),
@@ -58,14 +62,16 @@ pub fn validate_insertable(
                     insert_annotations.constraint_annotations_of(constraint.clone()).unwrap().as_left_right_filtered();
                 validate_input_combinations_insertable(
                     constraint,
-                    input_annotations,
+                    input_annotations_for_vertices,
+                    input_annotations_for_constraints,
                     links.relation(),
                     links.role_type(),
                     &ValidCombinations::Links(&links_annotations.filters_on_left()),
                 )?;
                 validate_input_combinations_insertable(
                     constraint,
-                    input_annotations,
+                    input_annotations_for_vertices,
+                    input_annotations_for_constraints,
                     links.player(),
                     links.role_type(),
                     &ValidCombinations::Links(&links_annotations.filters_on_right()),
@@ -87,15 +93,16 @@ pub fn validate_insertable(
 
 fn validate_input_combinations_insertable(
     constraint: &Constraint<Variable>,
-    input_annotations: &TypeAnnotations,
+    input_annotations_for_vertices: &HashMap<Variable, Arc<HashSet<answer::Type>>>,
+    input_annotations_for_constraints: &HashMap<Constraint<Variable>, ConstraintTypeAnnotations>,
     first: Variable,
     second: Variable,
     valid_combinations: &ValidCombinations,
 ) -> Result<(), TypeInferenceError> {
     // TODO: Improve. This is extremely coarse and likely to rule out many valid combinations
     // Esp when doing queries using type variables.
-    let left = input_annotations.variable_annotations_of(first).unwrap();
-    let right = input_annotations.variable_annotations_of(second).unwrap();
+    let left = input_annotations_for_vertices.get(&first).unwrap();
+    let right = input_annotations_for_vertices.get(&second).unwrap();
 
     let mut invalid_iter = left.iter().flat_map(|left_type| {
         right

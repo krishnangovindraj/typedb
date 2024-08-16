@@ -117,17 +117,27 @@ impl QueryManager {
         // let mut running_match_constraint_annotations = None;
         let mut running_variable_annotations: HashMap<Variable, Arc<HashSet<answer::Type>>> = HashMap::new();
         let mut annotated_stages = Vec::with_capacity(translated_stages.len());
+
+        let empty_constraint_annotations = HashMap::new();
+        let mut latest_match_index = None;
         for stage in translated_stages {
+            let running_constraint_annotations = latest_match_index.map(|idx| {
+                let AnnotatedStage::Match { block_annotations, .. } = annotated_stages.get(idx).unwrap() else { unreachable!(); };
+                block_annotations.constraint_annotations()
+            }).unwrap_or(&empty_constraint_annotations);
             let annotated_stage = annotate_stage(
                 &mut running_variable_annotations,
-                // &running_match_constraint_annotations,
                 &translation_context.variable_registry,
                 snapshot,
                 type_manager,
                 schema_function_annotations,
                 &preamble_function_annotations,
+                &running_constraint_annotations,
                 stage,
             )?;
+            if let AnnotatedStage::Match { .. } = annotated_stage {
+                latest_match_index = Some(annotated_stages.len());
+            }
             annotated_stages.push(annotated_stage);
         }
 
@@ -211,8 +221,10 @@ fn annotate_stage(
     type_manager: &TypeManager,
     schema_function_annotations: &IndexedAnnotatedFunctions,
     preamble_function_annotations: &AnnotatedUnindexedFunctions,
+    running_constraint_annotations: &HashMap<Constraint<Variable>, ConstraintTypeAnnotations>,
     stage: TranslatedStage,
 ) -> Result<AnnotatedStage, QueryError> {
+    let mut latest_match_index : Option<usize> = None;
     match stage {
         TranslatedStage::Match { block } => {
             let block_annotations = infer_types_for_match_block(
@@ -241,7 +253,10 @@ fn annotate_stage(
                 &AnnotatedUnindexedFunctions::empty(),
             )
             .map_err(|source| QueryError::TypeInference { source })?;
-            // validate_insertable(block, running_variable_annotations, previous_match_annotations, insert_annotations);
+
+            validate_insertable(
+                &block, running_variable_annotations, running_constraint_annotations, &insert_annotations
+            ).map_err(|source| QueryError::TypeInference { source })?;
             Ok(AnnotatedStage::Insert { block, annotations: insert_annotations })
         }
         TranslatedStage::Delete { block, deleted_variables } => {
