@@ -10,14 +10,23 @@ use std::{
 };
 
 use answer::{variable::Variable, Type};
-use compiler::match_::inference::{
-    annotated_functions::{AnnotatedUnindexedFunctions, IndexedAnnotatedFunctions},
-    type_annotations::TypeAnnotations,
-    type_inference::{
-        infer_types, infer_types_for_functions, infer_types_for_match_block,
+use compiler::{
+    delete::delete::{build_delete_plan, DeletePlan},
+    insert::{
+        insert::{build_insert_plan, InsertPlan},
+        validate::validate_insertable,
+    },
+    match_::{
+        inference::{
+            annotated_functions::{AnnotatedUnindexedFunctions, IndexedAnnotatedFunctions},
+            type_annotations::{ConstraintTypeAnnotations, TypeAnnotations},
+            type_inference::{infer_types, infer_types_for_functions, infer_types_for_match_block},
+        },
+        planner::pattern_plan::PatternPlan,
     },
 };
-use concept::{type_::type_manager::TypeManager};
+use concept::type_::type_manager::TypeManager;
+use executor::VariablePosition;
 use function::{
     function::Function,
     function_manager::{FunctionManager, ReadThroughFunctionSignatureIndex},
@@ -39,10 +48,6 @@ use ir::{
 use lending_iterator::LendingIterator;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 use typeql::query::{stage::Stage as TypeQLStage, SchemaQuery};
-use compiler::delete::delete::DeletePlan;
-use compiler::insert::insert::{build_insert_plan, InsertPlan};
-use compiler::match_::planner::pattern_plan::PatternPlan;
-use executor::VariablePosition;
 
 use crate::{define, error::QueryError};
 
@@ -109,11 +114,13 @@ impl QueryManager {
             infer_types_for_functions(preamble_functions, snapshot, type_manager, schema_function_annotations)
                 .map_err(|source| QueryError::TypeInference { source })?;
 
+        // let mut running_match_constraint_annotations = None;
         let mut running_variable_annotations: HashMap<Variable, Arc<HashSet<answer::Type>>> = HashMap::new();
         let mut annotated_stages = Vec::with_capacity(translated_stages.len());
         for stage in translated_stages {
             let annotated_stage = annotate_stage(
                 &mut running_variable_annotations,
+                // &running_match_constraint_annotations,
                 &translation_context.variable_registry,
                 snapshot,
                 type_manager,
@@ -129,7 +136,6 @@ impl QueryManager {
         //     let compiled_stage = compile_stage(stage);
         // }
 
-
         todo!()
     }
 
@@ -143,7 +149,6 @@ impl QueryManager {
         // ... build conjunction...
     }
 }
-
 
 enum QueryReturn {
     MapStream,
@@ -191,7 +196,7 @@ fn translate_stage(
 enum AnnotatedStage {
     Match { block: FunctionalBlock, block_annotations: TypeAnnotations },
     Insert { block: FunctionalBlock, annotations: TypeAnnotations },
-    Delete { block: FunctionalBlock, deleted_variables: Vec<Variable> },
+    Delete { block: FunctionalBlock, deleted_variables: Vec<Variable>, annotations: TypeAnnotations },
     // ...
     Filter(Filter),
     Sort(Sort),
@@ -226,17 +231,35 @@ fn annotate_stage(
             Ok(AnnotatedStage::Match { block, block_annotations })
         }
         TranslatedStage::Insert { block } => {
-            let (annotations, _) = infer_types(&block, vec![], snapshot, type_manager, &IndexedAnnotatedFunctions::empty(), &variable_registry)
-                .map_err(|source| QueryError::TypeInference { source })?;
-            validate_insertable();
-
-            Ok(AnnotatedStage::Insert { block, annotations })
+            let insert_annotations = infer_types_for_match_block(
+                &block,
+                &variable_registry,
+                snapshot,
+                type_manager,
+                running_variable_annotations,
+                &IndexedAnnotatedFunctions::empty(),
+                &AnnotatedUnindexedFunctions::empty(),
+            )
+            .map_err(|source| QueryError::TypeInference { source })?;
+            // validate_insertable(block, running_variable_annotations, previous_match_annotations, insert_annotations);
+            Ok(AnnotatedStage::Insert { block, annotations: insert_annotations })
         }
         TranslatedStage::Delete { block, deleted_variables } => {
+            let delete_annotations = infer_types_for_match_block(
+                &block,
+                &variable_registry,
+                snapshot,
+                type_manager,
+                running_variable_annotations,
+                &IndexedAnnotatedFunctions::empty(),
+                &AnnotatedUnindexedFunctions::empty(),
+            )
+            .map_err(|source| QueryError::TypeInference { source })?;
+            // TODO: Do we want to validate delete sanity?
             deleted_variables.iter().for_each(|v| {
                 running_variable_annotations.remove(v);
             });
-            Ok(AnnotatedStage::Delete { block, deleted_variables })
+            Ok(AnnotatedStage::Delete { block, deleted_variables, annotations: delete_annotations })
         }
         _ => todo!(),
     }
@@ -248,17 +271,29 @@ enum CompiledStage {
     Delete(DeletePlan),
 }
 
-fn compile_stage(input_variables: HashMap<Variable, VariablePosition>, annotated_stage: AnnotatedStage) -> Result<CompiledStage, QueryError> {
-    match annotated_stage {
-        AnnotatedStage::Match { .. } => todo!(),
-        AnnotatedStage::Insert { block, explicit_labels } => {
-            build_insert_plan(block, input_variables, )
+fn compile_stage(
+    input_variables: &HashMap<Variable, usize>,
+    annotated_stage: AnnotatedStage,
+) -> Result<CompiledStage, QueryError> {
+    match &annotated_stage {
+        AnnotatedStage::Match { block, block_annotations } => {
+            todo!()
         }
-        AnnotatedStage::Delete { .. } => {}
+        AnnotatedStage::Insert { block, annotations } => {
+            let plan = build_insert_plan(block.conjunction().constraints(), input_variables, &annotations)
+                .map_err(|source| QueryError::WriteCompilation { source })?;
+            Ok(CompiledStage::Insert(plan))
+        }
+        AnnotatedStage::Delete { block, deleted_variables, annotations } => {
+            let plan =
+                build_delete_plan(input_variables, annotations, block.conjunction().constraints(), deleted_variables)
+                    .map_err(|source| QueryError::WriteCompilation { source })?;
+            Ok(CompiledStage::Delete(plan))
+        }
         _ => todo!(),
         // AnnotatedStage::Filter(_) => {}
         // AnnotatedStage::Sort(_) => {}
         // AnnotatedStage::Offset(_) => {}
         // AnnotatedStage::Limit(_) => {}
-    };
+    }
 }

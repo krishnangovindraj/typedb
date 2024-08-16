@@ -17,6 +17,7 @@ use itertools::Itertools;
 
 pub mod insert;
 pub mod instructions;
+pub mod validate;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum VariableSource {

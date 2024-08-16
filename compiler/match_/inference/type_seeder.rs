@@ -6,11 +6,10 @@
 
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     iter::zip,
+    sync::Arc,
 };
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 
 use answer::{variable::Variable, Type as TypeAnnotation};
 use concept::{

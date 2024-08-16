@@ -6,7 +6,7 @@
 
 use std::{error::Error, fmt};
 
-use compiler::match_::inference::TypeInferenceError;
+use compiler::{insert::WriteCompilationError, match_::inference::TypeInferenceError};
 use ir::{program::FunctionDefinitionError, PatternDefinitionError};
 
 use crate::define::DefineError;
@@ -18,6 +18,7 @@ pub enum QueryError {
     FunctionDefinition { source: FunctionDefinitionError },
     PatternDefinition { source: PatternDefinitionError },
     TypeInference { source: TypeInferenceError },
+    WriteCompilation { source: WriteCompilationError },
 }
 
 impl fmt::Display for QueryError {
@@ -34,6 +35,7 @@ impl Error for QueryError {
             QueryError::FunctionDefinition { source, .. } => Some(source),
             QueryError::PatternDefinition { source, .. } => Some(source),
             QueryError::TypeInference { source } => Some(source),
+            QueryError::WriteCompilation { source } => Some(source),
         }
     }
 }

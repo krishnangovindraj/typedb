@@ -7,8 +7,10 @@
 use std::{collections::HashMap, sync::Arc};
 
 use answer::variable_value::VariableValue;
-use compiler::{delete::delete::build_delete_plan, match_::inference::annotated_functions::IndexedAnnotatedFunctions};
-use compiler::match_::inference::type_inference::infer_types;
+use compiler::{
+    delete::delete::build_delete_plan,
+    match_::inference::{annotated_functions::IndexedAnnotatedFunctions, type_inference::infer_types},
+};
 use concept::{
     thing::{object::ObjectAPI, relation::Relation, thing_manager::ThingManager},
     type_::{object_type::ObjectType, type_manager::TypeManager, Ordering, OwnerAPI, PlayerAPI},
@@ -85,11 +87,22 @@ fn execute_insert(
         .map(|(i, v)| (translation_context.visible_variables.get(*v).unwrap().clone(), i))
         .collect::<HashMap<_, _>>();
 
-    let (entry_annotations, _) = infer_types(&block, vec![], snapshot, type_manager, &IndexedAnnotatedFunctions::empty(), &translation_context.variable_registry).unwrap();
+    let (entry_annotations, _) = infer_types(
+        &block,
+        vec![],
+        snapshot,
+        type_manager,
+        &IndexedAnnotatedFunctions::empty(),
+        &translation_context.variable_registry,
+    )
+    .unwrap();
 
-    let insert_plan =
-        compiler::insert::insert::build_insert_plan(block.conjunction().constraints(), &input_row_format, &entry_annotations)
-            .unwrap();
+    let insert_plan = compiler::insert::insert::build_insert_plan(
+        block.conjunction().constraints(),
+        &input_row_format,
+        &entry_annotations,
+    )
+    .unwrap();
 
     println!("{:?}", &insert_plan.instructions);
     insert_plan.debug_info.iter().for_each(|(k, v)| {
@@ -163,7 +176,8 @@ fn execute_delete(
         .collect::<HashMap<_, _>>();
 
     let delete_plan =
-        build_delete_plan(&input_row_format, &entry_annotations, block.conjunction().constraints(), &deleted_concepts).unwrap();
+        build_delete_plan(&input_row_format, &entry_annotations, block.conjunction().constraints(), &deleted_concepts)
+            .unwrap();
     let mut output_rows = Vec::with_capacity(input_rows.len());
     for mut input_row in input_rows {
         let mut output_vec = (0..delete_plan.output_row_plan.len()).map(|_| VariableValue::Empty).collect::<Vec<_>>();
