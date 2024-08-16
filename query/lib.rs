@@ -10,6 +10,8 @@ use typeql::schema::definable::type_::Capability;
 mod define;
 mod error;
 pub mod query_manager;
+mod translation;
+mod type_inference;
 mod util;
 
 #[derive(Debug)]

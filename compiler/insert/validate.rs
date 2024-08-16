@@ -4,8 +4,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::sync::Arc;
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    sync::Arc,
+};
 
 use answer::{variable::Variable, Type};
 use ir::{
@@ -15,9 +17,11 @@ use ir::{
 
 use crate::{
     insert::WriteCompilationError,
-    match_::inference::{type_annotations::TypeAnnotations, TypeInferenceError},
+    match_::inference::{
+        type_annotations::{ConstraintTypeAnnotations, TypeAnnotations},
+        TypeInferenceError,
+    },
 };
-use crate::match_::inference::type_annotations::ConstraintTypeAnnotations;
 
 pub enum ValidCombinations<'a> {
     Has(&'a BTreeMap<answer::Type, Vec<answer::Type>>),
