@@ -66,8 +66,8 @@ impl PatternPlan {
         let mut elements = Vec::new();
         let mut adjacency: HashMap<usize, HashSet<usize>> = HashMap::new();
 
-        for (variable, category) in variable_registry.variable_categories() {
-            match category {
+        for variable in block.variables() {
+            match variable_registry.get_variable_category(variable).unwrap() {
                 VariableCategory::Type | VariableCategory::ThingType => (), // ignore for now
                 VariableCategory::RoleType => {
                     variable_index.insert(variable, elements.len());

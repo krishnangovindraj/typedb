@@ -52,6 +52,10 @@ impl FunctionalBlock {
     pub fn scope_id(&self) -> ScopeId {
         Scope::scope_id(self)
     }
+
+    pub fn variables(&self) -> impl Iterator<Item = Variable> + '_ {
+        self.scope_context.variable_declaration.iter().map(|(v, _)| v.clone())
+    }
 }
 
 impl Scope for FunctionalBlock {

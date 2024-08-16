@@ -105,6 +105,7 @@ fn validate_input_combinations_insertable(
 ) -> Result<(), TypeInferenceError> {
     // TODO: Improve. This is extremely coarse and likely to rule out many valid combinations
     // Esp when doing queries using type variables.
+    println!("{:?}, {:?} in {:?}", first.clone(), second.clone(), input_annotations_for_vertices);
     let left = input_annotations_for_vertices.get(&first).unwrap();
     let right = input_annotations_for_vertices.get(&second).unwrap();
 

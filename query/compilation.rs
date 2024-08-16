@@ -8,7 +8,6 @@ use std::collections::HashMap;
 use answer::variable::Variable;
 use compiler::{
     delete::delete::{build_delete_plan, DeletePlan},
-    expression::block_compiler::compile_expressions,
     insert::insert::{build_insert_plan, InsertPlan},
     match_::{inference::annotated_functions::AnnotatedUnindexedFunctions, planner::pattern_plan::PatternPlan},
 };
@@ -19,7 +18,8 @@ use ir::program::{block::VariableRegistry, function::Function};
 use crate::{error::QueryError, type_inference::AnnotatedStage};
 
 pub struct CompiledPipeline {
-    compiled_stages: Vec<CompiledStage>,
+    pub(super) compiled_functions: Vec<CompiledFunction>,
+    pub(super) compiled_stages: Vec<CompiledStage>,
 }
 
 pub struct CompiledFunction {
@@ -33,13 +33,26 @@ pub enum CompiledStage {
     Delete(DeletePlan),
 }
 
+impl CompiledStage {
+    fn output_row_mapping(&self) -> HashMap<Variable, usize> {
+        match self {
+            CompiledStage::Match(_) => HashMap::new(), // TODO
+            CompiledStage::Insert(plan) => {
+                plan.output_row_plan.iter().enumerate().map(|(i, (v, _))| (v.clone(), i)).collect()
+            }
+            CompiledStage::Delete(plan) => {
+                plan.output_row_plan.iter().enumerate().map(|(i, (v, _))| (v.clone(), i)).collect()
+            }
+        }
+    }
+}
+
 pub(super) fn compile_pipeline(
     statistics: &Statistics,
     variable_registry: &VariableRegistry,
     annotated_functions: AnnotatedUnindexedFunctions,
     annotated_stages: Vec<AnnotatedStage>,
-) -> Result<(), QueryError> {
-    let mut input_variable_positions = HashMap::new();
+) -> Result<CompiledPipeline, QueryError> {
     let compiled_functions = annotated_functions
         .iter_functions()
         .map(|function| compile_function(statistics, variable_registry, function))
@@ -47,10 +60,13 @@ pub(super) fn compile_pipeline(
 
     let mut compiled_stages = Vec::with_capacity(annotated_stages.len());
     for stage in annotated_stages {
-        let compiled_stage = compile_stage(statistics, variable_registry, &mut input_variable_positions, stage);
+        let input_variable_positions =
+            compiled_stages.last().map(|stage: &CompiledStage| stage.output_row_mapping()).unwrap_or(HashMap::new());
+
+        let compiled_stage = compile_stage(statistics, variable_registry, &input_variable_positions, stage)?;
         compiled_stages.push(compiled_stage);
     }
-    Ok(())
+    Ok(CompiledPipeline { compiled_functions, compiled_stages })
 }
 
 fn compile_function(

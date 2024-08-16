@@ -21,7 +21,7 @@ use crate::{
 
 pub struct DeletePlan {
     pub instructions: Vec<DeleteInstruction>,
-    pub output_row_plan: Vec<VariableSource>,
+    pub output_row_plan: Vec<(Variable, VariableSource)>,
     // pub debug_info: HashMap<VariableSource, Variable>,
 }
 
@@ -98,7 +98,7 @@ pub fn build_delete_plan(
             if deleted_concepts.contains(variable) {
                 None
             } else {
-                Some(VariableSource::InputVariable(*position as u32))
+                Some((variable.clone(), VariableSource::InputVariable(*position as u32)))
             }
         })
         .collect::<Vec<_>>();

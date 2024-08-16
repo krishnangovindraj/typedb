@@ -133,7 +133,9 @@ pub fn infer_types_for_match_block(
         &annotated_schema_functions,
         Some(&annotated_preamble_functions),
     )?;
-    Ok(TypeAnnotations::build(root_tig))
+    let type_annotations = TypeAnnotations::build(root_tig);
+    debug_assert!(&match_block.variables().all(|v| type_annotations.variable_annotations_of(v).is_some()));
+    Ok(type_annotations)
 }
 
 #[cfg(test)]

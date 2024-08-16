@@ -31,7 +31,7 @@ use crate::{
 pub struct InsertPlan {
     pub instructions: Vec<InsertInstruction>,
     pub n_created_concepts: usize,
-    pub output_row_plan: Vec<VariableSource>, // Where to copy from
+    pub output_row_plan: Vec<(Variable, VariableSource)>, // Where to copy from
     pub debug_info: HashMap<VariableSource, Variable>,
 }
 
@@ -54,11 +54,11 @@ pub fn build_insert_plan(
     let mut output_row_plan = Vec::with_capacity(input_variables.len() + inserted_concepts.len()); // TODO
     input_variables.iter().map(|(v, i)| (i, v)).sorted().for_each(|(i, v)| {
         debug_assert!(*i == output_row_plan.len());
-        output_row_plan.push(VariableSource::InputVariable(*i as u32));
+        output_row_plan.push((v.clone(), VariableSource::InputVariable(*i as u32)));
     });
     inserted_concepts.iter().map(|(v, i)| (i, v)).sorted().for_each(|(i, v)| {
         debug_assert!(*i + input_variables.len() == output_row_plan.len());
-        output_row_plan.push(VariableSource::InsertedThing(*i));
+        output_row_plan.push((v.clone(), VariableSource::InsertedThing(*i)));
     });
 
     let debug_info = HashMap::new(); // TODO

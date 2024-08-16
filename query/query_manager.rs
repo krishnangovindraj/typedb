@@ -5,12 +5,13 @@
  */
 
 use compiler::match_::{inference::annotated_functions::IndexedAnnotatedFunctions, planner::pattern_plan::PatternPlan};
-use concept::type_::type_manager::TypeManager;
+use concept::{thing::statistics::Statistics, type_::type_manager::TypeManager};
 use function::{function::Function, function_manager::FunctionManager};
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 use typeql::query::{stage::Stage as TypeQLStage, SchemaQuery};
 
 use crate::{
+    compilation::{compile_pipeline, CompiledPipeline},
     define,
     error::QueryError,
     translation::{translate_pipeline, TranslatedPipeline},
@@ -49,6 +50,7 @@ impl QueryManager {
         snapshot: &mut impl WritableSnapshot,
         type_manager: &TypeManager,
         function_manager: &FunctionManager,
+        statistics: &Statistics,
         schema_function_annotations: &IndexedAnnotatedFunctions,
         query: &typeql::query::Pipeline,
     ) -> Result<(), QueryError> {
@@ -69,11 +71,9 @@ impl QueryManager {
             translated_stages,
         )?;
 
-        // compile_pipeline(annotated_preamble, annotated_stages);
         // // 3: Compile
-        // for stage in annotated_stages {
-        //     let compiled_stage = compile_stage(stage);
-        // }
+        let CompiledPipeline { compiled_functions, compiled_stages } =
+            compile_pipeline(statistics, &variable_registry, annotated_preamble, annotated_stages)?;
 
         todo!()
     }

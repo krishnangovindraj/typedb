@@ -103,6 +103,7 @@ pub(super) fn infer_types_for_pipeline(
             latest_match_index = Some(annotated_stages.len());
         }
         annotated_stages.push(annotated_stage);
+        println!("{:?}", variable_registry.variable_categories().collect::<Vec<_>>());
     }
     Ok(AnnotatedPipeline { annotated_stages, annotated_preamble })
 }
@@ -149,6 +150,19 @@ fn annotate_stage(
                 &AnnotatedUnindexedFunctions::empty(),
             )
             .map_err(|source| QueryError::TypeInference { source })?;
+            block.conjunction().constraints().iter().for_each(|constraint| match constraint {
+                Constraint::Isa(isa) => {
+                    running_variable_annotations
+                        .insert(isa.thing(), insert_annotations.variable_annotations_of(isa.thing()).unwrap().clone());
+                }
+                Constraint::RoleName(role_name) => {
+                    running_variable_annotations.insert(
+                        role_name.left(),
+                        insert_annotations.variable_annotations_of(role_name.left()).unwrap().clone(),
+                    );
+                }
+                _ => {}
+            });
 
             validate_insertable(
                 &block,
@@ -157,6 +171,7 @@ fn annotate_stage(
                 &insert_annotations,
             )
             .map_err(|source| QueryError::TypeInference { source })?;
+
             Ok(AnnotatedStage::Insert { block, annotations: insert_annotations })
         }
         TranslatedStage::Delete { block, deleted_variables } => {

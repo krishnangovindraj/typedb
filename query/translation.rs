@@ -67,7 +67,6 @@ pub(super) fn translate_pipeline(
         let translated = translate_stage(&mut translation_context, &all_function_signatures, typeql_stage)?;
         translated_stages.push(translated);
     }
-
     Ok(TranslatedPipeline {
         translated_preamble,
         translated_stages,

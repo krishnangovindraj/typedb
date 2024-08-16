@@ -4,7 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use answer::variable_value::VariableValue;
+use answer::{variable::Variable, variable_value::VariableValue};
 use compiler::insert::{ThingSource, TypeSource, ValueSource, VariableSource};
 use encoding::value::value::Value;
 
@@ -36,12 +36,12 @@ fn get_value<'a>(input: &'a Row<'a>, source: &'a ValueSource) -> &'a Value<'stat
 }
 
 pub fn populate_output_row<'input, 'output>(
-    output_row_plan: &[VariableSource],
+    output_row_plan: &[(Variable, VariableSource)],
     input: &Row<'input>,
     freshly_inserted: &[answer::Thing<'static>],
     output: &mut Row<'output>,
 ) {
-    for (i, source) in output_row_plan.iter().enumerate() {
+    for (i, (_, source)) in output_row_plan.iter().enumerate() {
         let value = match source {
             VariableSource::InputVariable(s) => input.get(VariablePosition::new(*s)).clone(),
             VariableSource::InsertedThing(s) => VariableValue::Thing(freshly_inserted.get(*s).unwrap().clone()),
