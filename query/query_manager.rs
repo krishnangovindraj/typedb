@@ -4,20 +4,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
-
-use answer::{variable::Variable, Type};
-use compiler::{
-    delete::delete::{build_delete_plan, DeletePlan},
-    insert::insert::{build_insert_plan, InsertPlan},
-    match_::{inference::annotated_functions::IndexedAnnotatedFunctions, planner::pattern_plan::PatternPlan},
-};
+use compiler::match_::{inference::annotated_functions::IndexedAnnotatedFunctions, planner::pattern_plan::PatternPlan};
 use concept::type_::type_manager::TypeManager;
 use function::{function::Function, function_manager::FunctionManager};
-use lending_iterator::LendingIterator;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 use typeql::query::{stage::Stage as TypeQLStage, SchemaQuery};
 
@@ -25,7 +14,7 @@ use crate::{
     define,
     error::QueryError,
     translation::{translate_pipeline, TranslatedPipeline},
-    type_inference::{infer_types_for_pipeline, AnnotatedPipeline, AnnotatedStage},
+    type_inference::{infer_types_for_pipeline, AnnotatedPipeline},
 };
 
 pub struct QueryManager {}
@@ -80,6 +69,7 @@ impl QueryManager {
             translated_stages,
         )?;
 
+        // compile_pipeline(annotated_preamble, annotated_stages);
         // // 3: Compile
         // for stage in annotated_stages {
         //     let compiled_stage = compile_stage(stage);
@@ -103,37 +93,4 @@ enum QueryReturn {
     MapStream,
     JSONStream,
     Aggregate,
-}
-
-enum CompiledStage {
-    Match(PatternPlan),
-    Insert(InsertPlan),
-    Delete(DeletePlan),
-}
-
-fn compile_stage(
-    input_variables: &HashMap<Variable, usize>,
-    annotated_stage: AnnotatedStage,
-) -> Result<CompiledStage, QueryError> {
-    match &annotated_stage {
-        AnnotatedStage::Match { block, block_annotations } => {
-            todo!()
-        }
-        AnnotatedStage::Insert { block, annotations } => {
-            let plan = build_insert_plan(block.conjunction().constraints(), input_variables, &annotations)
-                .map_err(|source| QueryError::WriteCompilation { source })?;
-            Ok(CompiledStage::Insert(plan))
-        }
-        AnnotatedStage::Delete { block, deleted_variables, annotations } => {
-            let plan =
-                build_delete_plan(input_variables, annotations, block.conjunction().constraints(), deleted_variables)
-                    .map_err(|source| QueryError::WriteCompilation { source })?;
-            Ok(CompiledStage::Delete(plan))
-        }
-        _ => todo!(),
-        // AnnotatedStage::Filter(_) => {}
-        // AnnotatedStage::Sort(_) => {}
-        // AnnotatedStage::Offset(_) => {}
-        // AnnotatedStage::Limit(_) => {}
-    }
 }

@@ -11,6 +11,10 @@ use std::{
 
 use answer::{variable::Variable, Type};
 use compiler::{
+    expression::{
+        block_compiler::compile_expressions,
+        compiled_expression::{CompiledExpression, ExpressionValueType},
+    },
     insert::validate::validate_insertable,
     match_::inference::{
         annotated_functions::{AnnotatedUnindexedFunctions, IndexedAnnotatedFunctions},
@@ -37,9 +41,21 @@ pub(super) struct AnnotatedPipeline {
 }
 
 pub(super) enum AnnotatedStage {
-    Match { block: FunctionalBlock, block_annotations: TypeAnnotations },
-    Insert { block: FunctionalBlock, annotations: TypeAnnotations },
-    Delete { block: FunctionalBlock, deleted_variables: Vec<Variable>, annotations: TypeAnnotations },
+    Match {
+        block: FunctionalBlock,
+        block_annotations: TypeAnnotations,
+        compiled_expressions: HashMap<Variable, CompiledExpression>,
+        variable_value_types: HashMap<Variable, ExpressionValueType>,
+    },
+    Insert {
+        block: FunctionalBlock,
+        annotations: TypeAnnotations,
+    },
+    Delete {
+        block: FunctionalBlock,
+        deleted_variables: Vec<Variable>,
+        annotations: TypeAnnotations,
+    },
     // ...
     Filter(Filter),
     Sort(Sort),
@@ -116,7 +132,11 @@ fn annotate_stage(
             block_annotations.variable_annotations().iter().for_each(|(k, v)| {
                 running_variable_annotations.insert(k.clone(), v.clone());
             });
-            Ok(AnnotatedStage::Match { block, block_annotations })
+            let (compiled_expressions, variable_value_types) =
+                compile_expressions(snapshot, type_manager, &block, variable_registry, &block_annotations)
+                    .map_err(|source| QueryError::ExpressionCompilation { source })?;
+
+            Ok(AnnotatedStage::Match { block, block_annotations, compiled_expressions, variable_value_types })
         }
         TranslatedStage::Insert { block } => {
             let insert_annotations = infer_types_for_match_block(

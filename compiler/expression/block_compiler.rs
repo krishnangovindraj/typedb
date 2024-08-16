@@ -45,7 +45,7 @@ pub fn compile_expressions<'block, Snapshot: ReadableSnapshot>(
     block: &'block FunctionalBlock,
     variable_registry: &'block VariableRegistry,
     type_annotations: &'block TypeAnnotations,
-) -> Result<HashMap<Variable, CompiledExpression>, ExpressionCompileError> {
+) -> Result<(HashMap<Variable, CompiledExpression>, HashMap<Variable, ExpressionValueType>), ExpressionCompileError> {
     let mut expression_index = HashMap::new();
     index_expressions(block.conjunction(), &mut expression_index)?;
     let assigned_variables = expression_index.keys().cloned().collect_vec();
@@ -63,7 +63,7 @@ pub fn compile_expressions<'block, Snapshot: ReadableSnapshot>(
     for variable in assigned_variables {
         compile_expressions_recursive(&mut context, variable, &expression_index)?
     }
-    Ok(context.compiled_expressions)
+    Ok((context.compiled_expressions, context.variable_value_types))
 }
 
 fn index_expressions<'block>(
@@ -109,6 +109,7 @@ fn compile_expressions_recursive<'a, Snapshot: ReadableSnapshot>(
         resolve_type_for_variable(context, variable, expression_assignments)?;
     }
     let compiled = ExpressionCompilationContext::compile(expression, &context.variable_value_types)?;
+    context.variable_value_types.insert(assigned_variable, compiled.return_type);
     context.compiled_expressions.insert(assigned_variable, compiled);
     Ok(())
 }
