@@ -13,7 +13,7 @@ use ir::{
         constraint::{Constraint, ExpressionBinding},
         variable_category::VariableCategory,
     },
-    program::block::{BlockContext, FunctionalBlock, VariableRegistry},
+    program::block::{FunctionalBlock, VariableRegistry},
 };
 use itertools::Itertools;
 
@@ -66,7 +66,8 @@ impl PatternPlan {
         let mut elements = Vec::new();
         let mut adjacency: HashMap<usize, HashSet<usize>> = HashMap::new();
 
-        for variable in block.variables() {
+        // TODO: Consider block.input_variables()
+        for variable in block.block_variables() {
             match variable_registry.get_variable_category(variable).unwrap() {
                 VariableCategory::Type | VariableCategory::ThingType => (), // ignore for now
                 VariableCategory::RoleType => {
@@ -130,7 +131,6 @@ impl PatternPlan {
                 Constraint::Plays(_) => todo!(),
             }
         }
-
         let ordering = initialise_plan_greedy(&elements, &adjacency);
         let index_to_variable: HashMap<_, _> =
             variable_index.iter().map(|(&variable, &index)| (index, variable)).collect();

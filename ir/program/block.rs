@@ -53,8 +53,15 @@ impl FunctionalBlock {
         Scope::scope_id(self)
     }
 
-    pub fn variables(&self) -> impl Iterator<Item = Variable> + '_ {
-        self.scope_context.variable_declaration.iter().map(|(v, _)| v.clone())
+    pub fn variable_scopes(&self) -> impl Iterator<Item = (&Variable, &ScopeId)> + '_ {
+        self.scope_context.variable_declaration.iter()
+    }
+    pub fn block_variables(&self) -> impl Iterator<Item = Variable> + '_ {
+        self.variable_scopes().filter_map(|(v, scope)| if scope != &ScopeId::INPUT { Some(v.clone()) } else { None })
+    }
+
+    pub fn input_variables(&self) -> impl Iterator<Item = Variable> + '_ {
+        self.variable_scopes().filter_map(|(v, scope)| if scope == &ScopeId::INPUT { Some(v.clone()) } else { None })
     }
 }
 
@@ -131,6 +138,7 @@ impl VariableRegistry {
 
     fn register_variable_named(&mut self, name: String) -> Variable {
         let variable = self.allocate_variable();
+        println!("Registered variable {} to {}", name.clone(), variable);
         self.variable_names.insert(variable, name);
         variable
     }
@@ -245,18 +253,20 @@ pub struct BlockContext<'a> {
 impl<'a> BlockContext<'a> {
     pub(crate) fn new(
         variable_registry: &'a mut VariableRegistry,
-        variable_names_index: &'a mut HashMap<String, Variable>,
+        input_variable_names: &'a mut HashMap<String, Variable>,
     ) -> BlockContext<'a> {
         let mut variable_declaration = HashMap::new();
-        variable_names_index.values().for_each(|v| {
-            variable_declaration.insert(v.clone(), ScopeId::ROOT);
+        input_variable_names.values().for_each(|v| {
+            variable_declaration.insert(v.clone(), ScopeId::INPUT);
         });
+        let mut scope_parents = HashMap::new();
+        scope_parents.insert(ScopeId::ROOT, ScopeId::INPUT);
         Self {
             variable_registry,
             variable_declaration,
-            variable_names_index,
-            scope_id_allocator: 1, // `0` is reserved for ROOT
-            scope_parents: HashMap::new(),
+            variable_names_index: input_variable_names,
+            scope_id_allocator: 2, // `0`, `1` are reserved for INPUT, ROOT respectively.
+            scope_parents,
         }
     }
 
