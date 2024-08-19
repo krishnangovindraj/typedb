@@ -16,6 +16,7 @@ use storage::snapshot::ReadableSnapshot;
 use crate::{
     batch::ImmutableRow, function_executor::FunctionExecutor, pattern_executor::PatternExecutor, VariablePosition,
 };
+use crate::batch::Batch;
 
 pub struct ProgramExecutor {
     entry: PatternExecutor,

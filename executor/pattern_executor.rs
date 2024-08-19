@@ -98,7 +98,7 @@ impl PatternExecutor {
             (steps_len - 1, None, Direction::Backward)
         } else {
             self.initialised = true;
-            (0, Some(Batch::EMPTY_SINGLE_ROW), Direction::Forward)
+            (0, Some(Batch::SINGLE_EMPTY_ROW), Direction::Forward)
         };
 
         loop {
@@ -795,5 +795,46 @@ impl OptionalExecutor {
 
     fn batch_continue(&mut self) -> Result<Option<Batch>, ConceptReadError> {
         todo!()
+    }
+}
+
+
+struct MatchClause<Snapshot> {
+    batch_iterator: BatchIterator<Snapshot>,
+    current_batch: Option<Result<Batch, ConceptReadError>>,
+    current_index: u32
+}
+
+impl<Snapshot: ReadableSnapshot + 'static> MatchClause<Snapshot> {
+    fn new(batch_iterator: BatchIterator<Snapshot>) -> Self {
+        Self { batch_iterator, current_batch: Some(Ok(Batch::EMPTY)), current_index: 0 }
+    }
+
+    fn forward_batches_till_has_next_or_none(&mut self) {
+        let must_fetch_next = match &self.current_batch {
+            None => false,
+            Some(Err(_)) => false,
+            Some(Ok(batch)) => self.current_index >= batch.rows_count(),
+        };
+        if must_fetch_next {
+            self.current_batch = self.batch_iterator.next();
+            self.forward_batches_till_has_next_or_none(); // Just in case we have empty batches
+        }
+    }
+}
+
+impl<Snapshot: ReadableSnapshot + 'static> LendingIterator for MatchClause<Snapshot> {
+    type Item<'a> = Result<ImmutableRow<'a>, &'a ConceptReadError>;
+
+    fn next(&mut self) -> Option<Self::Item<'_>> {
+        self.forward_batches_till_has_next_or_none();
+        match &self.current_batch {
+            None => None,
+            Some(Err(err)) => Some(Err(err)),
+            Some(Ok(batch)) => {
+                self.current_index += 1;
+                Some(Ok(batch.get_row(self.current_index - 1)))
+            }
+        }
     }
 }
