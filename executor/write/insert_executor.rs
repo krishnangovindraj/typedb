@@ -10,14 +10,11 @@ use std::{
 };
 
 use answer::variable_value::VariableValue;
-use compiler::{
-    delete::{delete::DeletePlan, instructions::DeleteEdge},
-    insert::{
-        insert::InsertPlan,
-        instructions::{InsertEdgeInstruction, InsertVertexInstruction},
-        ThingSource,
-    },
-};
+use compiler::{delete::{delete::DeletePlan, instructions::DeleteEdge}, insert::{
+    insert::InsertPlan,
+    instructions::{InsertEdgeInstruction, InsertVertexInstruction},
+    ThingSource,
+}, VariablePosition};
 use concept::{
     error::{ConceptReadError, ConceptWriteError},
     thing::thing_manager::ThingManager,
@@ -25,20 +22,41 @@ use concept::{
 use lending_iterator::LendingIterator;
 use storage::snapshot::WritableSnapshot;
 
-use crate::{accumulator::RowAccumulator, batch::Row, write::write_instruction::AsWriteInstruction};
+use crate::{accumulator::AccumulatingStage, batch::Row, write::write_instruction::AsWriteInstruction};
+use crate::accumulator::AccumulatingStageAPI;
+use crate::batch::ImmutableRow;
 
 //
 pub struct InsertExecutor {
     plan: InsertPlan,
-    accumulator: RowAccumulator,
 }
 
 impl InsertExecutor {
     pub fn new(plan: InsertPlan) -> Self {
-        let accumulator = RowAccumulator::new(plan.output_row_plan.len());
-        Self { plan, accumulator }
+        Self { plan }
     }
 }
+
+// impl AccumulatingStageAPI for InsertExecutor {
+//     type Error = WriteError;
+//     fn process_accumulated(&self, snapshot: &impl WritableSnapshot, thing_manager: &ThingManager, rows: &mut Box<[(Box<[VariableValue<'static>]>, u64)]>) -> Result<(), Self::Error> {
+//         for (row, multiplicity) in rows {
+//             self.execute_insert(snapshot, thing_manager, &mut Row::new(row, multiplicity))
+//         }
+//         Ok(())
+//     }
+//
+//     fn must_deduplicate_incoming_rows(&self) -> bool {
+//         true
+//     }
+//
+//     fn store_incoming_row_into(&self, incoming: &ImmutableRow<'_>, stored_row: &mut Box<[VariableValue<'static>]>) {
+//         (0..incoming.width()).for_each(|i| {
+//             stored_row[i] = incoming.get(VariablePosition::new(i as u32)).clone().into_owned();
+//         });
+//     }
+// }
+
 //
 // pub struct AccumulatingInserter<Snapshot: WritableSnapshot> {
 //     executor: InsertExecutor,
@@ -62,13 +80,13 @@ impl InsertExecutor {
 
 impl InsertExecutor {
     pub fn execute_insert(
-        &mut self,
+        &self,
         snapshot: &mut impl WritableSnapshot,
         thing_manager: &ThingManager,
         row: &mut Row<'_>,
     ) -> Result<(), WriteError> {
         debug_assert!(row.multiplicity() == 1); // The accumulator should de-duplicate for insert
-        let Self { plan, accumulator } = self;
+        let Self { plan } = self;
         for instruction in &plan.vertex_instructions {
             match instruction {
                 InsertVertexInstruction::PutAttribute(isa_attr) => {
