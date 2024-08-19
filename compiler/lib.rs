@@ -5,6 +5,7 @@
  */
 
 use std::error::Error;
+use std::fmt::{Display, Formatter};
 
 pub mod delete;
 pub mod expression;
@@ -17,3 +18,27 @@ macro_rules! filter_variants {
     };
 }
 pub(crate) use filter_variants;
+use ir::pattern::IrID;
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct VariablePosition {
+    position: u32,
+}
+
+impl VariablePosition {
+    pub fn new(position: u32) -> Self {
+        VariablePosition { position }
+    }
+
+    pub fn as_usize(&self) -> usize {
+        self.position as usize
+    }
+}
+
+impl Display for VariablePosition {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "P_{}", self.position)
+    }
+}
+
+impl IrID for VariablePosition {}

@@ -12,25 +12,22 @@ use crate::{batch::Row, VariablePosition};
 
 fn get_type<'a>(input: &'a Row<'a>, source: &'a TypeSource) -> &'a answer::Type {
     match source {
-        TypeSource::InputVariable(position) => input.get(VariablePosition::new(*position)).as_type(),
+        TypeSource::InputVariable(position) => input.get(position.clone()).as_type(),
         TypeSource::TypeConstant(type_) => type_,
     }
 }
 
 fn get_thing<'a>(
     input: &'a Row<'a>,
-    freshly_inserted: &'a [answer::Thing<'static>],
     source: &'a ThingSource,
 ) -> &'a answer::Thing<'static> {
-    match source {
-        ThingSource::InputVariable(position) => input.get(VariablePosition::new(*position)).as_thing(),
-        ThingSource::InsertedThing(offset) => freshly_inserted.get(*offset).unwrap(),
-    }
+    let ThingSource(position) = source;
+    input.get(position.clone()).as_thing()
 }
 
 fn get_value<'a>(input: &'a Row<'a>, source: &'a ValueSource) -> &'a Value<'static> {
     match source {
-        ValueSource::InputVariable(position) => input.get(VariablePosition::new(*position)).as_value(),
+        ValueSource::InputVariable(position) => input.get(position.clone()).as_value(),
         ValueSource::ValueConstant(constant) => constant,
     }
 }
@@ -43,7 +40,7 @@ pub fn populate_output_row<'input>(
 ) {
     for (i, (_, source)) in output_row_plan.iter().enumerate() {
         let value = match source {
-            VariableSource::InputVariable(s) => input.get(VariablePosition::new(*s)).clone(),
+            VariableSource::InputVariable(s) => input.get(s.clone()).clone(),
             VariableSource::InsertedThing(s) => VariableValue::Thing(freshly_inserted.get(*s).unwrap().clone()),
         };
         output[i] = value;
