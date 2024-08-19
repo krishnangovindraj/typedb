@@ -4,8 +4,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::error::Error;
-use std::fmt::{Display, Formatter};
+use std::{
+    error::Error,
+    fmt::{Display, Formatter},
+};
 
 pub mod delete;
 pub mod expression;

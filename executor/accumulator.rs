@@ -5,6 +5,7 @@
  */
 
 use answer::variable_value::VariableValue;
+
 use crate::batch::Row;
 
 // TODO: Optimise for allocations
@@ -15,7 +16,7 @@ pub(crate) struct RowAccumulator {
 
 impl RowAccumulator {
     pub(crate) fn new(width: usize) -> Self {
-        Self { rows: Vec::new() , width }
+        Self { rows: Vec::new(), width }
     }
     // pub(crate) fn allocate_next(&mut self) -> &mut [VariableValue<'static>] {
     //     let row = (0..self.width).map().collect::<Vec<_>>().into_boxed_slice();

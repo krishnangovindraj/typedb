@@ -10,13 +10,19 @@ use answer::variable::Variable;
 use encoding::graph::type_::Kind;
 use ir::pattern::constraint::Constraint;
 
-use crate::{delete::instructions::{DeleteInstruction, DeleteThing, Has, RolePlayer}, insert::{
-    get_thing_source, insert::collect_role_type_bindings, ThingSource, TypeSource, VariableSource,
-    WriteCompilationError,
-}, match_::inference::type_annotations::TypeAnnotations, VariablePosition};
+use crate::{
+    delete::instructions::{DeleteEdge, DeleteThing, Has, RolePlayer},
+    insert::{
+        get_thing_source, insert::collect_role_type_bindings, ThingSource, TypeSource, VariableSource,
+        WriteCompilationError,
+    },
+    match_::inference::type_annotations::TypeAnnotations,
+    VariablePosition,
+};
 
 pub struct DeletePlan {
-    pub instructions: Vec<DeleteInstruction>,
+    pub edge_instructions: Vec<DeleteEdge>,
+    pub vertex_instructions: Vec<DeleteThing>,
     pub output_row_plan: Vec<(Variable, VariableSource)>,
     // pub debug_info: HashMap<VariableSource, Variable>,
 }
@@ -29,11 +35,11 @@ pub fn build_delete_plan(
 ) -> Result<DeletePlan, WriteCompilationError> {
     // TODO: Maybe unify all WriteCompilation errors?
     let named_role_types = collect_role_type_bindings(constraints, type_annotations)?;
-    let mut instructions = Vec::new();
+    let mut edge_instructions = Vec::new();
     for constraint in constraints {
         match constraint {
             Constraint::Has(has) => {
-                instructions.push(DeleteInstruction::Has(Has {
+                edge_instructions.push(DeleteEdge::Has(Has {
                     owner: get_thing_source(input_variables, has.owner())?,
                     attribute: get_thing_source(input_variables, has.attribute())?,
                 }));
@@ -57,7 +63,7 @@ pub fn build_delete_plan(
                     }
                     (Some(_), Some(_)) => unreachable!(),
                 };
-                instructions.push(DeleteInstruction::RolePlayer(RolePlayer { relation, player, role }));
+                edge_instructions.push(DeleteEdge::RolePlayer(RolePlayer { relation, player, role }));
             }
             Constraint::Isa(_)
             | Constraint::Label(_)
@@ -73,6 +79,8 @@ pub fn build_delete_plan(
             }
         }
     }
+
+    let mut vertex_instructions = Vec::new();
     for variable in deleted_concepts {
         let Some(thing) = input_variables.get(variable) else {
             return Err(WriteCompilationError::DeletedThingWasNotInInput { variable: variable.clone() });
@@ -85,7 +93,7 @@ pub fn build_delete_plan(
         {
             Err(WriteCompilationError::IllegalRoleDelete { variable: variable.clone() })?;
         } else {
-            instructions.push(DeleteInstruction::Thing(DeleteThing { thing: ThingSource(thing.clone()) }));
+            vertex_instructions.push(DeleteThing { thing: ThingSource(thing.clone()) });
         };
     }
     // To produce the output stream, we remove the deleted concepts from each map in the stream.
@@ -100,5 +108,5 @@ pub fn build_delete_plan(
         })
         .collect::<Vec<_>>();
 
-    Ok(DeletePlan { instructions, output_row_plan: output_row })
+    Ok(DeletePlan { edge_instructions, vertex_instructions, output_row_plan: output_row })
 }

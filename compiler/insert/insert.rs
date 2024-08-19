@@ -18,16 +18,20 @@ use ir::pattern::{
 use itertools::Itertools;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 
-use crate::{filter_variants, insert::{
-    get_kinds_from_annotations, get_thing_source,
-    instructions::{Has, InsertInstruction, PutAttribute, PutObject, RolePlayer},
-    TypeSource, ValueSource, VariableSource, WriteCompilationError,
-}, match_::inference::type_annotations::TypeAnnotations, VariablePosition};
-use crate::insert::ThingSource;
+use crate::{
+    filter_variants,
+    insert::{
+        get_kinds_from_annotations, get_thing_source,
+        instructions::{Has, InsertEdgeInstruction, InsertVertexInstruction, PutAttribute, PutObject, RolePlayer},
+        ThingSource, TypeSource, ValueSource, VariableSource, WriteCompilationError,
+    },
+    match_::inference::type_annotations::TypeAnnotations,
+    VariablePosition,
+};
 
 pub struct InsertPlan {
-    pub instructions: Vec<InsertInstruction>,
-    pub n_created_concepts: usize,
+    pub vertex_instructions: Vec<InsertVertexInstruction>,
+    pub edge_instructions: Vec<InsertEdgeInstruction>,
     pub output_row_plan: Vec<(Variable, VariableSource)>, // Where to copy from
     pub debug_info: HashMap<VariableSource, Variable>,
 }
@@ -43,34 +47,33 @@ pub fn build_insert_plan(
     input_variables: &HashMap<Variable, VariablePosition>,
     type_annotations: &TypeAnnotations,
 ) -> Result<InsertPlan, WriteCompilationError> {
-    let mut instructions = Vec::with_capacity(constraints.len());
-    let inserted_concepts = add_inserted_concepts(constraints, input_variables, type_annotations, &mut instructions)?;
-    add_has(constraints, input_variables, &inserted_concepts, &mut instructions)?;
-    add_role_players(constraints, type_annotations, input_variables, &inserted_concepts, &mut instructions)?;
+    let mut vertex_instructions = Vec::with_capacity(constraints.len());
+    let all_variables =
+        add_inserted_concepts(constraints, input_variables, type_annotations, &mut vertex_instructions)?;
 
-    let mut output_row_plan = Vec::with_capacity(input_variables.len() + inserted_concepts.len()); // TODO
-    input_variables.iter().map(|(v, i)| (i, v)).sorted().for_each(|(i, v)| {
+    let mut edge_instructions = Vec::with_capacity(constraints.len());
+    add_has(constraints, &all_variables, &mut edge_instructions)?;
+    add_role_players(constraints, type_annotations, &all_variables, &mut edge_instructions)?;
+
+    let mut output_row_plan = Vec::with_capacity(all_variables.len()); // TODO
+    all_variables.iter().map(|(v, i)| (i, v)).sorted().for_each(|(i, v)| {
         debug_assert!(i.position as usize == output_row_plan.len());
         output_row_plan.push((v.clone(), VariableSource::InputVariable(i.clone())));
     });
-    inserted_concepts.iter().map(|(v, i)| (i, v)).sorted().for_each(|(i, v)| {
-        debug_assert!(*i + input_variables.len() == output_row_plan.len());
-        output_row_plan.push((v.clone(), VariableSource::InsertedThing(*i)));
-    });
 
     let debug_info = HashMap::new(); // TODO
-    Ok(InsertPlan { instructions, n_created_concepts: inserted_concepts.len(), output_row_plan, debug_info })
+    Ok(InsertPlan { vertex_instructions, edge_instructions, output_row_plan, debug_info })
 }
 
 fn add_inserted_concepts(
     constraints: &[Constraint<Variable>],
     input_variables: &HashMap<Variable, VariablePosition>,
     type_annotations: &TypeAnnotations,
-    instructions: &mut Vec<InsertInstruction>,
-) -> Result<HashMap<Variable, usize>, WriteCompilationError> {
+    vertex_instructions: &mut Vec<InsertVertexInstruction>,
+) -> Result<HashMap<Variable, VariablePosition>, WriteCompilationError> {
+    let mut output_variables = input_variables.clone();
     let type_bindings = collect_type_bindings(constraints, type_annotations)?;
     let value_bindings = collect_value_bindings(constraints)?;
-    let mut inserted_concepts = HashMap::new();
     filter_variants!(Constraint::Isa : constraints).try_for_each(|isa| {
         if input_variables.contains_key(&isa.thing()) {
             Err(WriteCompilationError::IsaStatementForInputVariable { variable: isa.thing() })?
@@ -100,10 +103,10 @@ fn add_inserted_concepts(
             is_object
         };
         if is_object {
-            let write_to = ThingSource(VariablePosition::new(inserted_concepts.len() as u32));
-            let instruction = InsertInstruction::PutObject(PutObject { type_, write_to });
-            inserted_concepts.insert(isa.thing(), inserted_concepts.len());
-            instructions.push(instruction);
+            let write_to = VariablePosition::new((input_variables.len() + vertex_instructions.len()) as u32);
+            output_variables.insert(isa.thing(), write_to);
+            let instruction = InsertVertexInstruction::PutObject(PutObject { type_, write_to: ThingSource(write_to) });
+            vertex_instructions.push(instruction);
         } else {
             let value_variable = resolve_value_variable_for_inserted_attribute(constraints, isa.thing())?;
             let value = if let Some(constant) = value_bindings.get(&value_variable) {
@@ -116,26 +119,26 @@ fn add_inserted_concepts(
                     variable: value_variable,
                 })?;
             };
-            let write_to = ThingSource(VariablePosition::new(inserted_concepts.len() as u32));
-            let instruction = InsertInstruction::PutAttribute(PutAttribute { type_, value, write_to});
-            inserted_concepts.insert(isa.thing(), inserted_concepts.len());
-            instructions.push(instruction);
+            let write_to = VariablePosition::new((input_variables.len() + vertex_instructions.len()) as u32);
+            output_variables.insert(isa.thing(), write_to);
+            let instruction =
+                InsertVertexInstruction::PutAttribute(PutAttribute { type_, value, write_to: ThingSource(write_to) });
+            vertex_instructions.push(instruction);
         };
         Ok(())
     })?;
-    Ok(inserted_concepts)
+    Ok(output_variables)
 }
 
 fn add_has(
     constraints: &[Constraint<Variable>],
     input_variables: &HashMap<Variable, VariablePosition>,
-    inserted_concepts: &HashMap<Variable, usize>,
-    instructions: &mut Vec<InsertInstruction>,
+    instructions: &mut Vec<InsertEdgeInstruction>,
 ) -> Result<(), WriteCompilationError> {
     filter_variants!(Constraint::Has: constraints).try_for_each(|has| {
         let owner = get_thing_source(input_variables, has.owner())?;
         let attribute = get_thing_source(input_variables, has.attribute())?;
-        instructions.push(InsertInstruction::Has(Has { owner, attribute }));
+        instructions.push(InsertEdgeInstruction::Has(Has { owner, attribute }));
         Ok(())
     })
 }
@@ -144,8 +147,7 @@ fn add_role_players(
     constraints: &[Constraint<Variable>],
     type_annotations: &TypeAnnotations,
     input_variables: &HashMap<Variable, VariablePosition>,
-    inserted_concepts: &HashMap<Variable, usize>,
-    instructions: &mut Vec<InsertInstruction>,
+    instructions: &mut Vec<InsertEdgeInstruction>,
 ) -> Result<(), WriteCompilationError> {
     let named_role_types = collect_role_type_bindings(constraints, type_annotations)?;
     filter_variants!(Constraint::Links: constraints).try_for_each(|role_player| {
@@ -168,7 +170,7 @@ fn add_role_players(
             }
             (Some(_), Some(_)) => unreachable!(),
         };
-        instructions.push(InsertInstruction::RolePlayer(RolePlayer { relation, player, role }));
+        instructions.push(InsertEdgeInstruction::RolePlayer(RolePlayer { relation, player, role }));
         Ok(())
     })?;
     Ok(())

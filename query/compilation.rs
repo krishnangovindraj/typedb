@@ -10,9 +10,9 @@ use compiler::{
     delete::delete::{build_delete_plan, DeletePlan},
     insert::insert::{build_insert_plan, InsertPlan},
     match_::{inference::annotated_functions::AnnotatedUnindexedFunctions, planner::pattern_plan::PatternPlan},
+    VariablePosition,
 };
 use concept::thing::statistics::Statistics;
-use executor::VariablePosition;
 use ir::program::{block::VariableRegistry, function::Function};
 
 use crate::{error::QueryError, type_inference::AnnotatedStage};
@@ -34,15 +34,21 @@ pub enum CompiledStage {
 }
 
 impl CompiledStage {
-    fn output_row_mapping(&self) -> HashMap<Variable, usize> {
+    fn output_row_mapping(&self) -> HashMap<Variable, VariablePosition> {
         match self {
             CompiledStage::Match(_) => HashMap::new(), // TODO
-            CompiledStage::Insert(plan) => {
-                plan.output_row_plan.iter().enumerate().map(|(i, (v, _))| (v.clone(), i)).collect()
-            }
-            CompiledStage::Delete(plan) => {
-                plan.output_row_plan.iter().enumerate().map(|(i, (v, _))| (v.clone(), i)).collect()
-            }
+            CompiledStage::Insert(plan) => plan
+                .output_row_plan
+                .iter()
+                .enumerate()
+                .map(|(i, (v, _))| (v.clone(), VariablePosition::new(i as u32)))
+                .collect(),
+            CompiledStage::Delete(plan) => plan
+                .output_row_plan
+                .iter()
+                .enumerate()
+                .map(|(i, (v, _))| (v.clone(), VariablePosition::new(i as u32)))
+                .collect(),
         }
     }
 }
@@ -80,7 +86,7 @@ fn compile_function(
 fn compile_stage(
     statistics: &Statistics,
     variable_registry: &VariableRegistry,
-    input_variables: &HashMap<Variable, usize>,
+    input_variables: &HashMap<Variable, VariablePosition>,
     annotated_stage: AnnotatedStage,
 ) -> Result<CompiledStage, QueryError> {
     match &annotated_stage {

@@ -6,39 +6,36 @@
 use std::{
     error::Error,
     fmt::{Debug, Display, Formatter},
+    sync::Arc,
 };
-use std::sync::Arc;
-use answer::variable_value::VariableValue;
 
+use answer::variable_value::VariableValue;
 use compiler::{
-    delete::{delete::DeletePlan, instructions::DeleteInstruction},
-    insert::{insert::InsertPlan, instructions::InsertInstruction},
+    delete::{delete::DeletePlan, instructions::DeleteEdge},
+    insert::{
+        insert::InsertPlan,
+        instructions::{InsertEdgeInstruction, InsertVertexInstruction},
+        ThingSource,
+    },
 };
-use concept::{error::ConceptWriteError, thing::thing_manager::ThingManager};
-use concept::error::ConceptReadError;
+use concept::{
+    error::{ConceptReadError, ConceptWriteError},
+    thing::thing_manager::ThingManager,
+};
 use lending_iterator::LendingIterator;
 use storage::snapshot::WritableSnapshot;
 
-use crate::{
-    batch::Row,
-    write::{
-        common::populate_output_row,
-        write_instruction::{AsDeleteInstruction, AsInsertInstruction},
-    },
-};
-use crate::accumulator::RowAccumulator;
-use crate::batch::{Batch, BatchRowIterator, ImmutableRow};
-use crate::pattern_executor::PatternExecutor;
+use crate::{accumulator::RowAccumulator, batch::Row, write::write_instruction::AsWriteInstruction};
 
 //
 pub struct InsertExecutor {
     plan: InsertPlan,
-    accumulator: RowAccumulator
+    accumulator: RowAccumulator,
 }
 
 impl InsertExecutor {
     pub fn new(plan: InsertPlan) -> Self {
-        let accumulator =  RowAccumulator::new(plan.n_created_concepts);
+        let accumulator = RowAccumulator::new(plan.output_row_plan.len());
         Self { plan, accumulator }
     }
 }
@@ -64,54 +61,58 @@ impl InsertExecutor {
 //
 
 impl InsertExecutor {
-    
-    pub fn execute_insert<'input, 'output>(
+    pub fn execute_insert(
         &mut self,
         snapshot: &mut impl WritableSnapshot,
         thing_manager: &ThingManager,
-        row: &mut Row<'static>,
+        row: &mut Row<'_>,
     ) -> Result<(), WriteError> {
         debug_assert!(row.multiplicity() == 1); // The accumulator should de-duplicate for insert
-        let Self {plan, accumulator } = self;
-        for instruction in &plan.instructions {
+        let Self { plan, accumulator } = self;
+        for instruction in &plan.vertex_instructions {
             match instruction {
-                InsertInstruction::PutAttribute(isa_attr) => {
-                    isa_attr.insert(snapshot, thing_manager, row)?
+                InsertVertexInstruction::PutAttribute(isa_attr) => {
+                    isa_attr.execute(snapshot, thing_manager, row)?;
                 }
-                InsertInstruction::PutObject(isa_object) => {
-                    isa_object.insert(snapshot, thing_manager, row)?
+                InsertVertexInstruction::PutObject(isa_object) => {
+                    let inserted = isa_object.execute(snapshot, thing_manager, row)?;
                 }
-                InsertInstruction::Has(has) => has.insert(snapshot, thing_manager, row)?,
-                InsertInstruction::RolePlayer(role_player) => {
-                    role_player.insert(snapshot, thing_manager, row)?
+            }
+        }
+        for instruction in &plan.edge_instructions {
+            match instruction {
+                InsertEdgeInstruction::Has(has) => {
+                    has.execute(snapshot, thing_manager, row)?;
+                }
+                InsertEdgeInstruction::RolePlayer(role_player) => {
+                    role_player.execute(snapshot, thing_manager, row)?;
                 }
             };
         }
         Ok(())
     }
 }
-//
-// pub fn execute_delete<'input, 'output>(
-//     // TODO: pub(crate)
-//     snapshot: &mut impl WritableSnapshot,
-//     thing_manager: &ThingManager,
-//     plan: &DeletePlan,
-//     input: &Row<'input>
-// ) -> Result<Row<'output>, WriteError> {
-//     debug_assert!(input.multiplicity() == 1); // Else, we have to return a set of rows.
-//
-//     for instruction in &plan.instructions {
-//         match instruction {
-//             DeleteInstruction::Thing(thing) => thing.delete(snapshot, thing_manager, input)?,
-//             DeleteInstruction::Has(has) => has.delete(snapshot, thing_manager, input)?,
-//             DeleteInstruction::RolePlayer(role_player) => role_player.delete(snapshot, thing_manager, input)?,
-//         }
-//     }
-//
-//     let mut tmp_output = (0..plan.output_row_plan.len()).map(|_| VariableValue::EMPTY).collect::<Vec<_>>().into_boxed_slice();
-//     populate_output_row(&plan.output_row_plan, input, [].as_slice(), &mut tmp_output);
-//     Ok(output) // TODO: Create output row
-// }
+
+pub fn execute_delete(
+    // TODO: pub(crate)
+    snapshot: &mut impl WritableSnapshot,
+    thing_manager: &ThingManager,
+    plan: &DeletePlan,
+    row: &mut Row<'_>,
+) -> Result<(), WriteError> {
+    // Row multiplicity doesn't matter. You can't delete the same thing twice
+    for instruction in &plan.edge_instructions {
+        match instruction {
+            DeleteEdge::Has(has) => has.execute(snapshot, thing_manager, row)?,
+            DeleteEdge::RolePlayer(role_player) => role_player.execute(snapshot, thing_manager, row)?,
+        }
+    }
+
+    for instruction in &plan.vertex_instructions {
+        instruction.execute(snapshot, thing_manager, row)?;
+    }
+    Ok(())
+}
 
 #[derive(Debug, Clone)]
 pub enum WriteError {

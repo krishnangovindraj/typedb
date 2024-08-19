@@ -9,9 +9,13 @@ use encoding::value::value::Value;
 use super::{ThingSource, TypeSource, ValueSource};
 
 #[derive(Debug)]
-pub enum InsertInstruction {
+pub enum InsertVertexInstruction {
     PutObject(PutObject),
     PutAttribute(PutAttribute),
+}
+
+#[derive(Debug)]
+pub enum InsertEdgeInstruction {
     Has(Has),               // TODO: Ordering
     RolePlayer(RolePlayer), // TODO: Ordering
 }

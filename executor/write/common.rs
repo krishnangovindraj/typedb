@@ -17,10 +17,7 @@ fn get_type<'a>(input: &'a Row<'a>, source: &'a TypeSource) -> &'a answer::Type 
     }
 }
 
-fn get_thing<'a>(
-    input: &'a Row<'a>,
-    source: &'a ThingSource,
-) -> &'a answer::Thing<'static> {
+fn get_thing<'a>(input: &'a Row<'a>, source: &'a ThingSource) -> &'a answer::Thing<'static> {
     let ThingSource(position) = source;
     input.get(position.clone()).as_thing()
 }

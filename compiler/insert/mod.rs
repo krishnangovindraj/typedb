@@ -14,6 +14,7 @@ use answer::{variable::Variable, Type};
 use encoding::{graph::type_::Kind, value::value::Value};
 use ir::pattern::constraint::Isa;
 use itertools::Itertools;
+
 use crate::VariablePosition;
 
 pub mod insert;
