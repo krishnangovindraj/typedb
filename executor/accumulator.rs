@@ -17,13 +17,13 @@ use crate::{
 };
 
 // TODO: Optimise for allocations
-pub(crate) struct AccumulatingStage<Snapshot: ReadableSnapshot + 'static, Executor: AccumulatingStageAPI<Snapshot>> {
+pub(crate) struct Accumulator<Snapshot: ReadableSnapshot + 'static, Executor: AccumulatingStageAPI<Snapshot>> {
     upstream: Box<PipelineStage<Snapshot>>, // Can't do lending iterator because it has a generic associated type
     rows: Vec<(Box<[VariableValue<'static>]>, u64)>,
     executor: Executor,
 }
 
-impl<Snapshot: ReadableSnapshot, Executor: AccumulatingStageAPI<Snapshot>> AccumulatingStage<Snapshot, Executor> {
+impl<Snapshot: ReadableSnapshot, Executor: AccumulatingStageAPI<Snapshot>> Accumulator<Snapshot, Executor> {
     fn accumulate(&mut self) -> Result<(), PipelineError> {
         let Self { executor, rows, upstream } = self;
         while let Some(result) = upstream.next() {
@@ -82,31 +82,25 @@ pub struct AccumulatedRowIterator<Snapshot: ReadableSnapshot + 'static> {
     next_index: usize,
 }
 
-//
-// // TODO: Implement LendingIterator instead ?
-// impl<Snapshot, Executor: AccumulatingStageAPI> Iterator for AccumulatedRowIterator<Snapshot, Executor> {
-//     // type Item<'a> = Result<ImmutableRow<'a>, Executor::Error>;
-//     type Item = Result<ImmutableRow<'static>, Executor::Error>;
-//     fn next(&mut self) -> Option<Self::Item> {
-//         if AccumulatingStageState::Initial == self.state {
-//             self.accumulator.accumulate();
-//             let mut (snapshot, thing_manager) = upstream.into_parts();
-//             match self.accumulator.executor.accumulate_and_process(&mut snapshot, self.accumulator.rows.as_mut_slice()) {
-//                 Err(err) => {
-//                     return Some(Err(err));
-//                 },
-//                 Ok(()) => {
-//                     self.state = AccumulatingStageState::Streaming(0);
-//                 }
-//             }
-//         }
-//         match self.state {
-//             AccumulatingStageState::Initial => {}
-//             AccumulatingStageState::Streaming(next_index) => {
-//                 self.state = AccumulatingStageState::Streaming(next_index + 1);
-//                 Some(Ok(&self.rows.get(next_index)))
-//             }
-//         }
-//         let AccumulatingStageState::Streaming(next_index) = self.state;
-//     }
-// }
+impl<Snapshot: ReadableSnapshot + 'static> AccumulatedRowIterator<Snapshot> {
+    pub(crate) fn finalise(self) -> PipelineContext<Snapshot> {
+        // TODO: Ensure we have been consumed
+        debug_assert!(self.next_index >= self.rows.len());
+        self.context
+    }
+}
+
+// TODO: Implement LendingIterator instead ?
+impl<Snapshot: ReadableSnapshot + 'static> LendingIterator for AccumulatedRowIterator<Snapshot> {
+    // type Item<'a> = Result<ImmutableRow<'a>, Executor::Error>;
+    type Item<'a> = Result<ImmutableRow<'a>, PipelineError>;
+    fn next(&mut self) -> Option<Self::Item<'_>> {
+        if self.next_index < self.rows.len() {
+            let (row, multiplicity) = self.rows.get(self.next_index).unwrap();
+            self.next_index += 1;
+            Some(Ok(ImmutableRow::new(row, *multiplicity)))
+        } else {
+            None
+        }
+    }
+}

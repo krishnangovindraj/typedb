@@ -64,6 +64,7 @@ impl<Snapshot: ReadableSnapshot + 'static> PipelineStage<Snapshot> {
     }
 
     pub(crate) fn finalise(self) -> PipelineContext<Snapshot> {
+        // TODO: Ensure the stages are done somehow
         match self {
             PipelineStage::Match(match_) => match_.finalise(),
         }

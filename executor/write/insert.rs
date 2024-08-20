@@ -10,20 +10,21 @@ use std::{
 
 use answer::variable_value::VariableValue;
 use compiler::{
-    delete::{delete::DeletePlan, instructions::DeleteEdge},
     insert::{
         insert::InsertPlan,
         instructions::{InsertEdgeInstruction, InsertVertexInstruction},
     },
     VariablePosition,
 };
-use concept::{error::ConceptWriteError, thing::thing_manager::ThingManager};
+use concept::thing::thing_manager::ThingManager;
+use itertools::Either;
+use lending_iterator::LendingIterator;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 
 use crate::{
-    accumulator::AccumulatingStageAPI,
+    accumulator::{AccumulatedRowIterator, AccumulatingStageAPI, Accumulator},
     batch::{ImmutableRow, Row},
-    pipeline::{PipelineContext, PipelineError},
+    pipeline::{PipelineContext, PipelineError, PipelineStageAPI},
     write::{write_instruction::AsWriteInstruction, WriteError},
 };
 
@@ -100,4 +101,42 @@ impl InsertExecutor {
     }
 }
 
-pub struct InsertStage {}
+type InsertAccumulator<Snapshot: WritableSnapshot + 'static> = Accumulator<Snapshot, InsertExecutor>;
+pub struct InsertStage<Snapshot: WritableSnapshot + 'static> {
+    inner: Option<Either<InsertAccumulator<Snapshot>, AccumulatedRowIterator<Snapshot>>>, // TODO: Figure out how to neatly turn one into the other
+    error: Option<PipelineError>,
+}
+
+impl<Snapshot: WritableSnapshot> LendingIterator for InsertStage<Snapshot> {
+    type Item<'a> = Result<ImmutableRow<'a>, PipelineError>;
+
+    fn next(&mut self) -> Option<Self::Item<'_>> {
+        if self.inner.is_some() && self.inner.as_ref().unwrap().is_left() {
+            let Either::Left(accumulator) = self.inner.take().unwrap() else { unreachable!() };
+            match accumulator.accumulate_process_and_iterate() {
+                Ok(iterator) => self.inner = Some(Either::Right(iterator)),
+                Err(err) => {
+                    self.error = Some(err);
+                }
+            }
+        };
+
+        if self.error.is_some() {
+            Some(Err(self.error.as_ref().unwrap().clone()))
+        } else {
+            debug_assert!(self.inner.is_some() && self.inner.as_ref().unwrap().is_right());
+            let Either::Right(iterator) = self.inner.as_mut().unwrap() else { unreachable!() };
+            iterator.next()
+        }
+    }
+}
+
+impl<Snapshot: WritableSnapshot> PipelineStageAPI<Snapshot> for InsertStage<Snapshot> {
+    fn finalise(self) -> PipelineContext<Snapshot> {
+        match self.inner {
+            Some(Either::Left(accumulator)) => todo!("Illegal, but unhandled"),
+            Some(Either::Right(iterator)) => iterator.finalise(),
+            None => todo!("Illegal again, but I don't prevent it?"),
+        }
+    }
+}
