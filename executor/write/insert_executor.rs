@@ -10,11 +10,15 @@ use std::{
 };
 
 use answer::variable_value::VariableValue;
-use compiler::{delete::{delete::DeletePlan, instructions::DeleteEdge}, insert::{
-    insert::InsertPlan,
-    instructions::{InsertEdgeInstruction, InsertVertexInstruction},
-    ThingSource,
-}, VariablePosition};
+use compiler::{
+    delete::{delete::DeletePlan, instructions::DeleteEdge},
+    insert::{
+        insert::InsertPlan,
+        instructions::{InsertEdgeInstruction, InsertVertexInstruction},
+        ThingSource,
+    },
+    VariablePosition,
+};
 use concept::{
     error::{ConceptReadError, ConceptWriteError},
     thing::thing_manager::ThingManager,
@@ -22,9 +26,11 @@ use concept::{
 use lending_iterator::LendingIterator;
 use storage::snapshot::WritableSnapshot;
 
-use crate::{accumulator::AccumulatingStage, batch::Row, write::write_instruction::AsWriteInstruction};
-use crate::accumulator::AccumulatingStageAPI;
-use crate::batch::ImmutableRow;
+use crate::{
+    accumulator::{AccumulatingStage, AccumulatingStageAPI},
+    batch::{ImmutableRow, Row},
+    write::write_instruction::AsWriteInstruction,
+};
 
 //
 pub struct InsertExecutor {

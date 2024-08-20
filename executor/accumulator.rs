@@ -5,69 +5,87 @@
  */
 
 use std::sync::Arc;
+
 use answer::variable_value::VariableValue;
 use concept::thing::thing_manager::ThingManager;
 use lending_iterator::LendingIterator;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 
-use crate::batch::{ImmutableRow};
-
-#[derive(Debug)]
-enum AccumulatingStageState {
-    Initial,
-    Streaming(usize),
-}
+use crate::{
+    batch::ImmutableRow,
+    pipeline::{PipelineContext, PipelineError, PipelineStage},
+};
 
 // TODO: Optimise for allocations
-pub(crate) struct AccumulatingStage<Executor: AccumulatingStageAPI> {
-    upstream: Box<dyn Iterator<Item=ImmutableRow<'static>>>, // Can't do lending iterator because it has a generic associated type
+pub(crate) struct AccumulatingStage<Snapshot: ReadableSnapshot + 'static, Executor: AccumulatingStageAPI> {
+    upstream: Box<PipelineStage<Snapshot>>, // Can't do lending iterator because it has a generic associated type
     rows: Vec<(Box<[VariableValue<'static>]>, u64)>,
     executor: Executor,
 }
 
-impl<Executor: AccumulatingStageAPI> AccumulatingStage<Executor> {
-    pub fn accumulate(self) -> Box<[(Box<[VariableValue<'static>]>, u64)]> {
-        for row in self.upstream {
-
+impl<Snapshot: ReadableSnapshot, Executor: AccumulatingStageAPI> AccumulatingStage<Snapshot, Executor> {
+    fn accumulate(&mut self) -> Result<(), PipelineError> {
+        let Self { executor, rows, upstream } = self;
+        while let Some(result) = upstream.next() {
+            match result {
+                Err(err) => return Err(err),
+                Ok(row) => {
+                    Self::accept_incoming_row(rows, executor, row);
+                }
+            }
         }
-        self.rows.into_boxed_slice()
+        Ok(())
     }
 
-    pub(crate) fn accept_incoming_row(&mut self, incoming: &ImmutableRow<'_>) {
-        let (output_multiplicity, output_row_count) = if self.executor.must_deduplicate_incoming_rows() {
+    fn accept_incoming_row(
+        rows: &mut Vec<(Box<[VariableValue<'static>]>, u64)>,
+        executor: &mut Executor,
+        incoming: ImmutableRow<'_>,
+    ) {
+        let (output_multiplicity, output_row_count) = if executor.must_deduplicate_incoming_rows() {
             (1, incoming.get_multiplicity())
         } else {
             (incoming.get_multiplicity(), 1)
         };
         for _ in 0..output_row_count {
-            let mut stored_row = (0..self.executor.row_width())
-                .map(|_| VariableValue::Empty).collect::<Vec<_>>().into_boxed_slice();
-            self.executor.store_incoming_row_into(incoming, &mut stored_row);
-            self.rows.push((stored_row, output_multiplicity));
+            let mut stored_row =
+                (0..executor.row_width()).map(|_| VariableValue::Empty).collect::<Vec<_>>().into_boxed_slice();
+            executor.store_incoming_row_into(&incoming, &mut stored_row);
+            rows.push((stored_row, output_multiplicity));
         }
+    }
+
+    pub fn accumulate_process_and_iterate(mut self) -> Result<AccumulatedRowIterator<Snapshot>, PipelineError> {
+        self.accumulate()?;
+        let Self { executor, rows, upstream } = self;
+        let context = upstream.finalise();
+        let (snapshot, thing_manager) = context.borrow_parts();
+        let mut rows = rows.into_boxed_slice();
+        executor.process_accumulated(snapshot, thing_manager, &mut rows)?;
+        Ok(AccumulatedRowIterator { context, rows, next_index: 0 })
     }
 }
 
-
-
-pub(crate) trait AccumulatingStageAPI : 'static {
-    type Error;
-    fn process_accumulated(&self, snapshot: &impl ReadableSnapshot, thing_manager: &ThingManager, row: &mut Box<[(Box<[VariableValue<'static>]>, u64)]>) -> Result<(), Self::Error>;
+pub(crate) trait AccumulatingStageAPI: 'static {
+    fn process_accumulated(
+        &self,
+        snapshot: &impl ReadableSnapshot,
+        thing_manager: &ThingManager,
+        row: &mut Box<[(Box<[VariableValue<'static>]>, u64)]>,
+    ) -> Result<(), PipelineError>;
     fn store_incoming_row_into(&self, incoming: &ImmutableRow<'_>, stored_row: &mut Box<[VariableValue<'static>]>);
     fn must_deduplicate_incoming_rows(&self) -> bool;
     fn row_width(&self) -> usize;
 }
 
-// pub struct AccumulatedRowIterator<Snapshot, Executor: AccumulatingStageAPI> {
-//     snapshot: Snapshot,
-//     thing_manager: ThingManager,
-//     next_index: usize,
-//     upstream: Box<dyn Stage>,
-//     accumulator: AccumulatingStage<Executor>,
-//     state: AccumulatingStageState,
-// }
+pub struct AccumulatedRowIterator<Snapshot: ReadableSnapshot + 'static> {
+    context: PipelineContext<Snapshot>,
+    rows: Box<[(Box<[VariableValue<'static>]>, u64)]>,
+    next_index: usize,
+}
+
 //
-// // TODO: Implement LendingIterator instead
+// // TODO: Implement LendingIterator instead ?
 // impl<Snapshot, Executor: AccumulatingStageAPI> Iterator for AccumulatedRowIterator<Snapshot, Executor> {
 //     // type Item<'a> = Result<ImmutableRow<'a>, Executor::Error>;
 //     type Item = Result<ImmutableRow<'static>, Executor::Error>;

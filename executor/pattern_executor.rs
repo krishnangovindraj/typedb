@@ -24,6 +24,7 @@ use storage::snapshot::ReadableSnapshot;
 use crate::{
     batch::{Batch, BatchRowIterator, ImmutableRow, Row},
     instruction::{iterator::TupleIterator, InstructionExecutor},
+    pipeline::{PipelineContext, PipelineError, PipelineStageAPI},
     SelectedPositions, VariablePosition,
 };
 
@@ -156,15 +157,22 @@ enum Direction {
     Backward,
 }
 
-struct BatchIterator<Snapshot> {
+struct BatchIterator<Snapshot: ReadableSnapshot> {
     executor: PatternExecutor,
-    snapshot: Arc<Snapshot>,
-    thing_manager: Arc<ThingManager>,
+    context: PipelineContext<Snapshot>,
 }
 
 impl<Snapshot: ReadableSnapshot> BatchIterator<Snapshot> {
     fn new(executor: PatternExecutor, snapshot: Arc<Snapshot>, thing_manager: Arc<ThingManager>) -> Self {
-        Self { executor, snapshot, thing_manager }
+        Self::new_from_context(executor, PipelineContext::Arced(snapshot, thing_manager))
+    }
+
+    fn new_from_context(executor: PatternExecutor, context: PipelineContext<Snapshot>) -> Self {
+        Self { executor, context }
+    }
+
+    fn into_parts(self) -> (PatternExecutor, PipelineContext<Snapshot>) {
+        (self.executor, self.context)
     }
 }
 
@@ -172,7 +180,9 @@ impl<Snapshot: ReadableSnapshot> Iterator for BatchIterator<Snapshot> {
     type Item = Result<Batch, ConceptReadError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let batch = self.executor.compute_next_batch(self.snapshot.as_ref(), self.thing_manager.as_ref());
+        let Self { executor, context } = self;
+        let (snapshot, thing_manager) = self.context.borrow_parts();
+        let batch = self.executor.compute_next_batch(snapshot, thing_manager);
         batch.transpose()
     }
 }
@@ -798,14 +808,13 @@ impl OptionalExecutor {
     }
 }
 
-
-struct MatchClause<Snapshot> {
+pub struct MatchStage<Snapshot: ReadableSnapshot> {
     batch_iterator: BatchIterator<Snapshot>,
     current_batch: Option<Result<Batch, ConceptReadError>>,
-    current_index: u32
+    current_index: u32,
 }
 
-impl<Snapshot: ReadableSnapshot + 'static> MatchClause<Snapshot> {
+impl<Snapshot: ReadableSnapshot + 'static> MatchStage<Snapshot> {
     fn new(batch_iterator: BatchIterator<Snapshot>) -> Self {
         Self { batch_iterator, current_batch: Some(Ok(Batch::EMPTY)), current_index: 0 }
     }
@@ -823,18 +832,25 @@ impl<Snapshot: ReadableSnapshot + 'static> MatchClause<Snapshot> {
     }
 }
 
-impl<Snapshot: ReadableSnapshot + 'static> LendingIterator for MatchClause<Snapshot> {
-    type Item<'a> = Result<ImmutableRow<'a>, &'a ConceptReadError>;
+impl<Snapshot: ReadableSnapshot + 'static> LendingIterator for MatchStage<Snapshot> {
+    type Item<'a> = Result<ImmutableRow<'a>, PipelineError>;
 
     fn next(&mut self) -> Option<Self::Item<'_>> {
         self.forward_batches_till_has_next_or_none();
         match &self.current_batch {
             None => None,
-            Some(Err(err)) => Some(Err(err)),
+            Some(Err(err)) => Some(Err(PipelineError::ConceptRead(err.clone()))),
             Some(Ok(batch)) => {
                 self.current_index += 1;
                 Some(Ok(batch.get_row(self.current_index - 1)))
             }
         }
+    }
+}
+
+impl<Snapshot: ReadableSnapshot + 'static> PipelineStageAPI<Snapshot> for MatchStage<Snapshot> {
+    fn finalise(self) -> PipelineContext<Snapshot> {
+        let (_, context) = self.batch_iterator.into_parts();
+        context
     }
 }
