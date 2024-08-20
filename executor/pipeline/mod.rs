@@ -5,6 +5,8 @@
  */
 
 use std::{marker::PhantomData, sync::Arc};
+use std::error::Error;
+use std::fmt::{Display, Formatter};
 
 use concept::{error::ConceptReadError, thing::thing_manager::ThingManager};
 use lending_iterator::LendingIterator;
@@ -42,10 +44,20 @@ impl<Snapshot: WritableSnapshot> PipelineContext<Snapshot> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum PipelineError {
     ConceptRead(ConceptReadError),
     WriteError(WriteError),
+}
+
+impl Display for PipelineError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        todo!()
+    }
+}
+
+impl Error for PipelineError {
+
 }
 
 pub trait PipelineStageAPI<Snapshot: ReadableSnapshot>:
