@@ -8,9 +8,9 @@ use std::{marker::PhantomData, sync::Arc};
 
 use concept::{error::ConceptReadError, thing::thing_manager::ThingManager};
 use lending_iterator::LendingIterator;
-use storage::snapshot::ReadableSnapshot;
+use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 
-use crate::{batch::ImmutableRow, pattern_executor::MatchStage};
+use crate::{batch::ImmutableRow, pattern_executor::MatchStage, write::WriteError};
 
 pub enum PipelineContext<Snapshot: ReadableSnapshot> {
     Arced(Arc<Snapshot>, Arc<ThingManager>),
@@ -26,9 +26,19 @@ impl<Snapshot: ReadableSnapshot> PipelineContext<Snapshot> {
     }
 }
 
+impl<Snapshot: WritableSnapshot> PipelineContext<Snapshot> {
+    pub(crate) fn borrow_parts_mut(&mut self) -> (&mut Snapshot, &mut ThingManager) {
+        match self {
+            PipelineContext::Arced(snapshot, thing_manager) => todo!("illegal"),
+            PipelineContext::Owned(snapshot, thing_manager) => (snapshot, thing_manager),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub enum PipelineError {
     ConceptRead(ConceptReadError),
+    WriteError { source: WriteError },
 }
 
 pub trait PipelineStageAPI<Snapshot: ReadableSnapshot>:
@@ -57,5 +67,24 @@ impl<Snapshot: ReadableSnapshot + 'static> PipelineStage<Snapshot> {
         match self {
             PipelineStage::Match(match_) => match_.finalise(),
         }
+    }
+}
+
+pub struct InitialStage<Snapshot: ReadableSnapshot + 'static> {
+    context: PipelineContext<Snapshot>,
+    only_entry: Option<ImmutableRow<'static>>,
+}
+
+impl<Snapshot: ReadableSnapshot + 'static> LendingIterator for InitialStage<Snapshot> {
+    type Item<'a> = Result<ImmutableRow<'a>, PipelineError>;
+
+    fn next(&mut self) -> Option<Self::Item<'_>> {
+        self.only_entry.take().map(|entry| Ok(entry))
+    }
+}
+
+impl<Snapshot: ReadableSnapshot + 'static> PipelineStageAPI<Snapshot> for InitialStage<Snapshot> {
+    fn finalise(self) -> PipelineContext<Snapshot> {
+        self.context
     }
 }

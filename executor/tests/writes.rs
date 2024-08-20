@@ -20,7 +20,7 @@ use concept::{
 use encoding::value::{label::Label, value::Value, value_type::ValueType};
 use executor::{
     batch::{ImmutableRow, Row},
-    write::insert_executor::{InsertExecutor, WriteError},
+    write::{insert::InsertExecutor, WriteError},
 };
 use ir::{
     program::function_signature::HashMapFunctionSignatureIndex,
@@ -188,7 +188,7 @@ fn execute_delete(
         output_vec.extend_from_slice(input_row.as_mut_slice());
         let mut output_multiplicity = 1;
         let mut output = Row::new(&mut output_vec, &mut output_multiplicity);
-        executor::write::insert_executor::execute_delete(snapshot, &thing_manager, &delete_plan, &mut output)?;
+        executor::write::delete::execute_delete(snapshot, &thing_manager, &delete_plan, &mut output)?;
         output_rows.push(output_vec);
     }
     println!("{:?}", &delete_plan.output_row_plan);

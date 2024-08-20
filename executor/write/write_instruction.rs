@@ -16,7 +16,7 @@ use concept::thing::{
 use encoding::value::value::Value;
 use storage::snapshot::WritableSnapshot;
 
-use crate::{batch::Row, write::insert_executor::WriteError, VariablePosition};
+use crate::{batch::Row, write::WriteError, VariablePosition};
 
 macro_rules! try_unwrap_as {
     ($variant:path : $item:expr) => {

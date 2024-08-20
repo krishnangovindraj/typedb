@@ -17,13 +17,13 @@ use crate::{
 };
 
 // TODO: Optimise for allocations
-pub(crate) struct AccumulatingStage<Snapshot: ReadableSnapshot + 'static, Executor: AccumulatingStageAPI> {
+pub(crate) struct AccumulatingStage<Snapshot: ReadableSnapshot + 'static, Executor: AccumulatingStageAPI<Snapshot>> {
     upstream: Box<PipelineStage<Snapshot>>, // Can't do lending iterator because it has a generic associated type
     rows: Vec<(Box<[VariableValue<'static>]>, u64)>,
     executor: Executor,
 }
 
-impl<Snapshot: ReadableSnapshot, Executor: AccumulatingStageAPI> AccumulatingStage<Snapshot, Executor> {
+impl<Snapshot: ReadableSnapshot, Executor: AccumulatingStageAPI<Snapshot>> AccumulatingStage<Snapshot, Executor> {
     fn accumulate(&mut self) -> Result<(), PipelineError> {
         let Self { executor, rows, upstream } = self;
         while let Some(result) = upstream.next() {
@@ -58,19 +58,17 @@ impl<Snapshot: ReadableSnapshot, Executor: AccumulatingStageAPI> AccumulatingSta
     pub fn accumulate_process_and_iterate(mut self) -> Result<AccumulatedRowIterator<Snapshot>, PipelineError> {
         self.accumulate()?;
         let Self { executor, rows, upstream } = self;
-        let context = upstream.finalise();
-        let (snapshot, thing_manager) = context.borrow_parts();
+        let mut context = upstream.finalise();
         let mut rows = rows.into_boxed_slice();
-        executor.process_accumulated(snapshot, thing_manager, &mut rows)?;
+        executor.process_accumulated(&mut context, &mut rows)?;
         Ok(AccumulatedRowIterator { context, rows, next_index: 0 })
     }
 }
 
-pub(crate) trait AccumulatingStageAPI: 'static {
+pub(crate) trait AccumulatingStageAPI<Snapshot: ReadableSnapshot + 'static>: 'static {
     fn process_accumulated(
         &self,
-        snapshot: &impl ReadableSnapshot,
-        thing_manager: &ThingManager,
+        context: &mut PipelineContext<Snapshot>,
         row: &mut Box<[(Box<[VariableValue<'static>]>, u64)]>,
     ) -> Result<(), PipelineError>;
     fn store_incoming_row_into(&self, incoming: &ImmutableRow<'_>, stored_row: &mut Box<[VariableValue<'static>]>);

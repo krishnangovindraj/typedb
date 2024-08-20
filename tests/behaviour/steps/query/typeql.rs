@@ -12,7 +12,7 @@ use compiler::{
     match_::inference::annotated_functions::IndexedAnnotatedFunctions,
 };
 use cucumber::gherkin::Step;
-use executor::{batch::Row, write::insert_executor::WriteError};
+use executor::{batch::Row, write::insert::WriteError};
 use ir::{
     program::function_signature::HashMapFunctionSignatureIndex,
     translation::{match_::translate_match, TranslationContext},
@@ -71,7 +71,7 @@ fn execute_insert_plan(
 ) -> Result<Vec<VariableValue<'static>>, WriteError> {
     let mut output_vec = (0..insert_plan.n_created_concepts).map(|_| VariableValue::Empty).collect_vec();
     with_write_tx!(context, |tx| {
-        executor::write::insert_executor::execute_insert(
+        executor::write::insert::execute_insert(
             &mut tx.snapshot,
             &tx.thing_manager,
             &insert_plan,
