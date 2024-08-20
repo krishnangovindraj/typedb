@@ -8,9 +8,12 @@ use std::{marker::PhantomData, sync::Arc};
 
 use concept::{error::ConceptReadError, thing::thing_manager::ThingManager};
 use lending_iterator::LendingIterator;
-use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
+use storage::durability_client::WALClient;
+use storage::snapshot::{ReadableSnapshot, ReadSnapshot, WritableSnapshot, WriteSnapshot};
 
 use crate::{batch::ImmutableRow, pattern_executor::MatchStage, write::WriteError};
+use crate::batch::{Batch, BatchRowIterator};
+use crate::write::insert::InsertStage;
 
 pub enum PipelineContext<Snapshot: ReadableSnapshot> {
     Arced(Arc<Snapshot>, Arc<ThingManager>),
@@ -24,10 +27,11 @@ impl<Snapshot: ReadableSnapshot> PipelineContext<Snapshot> {
             PipelineContext::Owned(snapshot, thing_manager) => (&snapshot, &thing_manager),
         }
     }
+
 }
 
 impl<Snapshot: WritableSnapshot> PipelineContext<Snapshot> {
-    pub(crate) fn borrow_parts_mut(&mut self) -> (&mut Snapshot, &mut ThingManager) {
+    pub fn borrow_parts_mut(&mut self) -> (&mut Snapshot, &mut ThingManager) {
         match self {
             PipelineContext::Arced(snapshot, thing_manager) => todo!("illegal"),
             PipelineContext::Owned(snapshot, thing_manager) => (snapshot, thing_manager),
@@ -38,49 +42,92 @@ impl<Snapshot: WritableSnapshot> PipelineContext<Snapshot> {
 #[derive(Clone)]
 pub enum PipelineError {
     ConceptRead(ConceptReadError),
-    WriteError { source: WriteError },
+    WriteError(WriteError),
 }
 
 pub trait PipelineStageAPI<Snapshot: ReadableSnapshot>:
     for<'a> LendingIterator<Item<'a> = Result<ImmutableRow<'a>, PipelineError>>
 {
     fn finalise(self) -> PipelineContext<Snapshot>;
-
-    // fn next(&mut self) -> ImmutableRow<'static>; // TODO: See if we can LendingIterator instead
 }
 
-type InsertStage<Snapshot> = PhantomData<Snapshot>;
-pub enum PipelineStage<Snapshot: ReadableSnapshot + 'static> {
+
+pub enum ReadablePipelineStage<Snapshot: ReadableSnapshot + 'static> {
+    Initial(InitialStage<Snapshot>),
     Match(MatchStage<Snapshot>),
-    // Insert(InsertStage<Snapshot>),
 }
 
-impl<Snapshot: ReadableSnapshot + 'static> PipelineStage<Snapshot> {
-    pub(crate) fn next(&mut self) -> Option<Result<ImmutableRow<'_>, PipelineError>> {
+impl<Snapshot: ReadableSnapshot + 'static> LendingIterator for ReadablePipelineStage<Snapshot> {
+    type Item<'a> = Result<ImmutableRow<'a>, PipelineError>;
+
+    fn next(&mut self) -> Option<Self::Item<'_>> {
         match self {
-            PipelineStage::Match(match_) => match_.next(),
-            // PipelineStage::Insert(insert.next()) => insert.next(),
+            ReadablePipelineStage::Initial(initial) => initial.next(),
+            ReadablePipelineStage::Match(match_) => match_.next(),
         }
     }
+}
 
-    pub(crate) fn finalise(self) -> PipelineContext<Snapshot> {
+impl<Snapshot: ReadableSnapshot+ 'static> PipelineStageAPI<Snapshot> for ReadablePipelineStage<Snapshot>  {
+    fn finalise(self) -> PipelineContext<Snapshot> {
         // TODO: Ensure the stages are done somehow
         match self {
-            PipelineStage::Match(match_) => match_.finalise(),
+            ReadablePipelineStage::Match(match_) => match_.finalise(),
+            ReadablePipelineStage::Initial(initial) => initial.finalise(),
+        }
+    }
+}
+
+
+
+
+pub enum WritablePipelineStage<Snapshot: WritableSnapshot + 'static> {
+    Initial(InitialStage<Snapshot>),
+    Match(MatchStage<Snapshot>),
+    Insert(InsertStage<Snapshot>),
+}
+
+
+impl<Snapshot: WritableSnapshot + 'static> LendingIterator for WritablePipelineStage<Snapshot> {
+    type Item<'a> = Result<ImmutableRow<'a>, PipelineError>;
+
+    fn next(&mut self) -> Option<Self::Item<'_>> {
+        match self {
+            WritablePipelineStage::Initial(initial) => initial.next(),
+            WritablePipelineStage::Match(match_) => match_.next(),
+            WritablePipelineStage::Insert(insert) => insert.next(),
+        }
+    }
+}
+
+impl<Snapshot: WritableSnapshot+ 'static> PipelineStageAPI<Snapshot> for WritablePipelineStage<Snapshot>  {
+    fn finalise(self) -> PipelineContext<Snapshot> {
+        // TODO: Ensure the stages are done somehow
+        match self {
+            WritablePipelineStage::Match(match_) => match_.finalise(),
+            WritablePipelineStage::Initial(initial) => initial.finalise(),
+            WritablePipelineStage::Insert(insert) => insert.finalise(),
         }
     }
 }
 
 pub struct InitialStage<Snapshot: ReadableSnapshot + 'static> {
     context: PipelineContext<Snapshot>,
-    only_entry: Option<ImmutableRow<'static>>,
+    only_entry: BatchRowIterator,
+}
+
+impl<Snapshot: ReadableSnapshot + 'static> InitialStage<Snapshot> {
+    pub fn new(context: PipelineContext<Snapshot>) -> Self{
+        Self { context, only_entry: BatchRowIterator::new(Ok(Batch::SINGLE_EMPTY_ROW)) }
+    }
 }
 
 impl<Snapshot: ReadableSnapshot + 'static> LendingIterator for InitialStage<Snapshot> {
     type Item<'a> = Result<ImmutableRow<'a>, PipelineError>;
-
     fn next(&mut self) -> Option<Self::Item<'_>> {
-        self.only_entry.take().map(|entry| Ok(entry))
+        self.only_entry.next().map(|result| {
+            result.map_err(|source| PipelineError::ConceptRead(source.clone()))
+        })
     }
 }
 

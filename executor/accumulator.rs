@@ -4,6 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 use answer::variable_value::VariableValue;
@@ -13,19 +14,35 @@ use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 
 use crate::{
     batch::ImmutableRow,
-    pipeline::{PipelineContext, PipelineError, PipelineStage},
+    pipeline::{PipelineContext, PipelineError},
 };
+use crate::pipeline::PipelineStageAPI;
 
 // TODO: Optimise for allocations
-pub(crate) struct Accumulator<Snapshot: ReadableSnapshot + 'static, Executor: AccumulatingStageAPI<Snapshot>> {
-    upstream: Box<PipelineStage<Snapshot>>, // Can't do lending iterator because it has a generic associated type
+pub(crate) struct Accumulator<Snapshot, PipelineStageType, Executor>
+where
+    Snapshot: ReadableSnapshot + 'static,
+    Executor: AccumulatingStageAPI<Snapshot>,
+    PipelineStageType: PipelineStageAPI<Snapshot>,
+{
+    upstream: Box<PipelineStageType>,
     rows: Vec<(Box<[VariableValue<'static>]>, u64)>,
     executor: Executor,
+    phantom: PhantomData<Snapshot>,
 }
 
-impl<Snapshot: ReadableSnapshot, Executor: AccumulatingStageAPI<Snapshot>> Accumulator<Snapshot, Executor> {
+impl<PipelineStageType, Snapshot, Executor> Accumulator<Snapshot, PipelineStageType, Executor>
+where
+    Snapshot: ReadableSnapshot + 'static,
+    Executor: AccumulatingStageAPI<Snapshot>,
+    PipelineStageType: PipelineStageAPI<Snapshot>,
+{
+    pub(crate) fn new(upstream: Box<PipelineStageType>, executor: Executor) -> Self {
+        Self { upstream, executor, rows: Vec::new(), phantom: PhantomData }
+    }
+
     fn accumulate(&mut self) -> Result<(), PipelineError> {
-        let Self { executor, rows, upstream } = self;
+        let Self { executor, rows, upstream, .. } = self;
         while let Some(result) = upstream.next() {
             match result {
                 Err(err) => return Err(err),
@@ -57,7 +74,7 @@ impl<Snapshot: ReadableSnapshot, Executor: AccumulatingStageAPI<Snapshot>> Accum
 
     pub fn accumulate_process_and_iterate(mut self) -> Result<AccumulatedRowIterator<Snapshot>, PipelineError> {
         self.accumulate()?;
-        let Self { executor, rows, upstream } = self;
+        let Self { executor, rows, upstream, .. } = self;
         let mut context = upstream.finalise();
         let mut rows = rows.into_boxed_slice();
         executor.process_accumulated(&mut context, &mut rows)?;

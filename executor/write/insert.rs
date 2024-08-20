@@ -27,6 +27,7 @@ use crate::{
     pipeline::{PipelineContext, PipelineError, PipelineStageAPI},
     write::{write_instruction::AsWriteInstruction, WriteError},
 };
+use crate::pipeline::WritablePipelineStage;
 
 //
 pub struct InsertExecutor {
@@ -48,7 +49,7 @@ impl<Snapshot: WritableSnapshot + 'static> AccumulatingStageAPI<Snapshot> for In
         let (snapshot, thing_manager) = context.borrow_parts_mut();
         for (row, multiplicity) in rows {
             self.execute_insert(snapshot, thing_manager, &mut Row::new(row, multiplicity))
-                .map_err(|source| PipelineError::WriteError { source })?;
+                .map_err(|source| PipelineError::WriteError(source))?;
         }
         Ok(())
     }
@@ -101,10 +102,17 @@ impl InsertExecutor {
     }
 }
 
-type InsertAccumulator<Snapshot: WritableSnapshot + 'static> = Accumulator<Snapshot, InsertExecutor>;
+type InsertAccumulator<Snapshot: WritableSnapshot + 'static> = Accumulator<Snapshot, WritablePipelineStage<Snapshot>, InsertExecutor>;
 pub struct InsertStage<Snapshot: WritableSnapshot + 'static> {
     inner: Option<Either<InsertAccumulator<Snapshot>, AccumulatedRowIterator<Snapshot>>>, // TODO: Figure out how to neatly turn one into the other
     error: Option<PipelineError>,
+}
+
+impl<Snapshot: WritableSnapshot + 'static> InsertStage<Snapshot> {
+    pub fn new(upstream: Box<WritablePipelineStage<Snapshot>>, executor: InsertExecutor) -> InsertStage<Snapshot> {
+        let accumulator = Accumulator::new(upstream, executor);
+        Self { inner: Some(Either::Left(accumulator)) , error: None}
+    }
 }
 
 impl<Snapshot: WritableSnapshot> LendingIterator for InsertStage<Snapshot> {

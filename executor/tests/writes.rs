@@ -22,6 +22,8 @@ use executor::{
     batch::{ImmutableRow, Row},
     write::{insert::InsertExecutor, WriteError},
 };
+use executor::pipeline::{InitialStage, PipelineContext, PipelineStageAPI, WritablePipelineStage};
+use executor::write::insert::InsertStage;
 use ir::{
     program::function_signature::HashMapFunctionSignatureIndex,
     translation::{match_::translate_match, TranslationContext},
@@ -411,4 +413,70 @@ fn delete_has() {
     let snapshot = storage.clone().open_snapshot_read();
     assert_eq!(0, p10.as_thing().as_object().get_has_unordered(&snapshot, &thing_manager).count());
     snapshot.close_resources()
+}
+
+#[test]
+fn pipeline_initial_to_insert() {
+    let (_tmp_dir, storage) = setup_storage();
+    let (type_manager, thing_manager) = load_managers(storage.clone());
+    setup_schema(storage.clone());
+    let mut snapshot = storage.clone().open_snapshot_write();
+    let query_str = "insert $p isa person, has age 10;";
+    let (mut context, mut rows) = execute_insert_via_pipeline(snapshot, &type_manager, thing_manager, query_str).unwrap();
+    let PipelineContext::Owned(mut snapshot, mut thing_manager) = context else { unreachable!() };
+    snapshot.commit().unwrap();
+    {
+        let snapshot = storage.clone().open_snapshot_read();
+        let age_type = type_manager.get_attribute_type(&snapshot, &AGE_LABEL).unwrap().unwrap();
+        let attr_age_10 =
+            thing_manager.get_attribute_with_value(&snapshot, age_type, Value::Long(10)).unwrap().unwrap();
+        assert_eq!(1, attr_age_10.get_owners(&snapshot, &thing_manager).count());
+        snapshot.close_resources()
+    }
+}
+
+
+fn execute_insert_via_pipeline<Snapshot: WritableSnapshot + 'static>(
+    snapshot: Snapshot,
+    type_manager: &TypeManager,
+    thing_manager: ThingManager,
+    query_str: &str,
+) -> Result<(PipelineContext<Snapshot>, Vec<ImmutableRow<'static>>), WriteError> {
+    let mut translation_context = TranslationContext::new();
+    let typeql_insert = typeql::parse_query(query_str).unwrap().into_pipeline().stages.pop().unwrap().into_insert();
+    let block = ir::translation::writes::translate_insert(&mut translation_context, &typeql_insert).unwrap();
+
+    let (entry_annotations, _) = infer_types(
+        &block,
+        vec![],
+        &snapshot,
+        type_manager,
+        &IndexedAnnotatedFunctions::empty(),
+        &translation_context.variable_registry,
+    )
+        .unwrap();
+
+    let mut insert_plan =
+        build_insert_plan(block.conjunction().constraints(), &HashMap::new(), &entry_annotations).unwrap();
+
+    println!("Insert Vertex:\n{:?}", &insert_plan.vertex_instructions);
+    println!("Insert Edges:\n{:?}", &insert_plan.edge_instructions);
+    insert_plan.debug_info.iter().for_each(|(k, v)| {
+        println!("{:?} -> {:?}", k, translation_context.variable_registry.get_variables_named().get(v))
+    });
+
+    // TODO: Replace with accumulator
+    let mut output_rows = Vec::new();
+    println!("Insert OutputPlan: {:?}", &insert_plan.output_row_plan);
+    let output_width = insert_plan.output_row_plan.len();
+    let mut insert_executor = InsertExecutor::new(insert_plan);
+
+    let pipeline_context = PipelineContext::Owned(snapshot, thing_manager);
+    let initial_stage = WritablePipelineStage::Initial(InitialStage::new(pipeline_context));
+    let mut insert_stage = WritablePipelineStage::Insert(InsertStage::new(Box::new(initial_stage), insert_executor));
+    for row in insert_stage.next().unwrap() {
+        output_rows.push(row.clone().into_owned());
+    }
+    let context = insert_stage.finalise();
+    Ok((context, output_rows))
 }

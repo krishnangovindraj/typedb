@@ -22,7 +22,7 @@ pub mod expression_executor;
 mod function_executor;
 pub(crate) mod instruction;
 pub mod pattern_executor;
-mod pipeline;
+pub mod pipeline;
 pub mod program_executor;
 pub mod write;
 
