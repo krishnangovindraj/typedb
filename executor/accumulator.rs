@@ -4,8 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::marker::PhantomData;
-use std::sync::Arc;
+use std::{marker::PhantomData, sync::Arc};
 
 use answer::variable_value::VariableValue;
 use concept::thing::thing_manager::ThingManager;
@@ -14,9 +13,8 @@ use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 
 use crate::{
     batch::ImmutableRow,
-    pipeline::{PipelineContext, PipelineError},
+    pipeline::{PipelineContext, PipelineError, PipelineStageAPI},
 };
-use crate::pipeline::PipelineStageAPI;
 
 // TODO: Optimise for allocations
 pub(crate) struct Accumulator<Snapshot, PipelineStageType, Executor>
