@@ -4,6 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use concept::{thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
@@ -22,12 +23,13 @@ use test_utils::{create_tmp_dir, init_logging, TempDir};
 
 pub fn setup_storage() -> (TempDir, Arc<MVCCStorage<WALClient>>) {
     init_logging();
-    let storage_path = create_tmp_dir();
+    let storage_path = PathBuf::from("/mnt/disks/localssd/foo/test_sandbox");
     let wal = WAL::create(&storage_path).unwrap();
     let storage = Arc::new(
         MVCCStorage::<WALClient>::create::<EncodingKeyspace>("storage", &storage_path, WALClient::new(wal)).unwrap(),
     );
-    (storage_path, storage)
+    println!("Storage path is {:?}", storage_path);
+    (create_tmp_dir(), storage)
 }
 
 pub fn load_managers(storage: Arc<MVCCStorage<WALClient>>, type_cache_at: Option<SequenceNumber>) -> (Arc<TypeManager>, ThingManager) {
