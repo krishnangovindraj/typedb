@@ -6,26 +6,34 @@
 
 #![deny(unused_must_use)]
 
-use std::{array, collections::HashMap, ffi::c_int, fs::File, path::Path, sync::{Arc, OnceLock}, thread};
-use std::sync::{mpsc, RwLock};
-use std::thread::{JoinHandle, sleep};
-use std::time::{Duration, Instant};
+use std::{
+    array,
+    collections::HashMap,
+    ffi::c_int,
+    fs::File,
+    path::Path,
+    sync::{mpsc, Arc, OnceLock, RwLock},
+    thread,
+    thread::{sleep, JoinHandle},
+    time::{Duration, Instant},
+};
 
 use answer::variable_value::VariableValue;
-use compiler::match_::inference::annotated_functions::IndexedAnnotatedFunctions;
+use compiler::{
+    match_::inference::{annotated_functions::IndexedAnnotatedFunctions, type_inference::infer_types},
+    VariablePosition,
+};
 use concept::{
     thing::{object::ObjectAPI, thing_manager::ThingManager},
     type_::{type_manager::TypeManager, Ordering, OwnerAPI, PlayerAPI},
 };
 use encoding::value::{label::Label, value_type::ValueType};
-
-use rand::distributions::DistString;
-use compiler::match_::inference::type_inference::infer_types;
-use compiler::VariablePosition;
-use executor::batch::Row;
-use executor::write::insert::InsertExecutor;
-use executor::write::WriteError;
+use executor::{
+    batch::Row,
+    write::{insert::InsertExecutor, WriteError},
+};
 use ir::translation::TranslationContext;
+use rand::distributions::DistString;
 use storage::{
     durability_client::WALClient,
     snapshot::{CommittableSnapshot, WritableSnapshot, WriteSnapshot},
@@ -88,7 +96,6 @@ fn setup_schema(storage: Arc<MVCCStorage<WALClient>>) {
     snapshot.commit().unwrap();
 }
 
-
 fn execute_insert(
     snapshot: &mut impl WritableSnapshot,
     type_manager: &TypeManager,
@@ -113,7 +120,7 @@ fn execute_insert(
         &IndexedAnnotatedFunctions::empty(),
         &translation_context.variable_registry,
     )
-        .unwrap();
+    .unwrap();
 
     let insert_plan =
         compiler::insert::program::compile(block.conjunction().constraints(), &input_row_format, &entry_annotations)
@@ -175,7 +182,7 @@ fn multi_threaded_inserts() {
                     &vec![],
                     vec![vec![]],
                 )
-                    .unwrap();
+                .unwrap();
                 snapshot.commit().unwrap();
             }
         })
@@ -220,12 +227,11 @@ fn rwlock() {
         }
         let latencies = end_times.iter().map(|t| *t - start).collect::<Vec<_>>();
         let max_latency_ms = (latencies.iter().max().unwrap()).as_micros();
-        let avg_latency_ms = latencies.iter().map(|x| x.as_micros()).sum::<u128>() as usize/ latencies.len();
+        let avg_latency_ms = latencies.iter().map(|x| x.as_micros()).sum::<u128>() as usize / latencies.len();
         println!("Max latency: {max_latency_ms} us");
         println!("Avg latency: {avg_latency_ms} us");
     }
 }
-
 
 #[test]
 fn mpsc() {
@@ -265,7 +271,7 @@ fn mpsc() {
 fn noop() {
     for n_tests in 0..20 {
         let start = Instant::now();
-        let x = 123456/124 * 123;
+        let x = 123456 / 124 * 123;
         let noop_latency_ms = (Instant::now() - start).as_nanos();
         println!("noop latency: {noop_latency_ms} NANOs");
     }
