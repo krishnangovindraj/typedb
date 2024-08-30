@@ -10,6 +10,7 @@ use std::{
     fmt, io,
     io::{Read, Write},
 };
+use std::sync::mpsc;
 
 use durability::{wal::WAL, DurabilityRecordType, DurabilityService, DurabilityServiceError, RawRecord};
 use itertools::Itertools;
@@ -45,7 +46,7 @@ pub trait DurabilityClient {
     where
         Record: UnsequencedDurabilityRecord;
 
-    fn sync_all(&self);
+    fn request_sync(&self) -> mpsc::Receiver<()>;
 
     fn iter_from(
         &self,
@@ -141,8 +142,8 @@ impl WALClient {
 
 impl DurabilityClient for WALClient {
 
-    fn sync_all(&self) {
-        self.wal.sync_all()
+    fn request_sync(&self) -> mpsc::Receiver<()> {
+        self.wal.request_sync()
     }
 
     fn register_record_type<Record: DurabilityRecord>(&mut self) {
