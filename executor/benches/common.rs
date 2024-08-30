@@ -6,8 +6,10 @@
 
 use std::sync::Arc;
 
-use concept::{thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
-use concept::type_::type_manager::type_cache::TypeCache;
+use concept::{
+    thing::thing_manager::ThingManager,
+    type_::type_manager::{type_cache::TypeCache, TypeManager},
+};
 use durability::wal::WAL;
 use encoding::{
     graph::{
@@ -16,8 +18,7 @@ use encoding::{
     },
     EncodingKeyspace,
 };
-use storage::{durability_client::WALClient, MVCCStorage};
-use storage::sequence_number::SequenceNumber;
+use storage::{durability_client::WALClient, sequence_number::SequenceNumber, MVCCStorage};
 use test_utils::{create_tmp_dir, init_logging, TempDir};
 
 pub fn setup_storage() -> (TempDir, Arc<MVCCStorage<WALClient>>) {
@@ -30,7 +31,10 @@ pub fn setup_storage() -> (TempDir, Arc<MVCCStorage<WALClient>>) {
     (storage_path, storage)
 }
 
-pub fn load_managers(storage: Arc<MVCCStorage<WALClient>>, type_cache_at: Option<SequenceNumber>) -> (Arc<TypeManager>, ThingManager) {
+pub fn load_managers(
+    storage: Arc<MVCCStorage<WALClient>>,
+    type_cache_at: Option<SequenceNumber>,
+) -> (Arc<TypeManager>, ThingManager) {
     let definition_key_generator = Arc::new(DefinitionKeyGenerator::new());
     let type_vertex_generator = Arc::new(TypeVertexGenerator::new());
     let thing_vertex_generator = Arc::new(ThingVertexGenerator::load(storage.clone()).unwrap());

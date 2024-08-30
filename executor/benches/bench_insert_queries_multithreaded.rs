@@ -6,10 +6,17 @@
 
 #![deny(unused_must_use)]
 
-use std::{array, collections::HashMap, ffi::c_int, fs::File, path::Path, sync::{Arc, OnceLock}, thread};
-use std::sync::{mpsc, RwLock};
-use std::thread::{JoinHandle, sleep};
-use std::time::{Duration, Instant};
+use std::{
+    array,
+    collections::HashMap,
+    ffi::c_int,
+    fs::File,
+    path::Path,
+    sync::{mpsc, Arc, OnceLock, RwLock},
+    thread,
+    thread::{sleep, JoinHandle},
+    time::{Duration, Instant},
+};
 
 use answer::variable_value::VariableValue;
 use compiler::match_::inference::annotated_functions::IndexedAnnotatedFunctions;
@@ -19,7 +26,6 @@ use concept::{
 };
 use encoding::value::{label::Label, value_type::ValueType};
 use executor::{batch::Row, write::insert_executor::WriteError};
-
 use rand::distributions::DistString;
 use storage::{
     durability_client::WALClient,
@@ -171,7 +177,7 @@ fn multi_threaded_inserts() {
                     &vec![],
                     vec![vec![]],
                 )
-                    .unwrap();
+                .unwrap();
                 snapshot.commit().unwrap();
             }
         })
@@ -216,12 +222,11 @@ fn rwlock() {
         }
         let latencies = end_times.iter().map(|t| *t - start).collect::<Vec<_>>();
         let max_latency_ms = (latencies.iter().max().unwrap()).as_micros();
-        let avg_latency_ms = latencies.iter().map(|x| x.as_micros()).sum::<u128>() as usize/ latencies.len();
+        let avg_latency_ms = latencies.iter().map(|x| x.as_micros()).sum::<u128>() as usize / latencies.len();
         println!("Max latency: {max_latency_ms} us");
         println!("Avg latency: {avg_latency_ms} us");
     }
 }
-
 
 #[test]
 fn mpsc() {
@@ -261,7 +266,7 @@ fn mpsc() {
 fn noop() {
     for n_tests in 0..20 {
         let start = Instant::now();
-        let x = 123456/124 * 123;
+        let x = 123456 / 124 * 123;
         let noop_latency_ms = (Instant::now() - start).as_nanos();
         println!("noop latency: {noop_latency_ms} NANOs");
     }
