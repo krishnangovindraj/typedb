@@ -18,9 +18,14 @@ use concept::{
     type_::{type_manager::TypeManager, Ordering, OwnerAPI, PlayerAPI},
 };
 use encoding::value::{label::Label, value_type::ValueType};
-use executor::{batch::Row, write::insert_executor::WriteError};
 
 use rand::distributions::DistString;
+use compiler::match_::inference::type_inference::infer_types;
+use compiler::VariablePosition;
+use executor::batch::Row;
+use executor::write::insert::InsertExecutor;
+use executor::write::WriteError;
+use ir::translation::TranslationContext;
 use storage::{
     durability_client::WALClient,
     snapshot::{CommittableSnapshot, WritableSnapshot, WriteSnapshot},
@@ -39,7 +44,6 @@ static MEMBERSHIP_MEMBER_LABEL: OnceLock<Label> = OnceLock::new();
 static MEMBERSHIP_GROUP_LABEL: OnceLock<Label> = OnceLock::new();
 static AGE_LABEL: OnceLock<Label> = OnceLock::new();
 static NAME_LABEL: OnceLock<Label> = OnceLock::new();
-
 fn setup_schema(storage: Arc<MVCCStorage<WALClient>>) {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
 
@@ -76,13 +80,14 @@ fn setup_schema(storage: Arc<MVCCStorage<WALClient>>) {
     let name_type = type_manager.create_attribute_type(&mut snapshot, NAME_LABEL.get().unwrap()).unwrap();
     name_type.set_value_type(&mut snapshot, &type_manager, &thing_manager, ValueType::String).unwrap();
 
-    person_type.set_owns(&mut snapshot, &type_manager, &thing_manager, age_type.clone(), Ordering::Unordered).unwrap();
-    person_type.set_owns(&mut snapshot, &type_manager, &thing_manager, name_type.clone(), Ordering::Unordered).unwrap();
+    person_type.set_owns(&mut snapshot, &type_manager, &thing_manager, age_type.clone()).unwrap();
+    person_type.set_owns(&mut snapshot, &type_manager, &thing_manager, name_type.clone()).unwrap();
     person_type.set_plays(&mut snapshot, &type_manager, &thing_manager, membership_member_type.clone()).unwrap();
     group_type.set_plays(&mut snapshot, &type_manager, &thing_manager, membership_group_type.clone()).unwrap();
 
     snapshot.commit().unwrap();
 }
+
 
 fn execute_insert(
     snapshot: &mut impl WritableSnapshot,
@@ -93,43 +98,42 @@ fn execute_insert(
     input_rows: Vec<Vec<VariableValue<'static>>>,
 ) -> Result<Vec<Vec<VariableValue<'static>>>, WriteError> {
     let typeql_insert = typeql::parse_query(query_str).unwrap().into_pipeline().stages.pop().unwrap().into_insert();
-    let block = ir::translation::writes::translate_insert(&typeql_insert).unwrap().finish();
+    let mut translation_context = TranslationContext::new();
+    let block = ir::translation::writes::translate_insert(&mut translation_context, &typeql_insert).unwrap();
     let input_row_format = input_row_var_names
         .iter()
         .enumerate()
-        .map(|(i, v)| (block.context().get_variable_named(v, block.scope_id()).unwrap().clone(), i))
+        .map(|(i, v)| (*translation_context.visible_variables.get(*v).unwrap(), VariablePosition::new(i as u32)))
         .collect::<HashMap<_, _>>();
-    let (entry_annotations, _) = compiler::match_::inference::type_inference::infer_types(
+    let (entry_annotations, _) = infer_types(
         &block,
         vec![],
         snapshot,
-        &type_manager,
+        type_manager,
         &IndexedAnnotatedFunctions::empty(),
+        &translation_context.variable_registry,
     )
-    .unwrap();
-    let insert_plan = compiler::insert::insert::build_insert_plan(
-        block.conjunction().constraints(),
-        &input_row_format,
-        &entry_annotations,
-    )
-    .unwrap();
+        .unwrap();
+
+    let insert_plan =
+        compiler::insert::program::compile(block.conjunction().constraints(), &input_row_format, &entry_annotations)
+            .unwrap();
 
     let mut output_rows = Vec::with_capacity(input_rows.len());
-    for mut input_row in input_rows {
-        let mut output_vec = (0..insert_plan.n_created_concepts + input_row_format.len())
-            .map(|_| VariableValue::Empty)
-            .collect::<Vec<_>>();
-        let mut output_multiplicity = 0;
-        let output_row = Row::new(&mut output_vec, &mut output_multiplicity);
-        executor::write::insert_executor::execute_insert(
+    let output_width = insert_plan.output_row_schema.len();
+    let insert_executor = InsertExecutor::new(insert_plan);
+    for input_row in input_rows {
+        let mut output_multiplicity = 1;
+        output_rows.push(
+            (0..output_width)
+                .map(|i| input_row.get(i).map_or_else(|| VariableValue::Empty, |existing| existing.clone()))
+                .collect::<Vec<_>>(),
+        );
+        insert_executor.execute_insert(
             snapshot,
-            &thing_manager,
-            &insert_plan,
-            &Row::new(input_row.as_mut_slice(), &mut 1),
-            output_row,
-            &mut Vec::new(),
+            thing_manager,
+            &mut Row::new(output_rows.last_mut().unwrap(), &mut output_multiplicity),
         )?;
-        output_rows.push(output_vec);
     }
     Ok(output_rows)
 }

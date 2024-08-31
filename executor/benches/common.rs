@@ -36,7 +36,7 @@ pub fn load_managers(
 ) -> (Arc<TypeManager>, ThingManager) {
     let definition_key_generator = Arc::new(DefinitionKeyGenerator::new());
     let type_vertex_generator = Arc::new(TypeVertexGenerator::new());
-    let thing_vertex_generator = Arc::new(ThingVertexGenerator::load(storage).unwrap());
+    let thing_vertex_generator = Arc::new(ThingVertexGenerator::load(storage.clone()).unwrap());
     let cache = if let Some(sequence_number) = type_cache_at {
         Some(Arc::new(TypeCache::new(storage.clone(), sequence_number).unwrap()))
     } else {
