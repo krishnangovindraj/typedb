@@ -109,10 +109,10 @@ impl WAL {
         DurabilitySequenceNumber::from(self.next_sequence_number.load(Ordering::Relaxed) - 1)
     }
 
-    // Synchronously fsync
+    // // Synchronously fsync
     // pub fn request_sync(&self) -> mpsc::Receiver<()> {
     //     let (sender, recv) = mpsc::channel();
-    //     self.files.write().unwrap().sync_all();
+    //     self.files.write().unwrap().sync_all();// Comment this out for a no-op
     //     sender.send(()).unwrap();
     //     recv
     // }
