@@ -26,6 +26,36 @@ host_compatible_java_test(
     size = "large",
 )
 
+java_binary(
+    name = "benchmark-mac-arm64",
+    data = [],
+    main_class = "com.vaticle.typedb.core.test.integration.Benchmark",
+    tags = [],
+    runtime_deps = [":benchmark-lib-mac-arm64"],
+)
+
+load("@vaticle_dependencies//builder/java:rules.bzl", "native_java_libraries")
+native_java_libraries(
+    name = "benchmark-lib",
+    srcs = ["Benchmark.java"],
+    native_libraries_deps = [
+        # Internal dependencies
+        "//:typedb",
+        "//common:common",
+        "//database:database",
+        "//concept:concept",
+        "//logic:logic",
+    ],
+    deps = [
+        "//test/integration/util:util",
+        # External dependencies from Vaticle
+        "@vaticle_typeql//java/pattern:pattern",
+        "@vaticle_typeql//java:typeql-lang",
+    ],
+#    size = "large",
+)
+
+
 host_compatible_java_test(
     name = "test-query",
     srcs = ["QueryTest.java"],

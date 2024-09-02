@@ -78,7 +78,7 @@ public class CoreDatabaseManager implements TypeDB.DatabaseManager {
         loadAll();
 
         // Send first portion in the same thread to have a guarantee of it being sent before the end of the initialization.
-        synchronizeDatabaseDiagnostics();
+//        synchronizeDatabaseDiagnostics();
         Executors.scheduled().scheduleAtFixedRate(
                 this::synchronizeDatabaseDiagnostics,
                 DIAGNOSTICS_SYNC_PERIOD_MINUTES,
