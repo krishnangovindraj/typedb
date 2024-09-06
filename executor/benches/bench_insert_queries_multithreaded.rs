@@ -160,7 +160,7 @@ fn multi_threaded_inserts() {
     setup_schema(storage.clone());
     let (type_manager, thing_manager) = load_managers(storage.clone(), Some(storage.read_watermark()));
     let thing_manager_arced = Arc::new(thing_manager);
-    const NUM_THREADS: usize = 512;
+    const NUM_THREADS: usize = 16;
     const INTERNAL_ITERS: u64 = 1_000;
     let start_signal_rw_lock = Arc::new(RwLock::new(()));
     let write_guard = start_signal_rw_lock.write().unwrap();
@@ -200,35 +200,35 @@ fn multi_threaded_inserts() {
         (NUM_THREADS as u64 * INTERNAL_ITERS * 1000) / time_taken_ms as u64
     );
 }
-// These aren't as well written as i thought they'd be
-fn rwlock() {
-    for n_tests in 0..20 {
-        const NUM_THREADS: usize = 32;
-        let start_signal_rw_lock = Arc::new(RwLock::new(()));
-        let write_guard = start_signal_rw_lock.write().unwrap();
-        let join_handles: [JoinHandle<Instant>; NUM_THREADS] = array::from_fn(|_| {
-            let rw_lock_cloned = start_signal_rw_lock.clone();
-            thread::spawn(move || {
-                drop(rw_lock_cloned.read().unwrap());
-                Instant::now()
-            })
-        });
-        println!("Sleeping 0.5s before starting threads");
-        sleep(Duration::from_millis(500));
-        println!("Start!");
-        let mut end_times = Vec::with_capacity(NUM_THREADS);
-        let start = Instant::now();
-        drop(write_guard); // Start
-        for join_handle in join_handles {
-            end_times.push(join_handle.join().unwrap());
-        }
-        let latencies = end_times.iter().map(|t| *t - start).collect::<Vec<_>>();
-        let max_latency_ms = (latencies.iter().max().unwrap()).as_micros();
-        let avg_latency_ms = latencies.iter().map(|x| x.as_micros()).sum::<u128>() as usize / latencies.len();
-        println!("Max latency: {max_latency_ms} us");
-        println!("Avg latency: {avg_latency_ms} us");
-    }
-}
+// // These aren't as well written as i thought they'd be
+// fn rwlock() {
+//     for n_tests in 0..20 {
+//         const NUM_THREADS: usize = 32;
+//         let start_signal_rw_lock = Arc::new(RwLock::new(()));
+//         let write_guard = start_signal_rw_lock.write().unwrap();
+//         let join_handles: [JoinHandle<Instant>; NUM_THREADS] = array::from_fn(|_| {
+//             let rw_lock_cloned = start_signal_rw_lock.clone();
+//             thread::spawn(move || {
+//                 drop(rw_lock_cloned.read().unwrap());
+//                 Instant::now()
+//             })
+//         });
+//         println!("Sleeping 0.5s before starting threads");
+//         sleep(Duration::from_millis(500));
+//         println!("Start!");
+//         let mut end_times = Vec::with_capacity(NUM_THREADS);
+//         let start = Instant::now();
+//         drop(write_guard); // Start
+//         for join_handle in join_handles {
+//             end_times.push(join_handle.join().unwrap());
+//         }
+//         let latencies = end_times.iter().map(|t| *t - start).collect::<Vec<_>>();
+//         let max_latency_ms = (latencies.iter().max().unwrap()).as_micros();
+//         let avg_latency_ms = latencies.iter().map(|x| x.as_micros()).sum::<u128>() as usize / latencies.len();
+//         println!("Max latency: {max_latency_ms} us");
+//         println!("Avg latency: {avg_latency_ms} us");
+//     }
+// }
 
 // fn mpsc() {
 //     for n_tests in 0..20 {
