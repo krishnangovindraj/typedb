@@ -5,8 +5,12 @@
  */
 
 use std::{error::Error, fmt, fs, io, path::PathBuf};
+use std::sync::Arc;
 
 use database::{database_manager::DatabaseManager, DatabaseOpenError};
+use database::transaction::{TransactionRead, TransactionSchema};
+use options::TransactionOptions;
+use query::query_manager::QueryManager;
 
 use crate::{parameters::config::Config, service::typedb_service::TypeDBService};
 
@@ -50,7 +54,26 @@ impl Server {
         // .add_service(self.typedb_service.take().unwrap())
         // .serve(address)
         // .await?;
+        // Ok(())
+        self.TMP__distribution_test();
         Ok(())
+    }
+
+    fn TMP__distribution_test(&self) {
+        println!("TODO: This currently runs a test which commits a simple schema, for testing. Remove it.");
+        let dbm = self.typedb_service.as_ref().unwrap().database_manager() else {unreachable!()};
+        dbm.create_database("tmp__distribution_test");
+        let database = dbm.database("tmp__distribution_test").unwrap();
+        let mut tx = TransactionSchema::open(database.clone(), TransactionOptions::default());
+        let qm = QueryManager::new();
+        qm.execute_schema(
+            Arc::get_mut(&mut tx.snapshot).unwrap(),
+            &tx.type_manager,
+            &tx.thing_manager,
+            typeql::parse_query("define attribute name @independent, value string;").unwrap().into_schema()
+        ).unwrap();
+        tx.commit().unwrap();
+        println!("The schema has committed. Great success!");
     }
 }
 
