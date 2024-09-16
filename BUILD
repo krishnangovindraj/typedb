@@ -7,6 +7,8 @@ load("@vaticle_dependencies//tool/checkstyle:rules.bzl", "checkstyle_test")
 load("@vaticle_dependencies//tool/release/deps:rules.bzl", "release_validate_deps")
 
 load("@vaticle_bazel_distribution//common:rules.bzl", "assemble_targz", "assemble_versioned", "assemble_zip")
+load("@vaticle_bazel_distribution//platform:constraints.bzl", "constraint_linux_arm64", "constraint_linux_x86_64",
+     "constraint_mac_arm64", "constraint_mac_x86_64", "constraint_win_x86_64")
 
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
@@ -96,6 +98,7 @@ assemble_zip(
     output_filename = "typedb-all-mac-arm64",
     permissions = permissions,
     targets = ["//:package-typedb"],
+    target_compatible_with = constraint_mac_arm64,
 )
 
 assemble_targz(
@@ -106,6 +109,7 @@ assemble_targz(
     permissions = permissions,
     targets = ["//:package-typedb"],
     visibility = ["//tests/assembly:__subpackages__"],
+    target_compatible_with = constraint_linux_x86_64,
 )
 
 # TODO: assemble_versioned
