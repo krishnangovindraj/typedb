@@ -6,6 +6,9 @@ load("@vaticle_dependencies//distribution:deployment.bzl", "deployment")
 load("@vaticle_dependencies//tool/checkstyle:rules.bzl", "checkstyle_test")
 load("@vaticle_dependencies//tool/release/deps:rules.bzl", "release_validate_deps")
 
+load("@vaticle_bazel_distribution//common:rules.bzl", "assemble_targz", "assemble_versioned", "assemble_zip")
+
+load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 exports_files(
@@ -26,6 +29,8 @@ rust_binary(
         "@crates//:tokio",
     ],
 )
+
+
 
 
 checkstyle_test(
@@ -65,3 +70,32 @@ filegroup(
         "@vaticle_dependencies//tool/ide:rust_sync",
     ],
 )
+
+# Assembly
+assemble_files = {
+    "//resource:logo": "resource/typedb-ascii.txt",
+    "//:LICENSE": "LICENSE",
+}
+empty_directories = [
+    "server/data",
+]
+permissions = {
+    "server/conf/config.yml": "0755",
+    "server/data": "0755",
+}
+
+pkg_tar(
+    name = "package-typedb",
+    srcs = ["//:typedb_server_bin"],
+)
+
+assemble_zip(
+    name = "assemble-mac-arm64-zip",
+    additional_files = assemble_files,
+    empty_directories = empty_directories,
+    output_filename = "typedb-all-mac-arm64",
+    permissions = permissions,
+    targets = ["//:package-typedb"],
+)
+
+# TODO: assemble_versioned
