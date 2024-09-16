@@ -98,4 +98,14 @@ assemble_zip(
     targets = ["//:package-typedb"],
 )
 
+assemble_targz(
+    name = "assemble-linux-x86_64-tgz",
+    additional_files = assemble_files,
+    empty_directories = empty_directories,
+    output_filename = "typedb-all-linux-x86_64",
+    permissions = permissions,
+    targets = ["//:package-typedb"],
+    visibility = ["//tests/assembly:__subpackages__"],
+)
+
 # TODO: assemble_versioned
