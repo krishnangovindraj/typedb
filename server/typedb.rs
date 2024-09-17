@@ -5,12 +5,7 @@
  */
 
 use std::{error::Error, fmt, fs, io, path::PathBuf};
-use std::sync::Arc;
-
 use database::{database_manager::DatabaseManager, DatabaseOpenError};
-use database::transaction::{TransactionRead, TransactionSchema};
-use options::TransactionOptions;
-use query::query_manager::QueryManager;
 
 use crate::{parameters::config::Config, service::typedb_service::TypeDBService};
 
