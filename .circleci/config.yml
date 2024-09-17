@@ -97,7 +97,9 @@ jobs:
       - checkout
       - install-bazel-yum:
           bazel-arch: amd64
-      - run: bazel test //tests/assembly:test_assembly --test_output=errors
+      - run: |
+          bazel build //:assemble-typedb-server
+          bazel test //tests/assembly:test_assembly --test_output=errors
 
   # per platform snapshot deployment
   deploy-snapshot-linux-x86_64:
