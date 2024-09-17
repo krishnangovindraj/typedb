@@ -4,7 +4,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::collections::HashMap;
 use std::process::{Child, Command, Output};
 
 fn build_cmd(cmd_str: &str) -> Command {
@@ -46,7 +45,7 @@ fn test_assembly() {
     if !extract_output.status.success() {
         panic!("{:?}", extract_output);
     }
-    let mut server_process = build_cmd("typedb-extracted/typedb_server_bin").spawn().expect("Failed to spawn server process");
+    let server_process = build_cmd("typedb-extracted/typedb_server_bin").spawn().expect("Failed to spawn server process");
     let test_result = run_test_against_server();
     let server_process_output = kill_process(server_process);
 
