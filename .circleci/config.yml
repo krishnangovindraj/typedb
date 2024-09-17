@@ -73,6 +73,12 @@ commands:
           chmod a+x /usr/local/bin/bazel
 
   # deploy & test steps
+  test-assembly-linux-x86_64:
+    steps:
+      - run: |
+          bazel build //:assemble-typedb-server
+          bazel test //tests/assembly:test_assembly --test_output=errors
+
   deploy-snapshot-unix:
     steps:
       - run: |
@@ -88,34 +94,24 @@ commands:
           bazel run --jobs=8 --define version=$(cat VERSION) //:deploy-typedb-server --compilation_mode=opt -- release
 
 jobs:
-  # per platform tests
-  test-assembly-linux-x86_64:
-    executor: linux-x86_64-amazonlinux-2
-    working_directory: ~/typedb
-    steps:
-      - checkout
-      - install-deps-yum:
-          bazel-arch: amd64
-      - run: |
-          bazel build //:assemble-typedb-server
-          bazel test //tests/assembly:test_assembly --test_output=errors
-
   # per platform snapshot deployment
-  deploy-snapshot-linux-x86_64:
+  test-deploy-snapshot-linux-x86_64:
     executor: linux-x86_64-amazonlinux-2
     steps:
       - checkout
       - install-deps-yum:
           bazel-arch: amd64
+      - test-assembly-linux-x86_64
       - deploy-snapshot-unix
 
   # per platform release deployment
-  deploy-release-linux-x86_64:
+  test-deploy-release-linux-x86_64:
     executor: linux-x86_64-amazonlinux-2
     steps:
       - checkout
       - install-deps-yum:
           bazel-arch: amd64
+      - test-assembly-linux-x86_64
       - deploy-release-unix
 
   # generic
@@ -132,21 +128,14 @@ jobs:
 workflows:
   typedb-snapshot:
     jobs:
-      - test-assembly-linux-x86_64:
-        filters:
-          branches:
-            only: [ 3.0-dev ]
-
-      - deploy-snapshot-linux-x86_64:
+      - test-deploy-snapshot-linux-x86_64:
           filters:
             branches:
               only: [ 3.0-dev ]
-          requires:
-            - test-assembly-linux-x86_64
 
   release:
     jobs:
-      - deploy-release-linux-x86_64:
+      - test-deploy-release-linux-x86_64:
           filters:
             branches:
               only: [ release ]
@@ -156,4 +145,4 @@ workflows:
             branches:
               only: [ release ]
           requires:
-            - deploy-release-linux-x86_64
+            - test-deploy-release-linux-x86_64
