@@ -3,6 +3,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 load("@vaticle_dependencies//distribution:deployment.bzl", "deployment")
+load("//:deployment.bzl", deployment_docker = "deployment", deployment_github = "deployment")
 load("@vaticle_dependencies//tool/checkstyle:rules.bzl", "checkstyle_test")
 load("@vaticle_dependencies//tool/release/deps:rules.bzl", "release_validate_deps")
 
@@ -10,6 +11,9 @@ load("@vaticle_bazel_distribution//artifact:rules.bzl", "deploy_artifact")
 load("@vaticle_bazel_distribution//common:rules.bzl", "assemble_targz", "assemble_versioned", "assemble_zip")
 load("@vaticle_bazel_distribution//platform:constraints.bzl", "constraint_linux_arm64", "constraint_linux_x86_64",
      "constraint_mac_arm64", "constraint_mac_x86_64", "constraint_win_x86_64")
+
+load("@io_bazel_rules_docker//container:image.bzl", docker_container_image = "container_image")
+load("@io_bazel_rules_docker//container:container.bzl", docker_container_push = "container_push")
 
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
@@ -154,3 +158,47 @@ alias(
 #        "@vaticle_bazel_distribution//platform:is_windows_x86_64" : ":deploy-windows-x86_64-zip"
     })
 )
+
+# docker
+docker_container_image(
+    name = "assemble-docker",
+    base = "@vaticle_ubuntu_image//image",
+    cmd = [
+        "/opt/typedb-all-linux-x86_64/typedb",
+        "server",
+    ],
+    directory = "opt",
+    env = {
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+    },
+    ports = ["1729"],
+    tars = [":assemble-linux-x86_64-targz"],
+    visibility = ["//test:__subpackages__"],
+    volumes = ["/opt/typedb-all-linux-x86_64/server/data/"],
+    workdir = "/opt/typedb-all-linux-x86_64",
+)
+
+docker_container_push(
+    name = "deploy-docker-release-overwrite-latest-tag",
+    format = "Docker",
+    image = ":assemble-docker",
+    registry = deployment_docker["docker.index"],
+    repository = "{}/{}".format(
+        deployment_docker["docker.organisation"],
+        deployment_docker["docker.release.repository"],
+    ),
+    tag = "latest",
+)
+
+#docker_container_push(
+#    name = "deploy-docker-release",
+#    format = "Docker",
+#    image = ":assemble-docker",
+#    registry = deployment_docker["docker.index"],
+#    repository = "{}/{}".format(
+#        deployment_docker["docker.organisation"],
+#        deployment_docker["docker.release.repository"],
+#    ),
+#    tag_file = ":VERSION",
+#)
