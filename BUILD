@@ -56,6 +56,17 @@ pkg_tar(
 )
 
 assemble_zip(
+    name = "assemble-mac-x86_64-zip",
+    additional_files = assemble_files,
+    empty_directories = empty_directories,
+    output_filename = "typedb-all-mac-x86_64",
+    permissions = permissions,
+    targets = ["//:package-typedb"],
+    visibility = ["//tests/assembly:__subpackages__"],
+    target_compatible_with = constraint_mac_x86_64,
+)
+
+assemble_zip(
     name = "assemble-mac-arm64-zip",
     additional_files = assemble_files,
     empty_directories = empty_directories,
@@ -77,6 +88,26 @@ assemble_targz(
     target_compatible_with = constraint_linux_x86_64,
 )
 
+assemble_targz(
+    name = "assemble-linux-arm64-targz",
+    additional_files = assemble_files,
+    empty_directories = empty_directories,
+    output_filename = "typedb-all-linux-arm64",
+    permissions = permissions,
+    targets = ["//:package-typedb"],
+    visibility = ["//tests/assembly:__subpackages__"],
+    target_compatible_with = constraint_linux_arm64,
+)
+
+deploy_artifact(
+    name = "deploy-mac-x86_64-zip",
+    artifact_group = "typedb-all-mac-x86_64",
+    artifact_name = "typedb-all-mac-x86_64-{version}.zip",
+    release = deployment["artifact"]["release"]["upload"],
+    snapshot = deployment["artifact"]["snapshot"]["upload"],
+    target = ":assemble-mac-x86_64-zip",
+)
+
 deploy_artifact(
     name = "deploy-mac-arm64-zip",
     artifact_group = "typedb-all-mac-arm64",
@@ -95,14 +126,23 @@ deploy_artifact(
     target = ":assemble-linux-x86_64-targz",
 )
 
+deploy_artifact(
+    name = "deploy-linux-arm64-targz",
+    artifact_group = "typedb-all-linux-arm64",
+    artifact_name = "typedb-all-linux-arm64-{version}.tar.gz",
+    release = deployment["artifact"]["release"]["upload"],
+    snapshot = deployment["artifact"]["snapshot"]["upload"],
+    target = ":assemble-linux-arm64-targz",
+)
+
 # Convenience
 alias(
     name = "assemble-typedb-server",
     actual = select({
-#        "@vaticle_bazel_distribution//platform:is_linux_arm64" : ":assemble-linux-arm64-targz",
+        "@vaticle_bazel_distribution//platform:is_linux_arm64" : ":assemble-linux-arm64-targz",
         "@vaticle_bazel_distribution//platform:is_linux_x86_64" : ":assemble-linux-x86_64-targz",
         "@vaticle_bazel_distribution//platform:is_mac_arm64" : ":assemble-mac-arm64-zip",
-#        "@vaticle_bazel_distribution//platform:is_mac_x86_64" : ":assemble-mac-x86_64-zip",
+        "@vaticle_bazel_distribution//platform:is_mac_x86_64" : ":assemble-mac-x86_64-zip",
 #        "@vaticle_bazel_distribution//platform:is_windows_x86_64" : ":assemble-windows-x86_64-zip"
     }),
     visibility = ["//tests/assembly:__subpackages__"],
@@ -110,10 +150,10 @@ alias(
 alias(
     name = "deploy-typedb-server",
     actual = select({
-#        "@vaticle_bazel_distribution//platform:is_linux_arm64" : ":deploy-linux-arm64-targz",
+        "@vaticle_bazel_distribution//platform:is_linux_arm64" : ":deploy-linux-arm64-targz",
         "@vaticle_bazel_distribution//platform:is_linux_x86_64" : ":deploy-linux-x86_64-targz",
         "@vaticle_bazel_distribution//platform:is_mac_arm64" : ":deploy-mac-arm64-zip",
-#        "@vaticle_bazel_distribution//platform:is_mac_x86_64" : ":deploy-mac-x86_64-zip",
+        "@vaticle_bazel_distribution//platform:is_mac_x86_64" : ":deploy-mac-x86_64-zip",
 #        "@vaticle_bazel_distribution//platform:is_windows_x86_64" : ":deploy-windows-x86_64-zip"
     })
 )

@@ -4,6 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::collections::HashMap;
 use std::process::{Child, Command, Output};
 
 fn build_cmd(cmd_str: &str) -> Command {
@@ -29,13 +30,23 @@ fn kill_process(process: Child) -> std::io::Result<Output> {
 
 #[test]
 fn test_assembly() {
-    let tgz_path = "typedb-all-linux-x86_64.tar.gz";
-    let tar_output = build_cmd(format!("tar -xf {tgz_path}").as_str())
+    let archive_name = std::env::var("TYPEDB_ASSEMBLY_ARCHIVE").unwrap();
+    let extract_cmd = if archive_name.ends_with(".zip") {
+        let without_extension = archive_name.replace(".zip", "");
+        format!("unzip {archive_name} && mv {without_extension} typedb-extracted")
+    } else if archive_name.ends_with(".tar.gz") {
+        let without_extension = archive_name.replace(".tar.gz", "");
+        format!("tar -xf {archive_name} && mv {without_extension} typedb-extracted")
+    } else {
+        unreachable!("Expected .zip or .tar.gz");
+    };
+
+    let extract_output = build_cmd(extract_cmd.as_str())
         .output().expect("Failed to run tar");
-    if !tar_output.status.success() {
-        panic!("{:?}", tar_output);
+    if !extract_output.status.success() {
+        panic!("{:?}", extract_output);
     }
-    let mut server_process = build_cmd("typedb-all-linux-x86_64/typedb_server_bin").spawn().expect("Failed to spawn server process");
+    let mut server_process = build_cmd("typedb-extracted/typedb_server_bin").spawn().expect("Failed to spawn server process");
     let test_result = run_test_against_server();
     let server_process_output = kill_process(server_process);
 

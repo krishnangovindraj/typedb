@@ -12,7 +12,13 @@ rust_test(
         "@crates//:tokio",
     ],
     data = ["//:assemble-typedb-server"],
-    crate_features = ["bazel"], # TODO: Use to adapt per platform
+    env = select({
+        "@vaticle_bazel_distribution//platform:is_linux_x86_64" : {"TYPEDB_ASSEMBLY_ARCHIVE": "typedb-all-linux-x86_64.tar.gz" },
+        "@vaticle_bazel_distribution//platform:is_linux_arm64" : {"TYPEDB_ASSEMBLY_ARCHIVE":"typedb-all-linux-arm64.tar.gz"},
+        "@vaticle_bazel_distribution//platform:is_mac_x86_64" : {"TYPEDB_ASSEMBLY_ARCHIVE":":typedb-all-mac-x86_64.zip"},
+        "@vaticle_bazel_distribution//platform:is_mac_arm64" : {"TYPEDB_ASSEMBLY_ARCHIVE":"typedb-all-mac-arm64.zip"},
+        # "@vaticle_bazel_distribution//platform:is_windows_x86_64" : ":assemble-windows-x86_64-zip"},
+    }),
 )
 
 checkstyle_test(
