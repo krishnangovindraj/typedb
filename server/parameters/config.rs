@@ -19,7 +19,7 @@ impl Config {
     pub fn new() -> Self {
         Self {
             server: ServerConfig { address: SocketAddr::from_str("127.0.0.1:1729").unwrap() },
-            storage: StorageConfig { data: "runtimedata/server/data".into() },
+            storage: StorageConfig { data: "runtimedata/server/data".into() }, // TODO: Settle this path and update defaults in assembly rules
         }
     }
 

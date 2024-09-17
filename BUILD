@@ -37,47 +37,6 @@ rust_binary(
     ],
 )
 
-
-
-
-checkstyle_test(
-    name = "checkstyle",
-    include = glob(["*", ".factory/*", "bin/*", ".circleci/*"]),
-    exclude = glob([
-        "*.md",
-        ".circleci/windows/*",
-        "docs/*",
-        "tools/**",
-        "Cargo.*",
-    ]) + [
-        ".bazelversion",
-        ".bazel-remote-cache.rc",
-        ".bazel-cache-credential.json",
-        "LICENSE",
-        "VERSION",
-    ],
-    license_type = "mpl-header",
-)
-
-checkstyle_test(
-    name = "checkstyle_license",
-    include = ["LICENSE"],
-    license_type = "mpl-fulltext",
-)
-
-filegroup(
-    name = "tools",
-    data = [
-        "@vaticle_dependencies//factory/analysis:dependency-analysis",
-        "@vaticle_dependencies//tool/bazelinstall:remote_cache_setup.sh",
-        "@vaticle_dependencies//tool/release/notes:create",
-        "@vaticle_dependencies//tool/checkstyle:test-coverage",
-        "@vaticle_dependencies//tool/unuseddeps:unused-deps",
-        "@rust_analyzer_toolchain_tools//lib/rustlib/src:rustc_srcs",
-        "@vaticle_dependencies//tool/ide:rust_sync",
-    ],
-)
-
 # Assembly
 assemble_files = {
     "//resource:logo": "resource/typedb-ascii.txt",
@@ -191,14 +150,64 @@ docker_container_push(
     tag = "latest",
 )
 
-#docker_container_push(
-#    name = "deploy-docker-release",
-#    format = "Docker",
-#    image = ":assemble-docker",
-#    registry = deployment_docker["docker.index"],
-#    repository = "{}/{}".format(
-#        deployment_docker["docker.organisation"],
-#        deployment_docker["docker.release.repository"],
-#    ),
-#    tag_file = ":VERSION",
-#)
+docker_container_push(
+    name = "deploy-docker-release",
+    format = "Docker",
+    image = ":assemble-docker",
+    registry = deployment_docker["docker.index"],
+    repository = "{}/{}".format(
+        deployment_docker["docker.organisation"],
+        deployment_docker["docker.release.repository"],
+    ),
+    tag_file = ":VERSION",
+)
+
+# validation & tests
+release_validate_deps(
+    name = "release-validate-deps",
+    refs = "@vaticle_typedb_workspace_refs//:refs.json",
+    tagged_deps = [
+        "@vaticle_typeql",
+        "@vaticle_typedb_protocol",
+    ],
+    tags = ["manual"],  # in order for bazel test //... to not fail
+    version_file = "VERSION",
+)
+
+checkstyle_test(
+    name = "checkstyle",
+    include = glob(["*", ".factory/*", "bin/*", ".circleci/*"]),
+    exclude = glob([
+        "*.md",
+        ".circleci/windows/*",
+        "docs/*",
+        "tools/**",
+        "Cargo.*",
+    ]) + [
+        ".bazelversion",
+        ".bazel-remote-cache.rc",
+        ".bazel-cache-credential.json",
+        "LICENSE",
+        "VERSION",
+    ],
+    license_type = "mpl-header",
+)
+
+checkstyle_test(
+    name = "checkstyle_license",
+    include = ["LICENSE"],
+    license_type = "mpl-fulltext",
+)
+
+filegroup(
+    name = "tools",
+    data = [
+        "@vaticle_dependencies//factory/analysis:dependency-analysis",
+        "@vaticle_dependencies//tool/bazelinstall:remote_cache_setup.sh",
+        "@vaticle_dependencies//tool/release/notes:create",
+        "@vaticle_dependencies//tool/checkstyle:test-coverage",
+        "@vaticle_dependencies//tool/unuseddeps:unused-deps",
+        "@rust_analyzer_toolchain_tools//lib/rustlib/src:rustc_srcs",
+        "@vaticle_dependencies//tool/ide:rust_sync",
+    ],
+)
