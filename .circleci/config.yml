@@ -72,8 +72,24 @@ commands:
           mv "bazelisk-linux-<<parameters.bazel-arch>>" /usr/local/bin/bazel
           chmod a+x /usr/local/bin/bazel
 
+  install-deps-brew:
+    parameters:
+      bazel-arch:
+        type: string
+    steps:
+      - run: |
+          brew install python@3.8
+          curl -OL "https://github.com/bazelbuild/bazelisk/releases/download/v1.17.0/bazelisk-darwin-<<parameters.bazel-arch>>"
+          sudo mv "bazelisk-darwin-<<parameters.bazel-arch>>" /usr/local/bin/bazel
+          chmod a+x /usr/local/bin/bazel
+
+  install-brew-rosetta:
+    steps:
+      - run: arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+
   # deploy & test steps
-  test-assembly-linux-x86_64:
+  test-assembly-unix:
     steps:
       - run: |
           bazel build //:assemble-typedb-server
@@ -109,7 +125,35 @@ jobs:
       - checkout
       - install-deps-yum:
           bazel-arch: amd64
-      - test-assembly-linux-x86_64
+      - test-assembly-unix
+      - deploy-snapshot-unix
+
+  test-deploy-snapshot-linux-arm64:
+    executor: linux-arm64-amazonlinux-2
+    steps:
+      - checkout
+      - install-deps-yum:
+          bazel-arch: arm64
+      - test-assembly-unix
+      - deploy-snapshot-unix
+
+  test-deploy-snapshot-mac-x86_64:
+    executor: mac-arm64
+    steps:
+      - checkout
+      - install-brew-rosetta
+      - install-deps-brew:
+          bazel-arch: amd64
+      - test-assembly-unix
+      - deploy-snapshot-unix
+
+  test-deploy-snapshot-mac-arm64:
+    executor: mac-arm64
+    steps:
+      - checkout
+      - install-deps-brew:
+          bazel-arch: arm64
+      - test-assembly-unix
       - deploy-snapshot-unix
 
   # per platform release deployment
@@ -119,7 +163,7 @@ jobs:
       - checkout
       - install-deps-yum:
           bazel-arch: amd64
-      - test-assembly-linux-x86_64
+      - test-assembly-unix
       - deploy-release-unix
 
   deploy-docker:
