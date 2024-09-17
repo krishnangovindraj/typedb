@@ -140,6 +140,7 @@ jobs:
   test-deploy-snapshot-mac-x86_64:
     executor: mac-arm64
     steps:
+      - macos/install-rosetta
       - checkout
       - install-brew-rosetta
       - install-deps-brew:
