@@ -11,8 +11,8 @@ rust_test(
     deps = [
         "@crates//:tokio",
     ],
-    data = ["//:assemble-linux-x86_64-tgz"],
-    crate_features = ["bazel"],
+    data = ["//:assemble-typedb-server"],
+    crate_features = ["bazel"], # TODO: Use to adapt per platform
 )
 
 checkstyle_test(

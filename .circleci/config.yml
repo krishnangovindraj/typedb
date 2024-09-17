@@ -5,19 +5,27 @@
 version: 2.1
 
 orbs:
-  win: circleci/windows@2.0.0
-
+  win: circleci/windows@5.0
+  macos: circleci/macos@2.4.0
 
 executors:
-  linux-arm64:
-    machine:
-      image: ubuntu-2004:current
-      resource_class: arm.medium
+  linux-arm64-amazonlinux-2:
+    docker:
+      - image: amazonlinux:2
+    resource_class: arm.large
     working_directory: ~/typedb
 
-  linux-x86_64:
-    machine:
-      image: ubuntu-2004:current
+  # All builds go on amazon-linux.
+  linux-x86_64-amazonlinux-2:
+    docker:
+      - image: amazonlinux:2
+    resource_class: large
+    working_directory: ~/typedb
+
+  linux-x86_64-ubuntu-2204:
+    docker:
+      - image: ubuntu:22.04
+    resource_class: large
     working_directory: ~/typedb
 
   mac-arm64:
@@ -26,107 +34,125 @@ executors:
     resource_class: macos.m1.medium.gen1
     working_directory: ~/typedb
 
-  mac-x86_64:
-    macos:
-      xcode: "13.4.1"
-    working_directory: ~/typedb
+  win-x86_64:
+    resource_class: windows.xlarge
+    machine:
+      image: windows-server-2022-gui:2024.01.1
+    shell: cmd.exe
 
 
 commands:
 
-  install-bazel-linux-x86_64:
+  ######################
+  # common setup steps #
+  ######################
+
+  install-bazel-yum:
+    parameters:
+      bazel-arch:
+        type: string
     steps:
       - run: |
-          curl -OL "https://github.com/bazelbuild/bazelisk/releases/download/v1.17.0/bazelisk-linux-amd64"
-          sudo mv "bazelisk-linux-amd64" /usr/local/bin/bazel
+          amazon-linux-extras install python3.8 java-openjdk11 -y
+          yum install -y git tar gcc gcc-c++ file lsof which procps
+          ln -s /usr/bin/python3.8 /usr/bin/python3
+          curl -OL "https://github.com/bazelbuild/bazelisk/releases/download/v1.17.0/bazelisk-linux-<<parameters.bazel-arch>>"
+          mv "bazelisk-linux-<<parameters.bazel-arch>>" /usr/local/bin/bazel
           chmod a+x /usr/local/bin/bazel
 
-  install-bazel-linux-arm64:
+  install-bazel-apt:
+    parameters:
+      bazel-arch:
+        type: string
     steps:
       - run: |
-          curl -OL "https://github.com/bazelbuild/bazelisk/releases/download/v1.17.0/bazelisk-linux-arm64"
-          sudo mv "bazelisk-linux-arm64" /usr/local/bin/bazel
+          apt update -y
+          DEBIAN_FRONTEND=noninteractive apt install -y --no-install-recommends tzdata
+          apt install -y curl build-essential git python3 python3-pip default-jre lsof cmake file wget
+          curl -OL "https://github.com/bazelbuild/bazelisk/releases/download/v1.17.0/bazelisk-linux-<<parameters.bazel-arch>>"
+          mv "bazelisk-linux-<<parameters.bazel-arch>>" /usr/local/bin/bazel
           chmod a+x /usr/local/bin/bazel
 
-  install-bazel-mac:
+  # deploy & test steps
+  deploy-snapshot-unix:
     steps:
-      - run: brew install bazelisk
+      - run: |
+          export DEPLOY_ARTIFACT_USERNAME=$REPO_TYPEDB_USERNAME
+          export DEPLOY_ARTIFACT_PASSWORD=$REPO_TYPEDB_PASSWORD
+          bazel run --jobs=8 --define version=$(git rev-parse HEAD) //:deploy-typedb-server --compilation_mode=opt -- snapshot
+
+  deploy-release-unix:
+    steps:
+      - run: |
+          export DEPLOY_ARTIFACT_USERNAME=$REPO_TYPEDB_USERNAME
+          export DEPLOY_ARTIFACT_PASSWORD=$REPO_TYPEDB_PASSWORD
+          bazel run --jobs=8 --define version=$(cat VERSION) //:deploy-typedb-server --compilation_mode=opt -- release
 
 jobs:
-  test-assembly-mac-x86_64-zip:
-    executor: mac-x86_64
+  # per platform tests
+  test-assembly-linux-x86_64:
+    executor: linux-x86_64-amazonlinux-2
     working_directory: ~/typedb
     steps:
       - checkout
-      - install-bazel-mac
+      - install-bazel-yum:
+          bazel-arch: amd64
       - run: bazel test //test/assembly:assembly --test_output=errors
 
-  test-assembly-mac-arm64-zip:
-    executor: mac-arm64
-    resource_class: macos.m1.medium.gen1
-    working_directory: ~/typedb
+  # per platform snapshot deployment
+  deploy-snapshot-linux-x86_64:
+    executor: linux-x86_64-amazonlinux-2
     steps:
       - checkout
-      - install-bazel-mac
-      - run: bazel test //test/assembly:assembly --test_output=errors
+      - install-bazel-yum:
+          bazel-arch: amd64
+      - deploy-snapshot-unix
 
-  test-assembly-linux-arm64-zip:
-    executor: linux-arm64
-    working_directory: ~/typedb
+  # per platform release deployment
+  deploy-release-linux-x86_64:
+    executor: linux-x86_64-amazonlinux-2
     steps:
       - checkout
-      - install-bazel-linux-arm64
-      - run: bazel test //test/assembly:assembly --test_output=errors
+      - install-bazel-yum:
+          bazel-arch: amd64
+      - deploy-release-unix
 
-  test-assembly-linux-x86_64-zip:
-    executor: linux-x86_64
-    working_directory: ~/typedb
+  # generic
+  release-cleanup:
+    executor: linux-x86_64-ubuntu-2204
     steps:
       - checkout
-      - install-bazel-linux-x86_64
-      - run: bazel test //test/assembly:assembly --test_output=errors
-
-  test-assembly-windows-zip:
-    executor:
-      name: win/default
-      shell: cmd.exe
-    working_directory: ~/typedb
-    steps:
-      - checkout
-      - run: .circleci\windows\prepare.bat
-      - run: .circleci\windows\test-assembly.bat
+      - run: |
+          apt update -y
+          apt install -y git
+          git push --delete https://$REPO_GITHUB_TOKEN@github.com/typedb/typedb-driver.git $CIRCLE_BRANCH
 
 
 workflows:
-#  typedb:
-#    jobs:
-#      - test-assembly-mac-x86_64-zip:
-#          filters:
-#            branches:
-#              only:
-#                - master
-#                - development
-#      - test-assembly-mac-arm64-zip:
-#          filters:
-#            branches:
-#              only:
-#                - master
-#                - development
-#      - test-assembly-linux-x86_64-zip:
-#          filters:
-#            branches:
-#              only:
-#                - master
-#                - development
-#      - test-assembly-linux-arm64-zip:
-#          filters:
-#            branches:
-#              only:
-#                - master
-#                - development
-#      - test-assembly-windows-zip:
-#          filters:
-#            branches:
-#              only:
-#                - master
-#                - development
+  typedb-snapshot:
+    jobs:
+      - test-assembly-linux-x86_64:
+        filters:
+          branches:
+            only: [ 3.0-dev ]
+
+      - deploy-snapshot-linux-x86_64:
+          filters:
+            branches:
+              only: [ 3.0-dev ]
+          requires:
+            - test-assembly-linux-x86_64
+
+  release:
+    jobs:
+      - deploy-release-linux-x86_64:
+          filters:
+            branches:
+              only: [ release ]
+
+      - release-cleanup:
+          filters:
+            branches:
+              only: [ release ]
+          requires:
+            - deploy-release-linux-x86_64
