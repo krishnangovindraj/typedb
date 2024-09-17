@@ -163,8 +163,7 @@ docker_container_image(
     name = "assemble-docker",
     base = "@vaticle_ubuntu_image//image",
     cmd = [
-        "/opt/typedb-all-linux-x86_64/typedb",
-        "server",
+        "/opt/typedb-all-linux-x86_64/typedb_server_bin"
     ],
     directory = "opt",
     env = {
