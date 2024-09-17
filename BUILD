@@ -104,7 +104,7 @@ assemble_zip(
 )
 
 assemble_targz(
-    name = "assemble-linux-x86_64-tgz",
+    name = "assemble-linux-x86_64-targz",
     additional_files = assemble_files,
     empty_directories = empty_directories,
     output_filename = "typedb-all-linux-x86_64",
