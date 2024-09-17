@@ -99,6 +99,7 @@ assemble_zip(
     output_filename = "typedb-all-mac-arm64",
     permissions = permissions,
     targets = ["//:package-typedb"],
+    visibility = ["//tests/assembly:__subpackages__"],
     target_compatible_with = constraint_mac_arm64,
 )
 
@@ -140,7 +141,8 @@ alias(
         "@vaticle_bazel_distribution//platform:is_mac_arm64" : ":assemble-mac-arm64-zip",
 #        "@vaticle_bazel_distribution//platform:is_mac_x86_64" : ":assemble-mac-x86_64-zip",
 #        "@vaticle_bazel_distribution//platform:is_windows_x86_64" : ":assemble-windows-x86_64-zip"
-    })
+    }),
+    visibility = ["//tests/assembly:__subpackages__"],
 )
 alias(
     name = "deploy-typedb-server",
