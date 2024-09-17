@@ -6,6 +6,7 @@ load("@vaticle_dependencies//distribution:deployment.bzl", "deployment")
 load("@vaticle_dependencies//tool/checkstyle:rules.bzl", "checkstyle_test")
 load("@vaticle_dependencies//tool/release/deps:rules.bzl", "release_validate_deps")
 
+load("@vaticle_bazel_distribution//artifact:rules.bzl", "deploy_artifact")
 load("@vaticle_bazel_distribution//common:rules.bzl", "assemble_targz", "assemble_versioned", "assemble_zip")
 load("@vaticle_bazel_distribution//platform:constraints.bzl", "constraint_linux_arm64", "constraint_linux_x86_64",
      "constraint_mac_arm64", "constraint_mac_x86_64", "constraint_win_x86_64")
@@ -110,6 +111,24 @@ assemble_targz(
     targets = ["//:package-typedb"],
     visibility = ["//tests/assembly:__subpackages__"],
     target_compatible_with = constraint_linux_x86_64,
+)
+
+deploy_artifact(
+    name = "deploy-mac-arm64-zip",
+    artifact_group = "typedb-all-mac-arm64",
+    artifact_name = "typedb-all-mac-arm64-{version}.zip",
+    release = deployment["artifact"]["release"]["upload"],
+    snapshot = deployment["artifact"]["snapshot"]["upload"],
+    target = ":assemble-mac-arm64-zip",
+)
+
+deploy_artifact(
+    name = "deploy-linux-x86_64-targz",
+    artifact_group = "typedb-all-linux-x86_64",
+    artifact_name = "typedb-all-linux-x86_64-{version}.tar.gz",
+    release = deployment["artifact"]["release"]["upload"],
+    snapshot = deployment["artifact"]["snapshot"]["upload"],
+    target = ":assemble-linux-x86_64-targz",
 )
 
 # TODO: assemble_versioned

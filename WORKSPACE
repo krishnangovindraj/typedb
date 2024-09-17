@@ -91,6 +91,12 @@ crate_repositories()
 load("//dependencies/vaticle:repositories.bzl", "vaticle_bazel_distribution")
 vaticle_bazel_distribution()
 
+# Load @vaticle_bazel_distribution_uploader
+load("@vaticle_bazel_distribution//common/uploader:deps.bzl", uploader_deps = "deps")
+uploader_deps()
+load("@vaticle_bazel_distribution_uploader//:requirements.bzl", install_uploader_deps = "install_deps")
+install_uploader_deps()
+
 # Load //common
 load("@vaticle_bazel_distribution//common:deps.bzl", "rules_pkg")
 rules_pkg()
