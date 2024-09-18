@@ -14,6 +14,7 @@ load("@vaticle_bazel_distribution//platform:constraints.bzl", "constraint_linux_
 
 load("@io_bazel_rules_docker//container:image.bzl", docker_container_image = "container_image")
 load("@io_bazel_rules_docker//container:container.bzl", docker_container_push = "container_push")
+load("@io_bazel_rules_docker//container:import.bzl", docker_container_import = "container_import")
 
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
@@ -159,9 +160,27 @@ alias(
 )
 
 # docker
+docker_container_import(
+    name = "ubuntu-amd64",
+    layers = glob(["*.tar.gz"]),
+    base_image_registry = "index.docker.io",
+    base_image_repository = "amd64/ubuntu",
+    base_image_digest = "sha256:3d1556a8a18cf5307b121e0a98e93f1ddf1f3f8e092f1fddfd941254785b95d7",
+    tags = ["22.04"],
+)
+
+docker_container_import(
+    name = "ubuntu-arm64",
+    layers = glob(["*.tar.gz"]),
+    base_image_registry = "index.docker.io",
+    base_image_repository = "aarch64/ubuntu",
+    base_image_digest = "sha256:7c75ab2b0567edbb9d4834a2c51e462ebd709740d1f2c40bcd23c56e974fe2a8",
+    tags = ["22.04"],
+)
+
 docker_container_image(
-    name = "assemble-docker",
-    base = "@vaticle_ubuntu_image//image",
+    name = "assemble-docker-amd64",
+    base = "//:ubuntu-amd64",
     cmd = [
         "/opt/typedb-all-linux-x86_64/typedb_server_bin"
     ],
@@ -177,26 +196,56 @@ docker_container_image(
     workdir = "/opt/typedb-all-linux-x86_64",
 )
 
+docker_container_image(
+    name = "assemble-docker-arm64",
+    base = "//:ubuntu-arm64",
+    cmd = [
+        "/opt/typedb-all-linux-arm64/typedb_server_bin"
+    ],
+    directory = "opt",
+    env = {
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+    },
+    ports = ["1729"],
+    tars = [":assemble-linux-arm64-targz"],
+    visibility = ["//test:__subpackages__"],
+    volumes = ["/opt/typedb-all-linux-arm64/server/data/"],
+    workdir = "/opt/typedb-all-linux-arm64",
+)
+
+#docker_container_push(
+#    name = "deploy-docker-release-overwrite-latest-tag",
+#    format = "Docker",
+#    image = ":assemble-docker",
+#    registry = deployment_docker["docker.index"],
+#    repository = "{}/{}".format(
+#        deployment_docker["docker.organisation"],
+#        deployment_docker["docker.release.multi-arch-repository"],
+#    ),
+#    tag = "latest",
+#)
+
 docker_container_push(
-    name = "deploy-docker-release-overwrite-latest-tag",
+    name = "deploy-docker-release-amd64",
     format = "Docker",
-    image = ":assemble-docker",
+    image = ":assemble-docker-amd64",
     registry = deployment_docker["docker.index"],
     repository = "{}/{}".format(
         deployment_docker["docker.organisation"],
-        deployment_docker["docker.release.repository"],
+        deployment_docker["docker.release.amd64-repository"],
     ),
-    tag = "latest",
+    tag_file = ":VERSION",
 )
 
 docker_container_push(
-    name = "deploy-docker-release",
+    name = "deploy-docker-release-arm64",
     format = "Docker",
-    image = ":assemble-docker",
+    image = ":assemble-docker-arm64",
     registry = deployment_docker["docker.index"],
     repository = "{}/{}".format(
         deployment_docker["docker.organisation"],
-        deployment_docker["docker.release.repository"],
+        deployment_docker["docker.release.arm64-repository"],
     ),
     tag_file = ":VERSION",
 )
