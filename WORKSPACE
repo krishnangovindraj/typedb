@@ -119,28 +119,18 @@ pip_deps()
 # `rules_pkg` is correctly patched (bazel-distribution #251)
 
 # Load //distribution/docker
-load("@vaticle_dependencies//distribution/docker:deps.bzl", docker_deps = "deps")
-docker_deps()
+load("@vaticle_dependencies//distribution/oci:deps.bzl", oci_deps = "deps")
+oci_deps()
 
-load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
-load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies", "go_repository")
-go_rules_dependencies()
-go_register_toolchains(version = "1.18.3")
-gazelle_dependencies()
+load("@rules_oci//oci:dependencies.bzl", "rules_oci_dependencies")
+rules_oci_dependencies()
 
-load("@io_bazel_rules_docker//repositories:repositories.bzl", bazel_rules_docker_repositories = "repositories")
-bazel_rules_docker_repositories()
+load("@rules_oci//oci:repositories.bzl", "oci_register_toolchains")
+oci_register_toolchains(name = "oci")
 
-load("@io_bazel_rules_docker//repositories:deps.bzl", bazel_rules_docker_container_deps = "deps")
-bazel_rules_docker_container_deps()
-
-load("@io_bazel_rules_docker//container:container.bzl", "container_pull")
-container_pull(
-  name = "vaticle_ubuntu_image",
-  registry = "index.docker.io",
-  repository = "vaticle/ubuntu",
-  tag = "4ee548cea883c716055566847c4736a7ef791c38"
-)
+# Pull base images
+load("@vaticle_dependencies//distribution/oci:images.bzl", oci_pull_base_images = "pull_base_images")
+oci_pull_base_images()
 
 #####################################
 # Load @vaticle/typedb dependencies #
