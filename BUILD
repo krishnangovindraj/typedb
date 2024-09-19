@@ -160,7 +160,7 @@ alias(
 
 # docker
 docker_container_image(
-    name = "assemble-docker",
+    name = "assemble-docker-x86_64",
     base = "@vaticle_ubuntu_image//image",
     cmd = [
         "/opt/typedb-all-linux-x86_64/typedb_server_bin"
@@ -177,12 +177,54 @@ docker_container_image(
     workdir = "/opt/typedb-all-linux-x86_64",
 )
 
+docker_container_image(
+    name = "assemble-docker-arm64",
+    base = "@vaticle_ubuntu_image//image",
+    cmd = [
+        "/opt/typedb-all-linux-arm64/typedb_server_bin"
+    ],
+    directory = "opt",
+    env = {
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+    },
+    ports = ["1729"],
+    tars = [":assemble-linux-arm64-targz"],
+    visibility = ["//test:__subpackages__"],
+    volumes = ["/opt/typedb-all-linux-arm64/server/data/"],
+    workdir = "/opt/typedb-all-linux-arm64",
+)
+
 docker_container_push(
-    name = "deploy-docker-release-overwrite-latest-tag",
+    name = "deploy-docker-release-x86_64",
     format = "Docker",
     image = ":assemble-docker",
     registry = deployment_docker["docker.index"],
-    repository = "{}/{}".format(
+    repository = "{}/{}-x86_64".format(
+        deployment_docker["docker.organisation"],
+        deployment_docker["docker.release.repository"],
+    ),
+    tag_file = ":VERSION",
+)
+
+docker_container_push(
+    name = "deploy-docker-release-arm64",
+    format = "Docker",
+    image = ":assemble-docker-arm64",
+    registry = deployment_docker["docker.index"],
+    repository = "{}/{}-arm64".format(
+        deployment_docker["docker.organisation"],
+        deployment_docker["docker.release.repository"],
+    ),
+    tag_file = ":VERSION",
+)
+
+docker_container_push(
+    name = "deploy-docker-release-overwrite-latest-tag-x86_64",
+    format = "Docker",
+    image = ":assemble-docker-x86_64",
+    registry = deployment_docker["docker.index"],
+    repository = "{}/{}-x86_64".format(
         deployment_docker["docker.organisation"],
         deployment_docker["docker.release.repository"],
     ),
@@ -190,15 +232,15 @@ docker_container_push(
 )
 
 docker_container_push(
-    name = "deploy-docker-release",
+    name = "deploy-docker-release-overwrite-latest-tag-arm64",
     format = "Docker",
-    image = ":assemble-docker",
+    image = ":assemble-docker-arm64",
     registry = deployment_docker["docker.index"],
-    repository = "{}/{}".format(
+    repository = "{}/{}-arm64".format(
         deployment_docker["docker.organisation"],
         deployment_docker["docker.release.repository"],
     ),
-    tag_file = ":VERSION",
+    tag = "latest",
 )
 
 # validation & tests
