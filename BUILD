@@ -161,7 +161,8 @@ alias(
 # docker
 docker_container_image(
     name = "assemble-docker-x86_64",
-#    base = "@ubuntu-22.04-x86_64//image",
+    operating_system = "linux",
+    architecture = "amd64",
     base = "@ubuntu-22.04-arm64//image",
     cmd = [
         "/opt/typedb-all-linux-x86_64/typedb_server_bin"
@@ -180,6 +181,8 @@ docker_container_image(
 
 docker_container_image(
     name = "assemble-docker-arm64",
+    operating_system = "linux",
+    architecture = "arm64v8",
     base = "@ubuntu-22.04-arm64//image",
     cmd = [
         "/opt/typedb-all-linux-arm64/typedb_server_bin"
