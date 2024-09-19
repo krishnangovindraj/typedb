@@ -96,7 +96,7 @@ assemble_targz(
     permissions = permissions,
     targets = ["//:package-typedb"],
     visibility = ["//tests/assembly:__subpackages__"],
-    target_compatible_with = constraint_linux_arm64,
+#    target_compatible_with = constraint_linux_arm64,
 )
 
 deploy_artifact(
@@ -162,7 +162,7 @@ alias(
 docker_container_image(
     name = "assemble-docker-x86_64",
 #    base = "@ubuntu-22.04-x86_64//image",
-    base = "//multiarch:ubuntu-22.04-x86_64", # @ubuntu-22.04-arm64//image",
+    base = "@ubuntu-22.04-arm64//image",
     cmd = [
         "/opt/typedb-all-linux-x86_64/typedb_server_bin"
     ],
@@ -180,7 +180,7 @@ docker_container_image(
 
 docker_container_image(
     name = "assemble-docker-arm64",
-    base = "//multiarch:ubuntu-22.04-arm64", # @ubuntu-22.04-arm64//image",
+    base = "@ubuntu-22.04-arm64//image",
     cmd = [
         "/opt/typedb-all-linux-arm64/typedb_server_bin"
     ],
@@ -194,12 +194,13 @@ docker_container_image(
     visibility = ["//test:__subpackages__"],
     volumes = ["/opt/typedb-all-linux-arm64/server/data/"],
     workdir = "/opt/typedb-all-linux-arm64",
+
 )
 
 docker_container_push(
     name = "deploy-docker-release-x86_64",
     format = "Docker",
-    image = ":assemble-docker",
+    image = ":assemble-docker-x86_64",
     registry = deployment_docker["docker.index"],
     repository = "{}/{}-x86_64".format(
         deployment_docker["docker.organisation"],
