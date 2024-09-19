@@ -212,6 +212,7 @@ docker_container_push(
     tag_file = ":VERSION",
 )
 
+# bazel run  --@io_bazel_rules_docker//transitions:enable=false --platforms=//multiarch:linux-arm64 //:deploy-docker-release-arm64  --toolchain_resolution_debug='@bazel_tools//tools/cpp:toolchain_type'
 docker_container_push(
     name = "deploy-docker-release-arm64",
     format = "Docker",
