@@ -158,6 +158,16 @@ alias(
 )
 
 # docker
+platform(
+    name = "linux-x86_64",
+    constraint_values = constraint_linux_x86_64,
+)
+platform(
+    name = "linux-arm64",
+    constraint_values = constraint_linux_arm64,
+)
+
+load(":multiarch.bzl", "build_as_arm64", "build_as_x86_64")
 pkg_tar(
     name = "assemble-docker-layer-x86_64",
     deps = [":assemble-linux-x86_64-targz"],
@@ -173,7 +183,7 @@ pkg_tar(
 oci_image(
     name = "assemble-docker-image-x86_64",
     base = "@vaticle-base-ubuntu",
-#    os = "linux",
+    os = "linux",
 #    architecture = "amd64",
     cmd = [
         "/opt/typedb-all-linux-x86_64/typedb_server_bin"
@@ -189,6 +199,7 @@ oci_image(
     workdir = "/opt/typedb-all-linux-x86_64",
 )
 #
+
 oci_image(
     name = "assemble-docker-image-arm64",
     base = "@vaticle-base-ubuntu",
@@ -208,6 +219,19 @@ oci_image(
     volumes = ["/opt/typedb-all-linux-arm64/server/data/"],
     workdir = "/opt/typedb-all-linux-arm64",
 )
+
+build_as_x86_64(
+    name = "docker-x86_64",
+    target = ":assemble-docker-image-x86_64",
+    target_compatible_with = constraint_linux_x86_64,
+)
+
+build_as_arm64(
+    name = "docker-arm64",
+    target = ":assemble-docker-image-arm64"
+    target_compatible_with = constraint_linux_arm64,
+)
+
 oci_image_index(
     name = "assemble-docker-image-multiarch",
     images = [
