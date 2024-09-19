@@ -1,12 +1,10 @@
 
-package(default_visibility = ["//visibility:public"])
 load("@io_bazel_rules_docker//container:import.bzl", "container_import")
-
 
 def base_images():
     container_import(
         name = "ubuntu-22.04-x86_64",
-        config = "amd64.json",
+        config = ":amd64.json",
         layers = [],
         base_image_registry = "index.docker.io",
         base_image_repository = "amd64/ubuntu",
@@ -16,7 +14,7 @@ def base_images():
 
     container_import(
         name = "ubuntu-22.04-arm64",
-        config = "arm64.json",
+        config = ":arm64.json",
         layers = [],
         base_image_registry = "index.docker.io",
         base_image_repository = "arm64v8/ubuntu",

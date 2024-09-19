@@ -395,3 +395,44 @@ fn test_select() {
         assert!(!named_outputs.contains_key("p"));
     }
 }
+
+
+#[test]
+fn foo() {
+
+    let (_tmp_dir, mut storage) = create_core_storage();
+    setup_concept_storage(&mut storage);
+    let (type_manager, thing_manager) = load_managers(storage.clone(), None);
+    let function_manager = FunctionManager::new(Arc::new(DefinitionKeyGenerator::new()), None);
+    let query_manager = QueryManager::new();
+
+
+    let mut snapshot = storage.clone().open_snapshot_schema();
+    let define_str = r#"
+    define
+        entity user;
+        entity group;
+        entity admin sub user;
+        user owns username;
+        group owns name;
+        attribute id @abstract, value string;
+        attribute username sub id;
+        attribute name sub id;
+        relation membership @abstract, relates parent, relates member;
+        relation group-membership sub membership;
+        group-membership relates group as parent;
+        group-membership relates group-member as member;
+        user plays group-membership:group-member;
+        group plays group-membership:group;
+    "#;
+    let schema_query = typeql::parse_query(define_str).unwrap().into_schema();
+    query_manager.execute_schema(&mut snapshot, &type_manager, &thing_manager, schema_query).unwrap();
+    snapshot.commit().unwrap();
+
+    let mut snapshot = storage.clone().open_snapshot_write();
+    let insert_query = typeql::parse_query(define_str).unwrap().into_pipeline();
+    query_manager.prepare_write_pipeline(&mut snapshot, &type_manager, thing_manager.clone(), &function_manager, &insert_query).unwrap();
+    snapshot.commit().unwrap();
+
+
+}
