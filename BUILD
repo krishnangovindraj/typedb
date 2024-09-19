@@ -202,7 +202,7 @@ docker_container_push(
     format = "Docker",
     image = ":assemble-docker-x86_64",
     registry = deployment_docker["docker.index"],
-    repository = "{}/{}-x86_64".format(
+    repository = "{}/{}".format(
         deployment_docker["docker.organisation"],
         deployment_docker["docker.release.repository"],
     ),
@@ -214,7 +214,7 @@ docker_container_push(
     format = "Docker",
     image = ":assemble-docker-arm64",
     registry = deployment_docker["docker.index"],
-    repository = "{}/{}-arm64".format(
+    repository = "{}/{}".format(
         deployment_docker["docker.organisation"],
         deployment_docker["docker.release.repository"],
     ),
@@ -226,7 +226,7 @@ docker_container_push(
     format = "Docker",
     image = ":assemble-docker-x86_64",
     registry = deployment_docker["docker.index"],
-    repository = "{}/{}-x86_64".format(
+    repository = "{}/{}".format(
         deployment_docker["docker.organisation"],
         deployment_docker["docker.release.repository"],
     ),
@@ -238,7 +238,7 @@ docker_container_push(
     format = "Docker",
     image = ":assemble-docker-arm64",
     registry = deployment_docker["docker.index"],
-    repository = "{}/{}-arm64".format(
+    repository = "{}/{}".format(
         deployment_docker["docker.organisation"],
         deployment_docker["docker.release.repository"],
     ),
