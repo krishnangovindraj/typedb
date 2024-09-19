@@ -96,7 +96,7 @@ assemble_targz(
     permissions = permissions,
     targets = ["//:package-typedb"],
     visibility = ["//tests/assembly:__subpackages__"],
-#    target_compatible_with = constraint_linux_arm64,
+    target_compatible_with = constraint_linux_arm64,
 )
 
 deploy_artifact(
