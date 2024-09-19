@@ -209,7 +209,7 @@ docker_container_push(
         deployment_docker["docker.organisation"],
         deployment_docker["docker.release.repository"],
     ),
-    tag_file = ":VERSION",
+    tag_file = "//multiarch:version-x86_64",
 )
 
 # bazel run  --@io_bazel_rules_docker//transitions:enable=false --platforms=//multiarch:linux-arm64 //:deploy-docker-release-arm64  --toolchain_resolution_debug='@bazel_tools//tools/cpp:toolchain_type'
@@ -223,30 +223,6 @@ docker_container_push(
         deployment_docker["docker.release.repository"],
     ),
     tag_file = "//multiarch:version-arm64",
-)
-
-docker_container_push(
-    name = "deploy-docker-release-overwrite-latest-tag-x86_64",
-    format = "Docker",
-    image = ":assemble-docker-x86_64",
-    registry = deployment_docker["docker.index"],
-    repository = "{}/{}".format(
-        deployment_docker["docker.organisation"],
-        deployment_docker["docker.release.repository"],
-    ),
-    tag_file = "//multiarch:version-x86_64",
-)
-
-docker_container_push(
-    name = "deploy-docker-release-overwrite-latest-tag-arm64",
-    format = "Docker",
-    image = ":assemble-docker-arm64",
-    registry = deployment_docker["docker.index"],
-    repository = "{}/{}".format(
-        deployment_docker["docker.organisation"],
-        deployment_docker["docker.release.repository"],
-    ),
-    tag = "latest",
 )
 
 # validation & tests
