@@ -26,7 +26,7 @@ genrule(
 genrule(
   name = "version-x86_64",
   srcs = ["//:VERSION"],
-  outs = ["version-arm64.txt"],
+  outs = ["version-x86_64.txt"],
   tools = [],
   cmd = "cp $(location //:VERSION) $@; echo \"-x86_64\" >> $@"
 )
