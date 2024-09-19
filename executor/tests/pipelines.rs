@@ -456,6 +456,4 @@ fn foo() {
     let read_batch = it.collect_owned().unwrap();
     assert_eq!(2, read_batch.len());
     Arc::into_inner(snapshot).unwrap().close_resources();
-
-
 }

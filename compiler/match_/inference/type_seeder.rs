@@ -110,7 +110,6 @@ impl<'this, Snapshot: ReadableSnapshot> TypeSeeder<'this, Snapshot> {
                 .dedup()
                 .all(|id| tig.vertices.contains_key(&id))
         });
-
         Ok(tig)
     }
 
