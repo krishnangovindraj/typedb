@@ -12,6 +12,10 @@ def vaticle_bazel_distribution():
     )
 
 def vaticle_dependencies():
+#    native.local_repository(
+#        name = "vaticle_dependencies",
+#        path = "../vaticle_minor/dependencies/",
+#    )
     git_repository(
         name = "vaticle_dependencies",
         remote = "https://github.com/krishnangovindraj/dependencies",

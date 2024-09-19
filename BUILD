@@ -12,7 +12,7 @@ load("@vaticle_bazel_distribution//common:rules.bzl", "assemble_targz", "assembl
 load("@vaticle_bazel_distribution//platform:constraints.bzl", "constraint_linux_arm64", "constraint_linux_x86_64",
      "constraint_mac_arm64", "constraint_mac_x86_64", "constraint_win_x86_64")
 
-load("@rules_oci//oci:defs.bzl", "oci_image", "oci_image_index")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_image_index", "oci_push")
 
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
@@ -173,8 +173,8 @@ pkg_tar(
 oci_image(
     name = "assemble-docker-image-x86_64",
     base = "@vaticle-base-ubuntu",
-    os = "linux",
-    architecture = "amd64",
+#    os = "linux",
+#    architecture = "amd64",
     cmd = [
         "/opt/typedb-all-linux-x86_64/typedb_server_bin"
     ],
@@ -192,9 +192,9 @@ oci_image(
 oci_image(
     name = "assemble-docker-image-arm64",
     base = "@vaticle-base-ubuntu",
-    os = "linux",
-    architecture = "arm64",
-    variant = "v8",
+#    os = "linux",
+#    architecture = "arm64",
+#    variant = "v8",
     cmd = [
         "/opt/typedb-all-linux-arm64/typedb_server_bin"
     ],
@@ -207,6 +207,20 @@ oci_image(
     visibility = ["//test:__subpackages__"],
     volumes = ["/opt/typedb-all-linux-arm64/server/data/"],
     workdir = "/opt/typedb-all-linux-arm64",
+)
+oci_image_index(
+    name = "assemble-docker-image-multiarch",
+    images = [
+        ":assemble-docker-image-x86_64",
+        ":assemble-docker-image-arm64",
+    ]
+)
+
+oci_push(
+    name = "deploy-docker-release-multiarch",
+    image = "assemble-docker-image-multiarch",
+    repository = "vaticle/typedb-snapshot",
+    remote_tags = ":version",
 )
 ##
 ##docker_container_push(
@@ -221,7 +235,7 @@ oci_image(
 ##    tag = "latest",
 ##)
 ##
-#docker_container_push(
+#oci_push(
 #    name = "deploy-docker-release-amd64",
 #    format = "Docker",
 #    image = ":assemble-docker-amd64",
