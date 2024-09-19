@@ -158,16 +158,16 @@ alias(
 )
 
 # docker
-platform(
-    name = "linux-x86_64",
-    constraint_values = constraint_linux_x86_64,
-)
-platform(
-    name = "linux-arm64",
-    constraint_values = constraint_linux_arm64,
-)
+#platform(
+#    name = "linux-x86_64",
+#    constraint_values = constraint_linux_x86_64,
+#)
+#platform(
+#    name = "linux-arm64",
+#    constraint_values = constraint_linux_arm64,
+#)
 
-load(":multiarch.bzl", "build_as_arm64", "build_as_x86_64")
+#load(":multiarch.bzl", "build_as_arm64", "build_as_x86_64")
 pkg_tar(
     name = "assemble-docker-layer-x86_64",
     deps = [":assemble-linux-x86_64-targz"],
@@ -219,33 +219,54 @@ oci_image(
     volumes = ["/opt/typedb-all-linux-arm64/server/data/"],
     workdir = "/opt/typedb-all-linux-arm64",
 )
+#
+#build_as_x86_64(
+#    name = "docker-x86_64",
+#    target = ":assemble-docker-image-x86_64",
+#    target_compatible_with = constraint_linux_x86_64,
+#)
+#
+#build_as_arm64(
+#    name = "docker-arm64",
+#    target = ":assemble-docker-image-arm64",
+#    target_compatible_with = constraint_linux_arm64,
+#)
 
-build_as_x86_64(
-    name = "docker-x86_64",
-    target = ":assemble-docker-image-x86_64",
-    target_compatible_with = constraint_linux_x86_64,
-)
-
-build_as_arm64(
-    name = "docker-arm64",
-    target = ":assemble-docker-image-arm64"
-    target_compatible_with = constraint_linux_arm64,
-)
-
-oci_image_index(
-    name = "assemble-docker-image-multiarch",
-    images = [
-        ":assemble-docker-image-x86_64",
-        ":assemble-docker-image-arm64",
-    ]
+oci_push(
+    name = "deploy-docker-release-x86_64",
+    image = "assemble-docker-image-x86_64",
+    repository = "{}/{}".format(
+             deployment_docker["docker.organisation"],
+             deployment_docker["docker.release.amd64-repository"],
+         ),
+    remote_tags = ":version",
 )
 
 oci_push(
-    name = "deploy-docker-release-multiarch",
-    image = "assemble-docker-image-multiarch",
-    repository = "vaticle/typedb-snapshot",
+    name = "deploy-docker-release-arm64",
+    image = ":assemble-docker-image-arm64",
+    repository = "{}/{}".format(
+         deployment_docker["docker.organisation"],
+         deployment_docker["docker.release.arm64-repository"],
+     ),
     remote_tags = ":version",
 )
+
+#
+#oci_image_index(
+#    name = "assemble-docker-image-multiarch",
+#    images = [
+#        ":assemble-docker-image-x86_64",
+#        ":assemble-docker-image-arm64",
+#    ]
+#)
+#
+#oci_push(
+#    name = "deploy-docker-release-multiarch",
+#    image = "assemble-docker-image-multiarch",
+#    repository = "vaticle/typedb-snapshot",
+#    remote_tags = ":version",
+#)
 ##
 ##docker_container_push(
 ##    name = "deploy-docker-release-overwrite-latest-tag",
