@@ -221,7 +221,7 @@ docker_container_push(
         deployment_docker["docker.organisation"],
         deployment_docker["docker.release.repository"],
     ),
-    tag_file = ":VERSION",
+    tag_file = "//multiarch:version-arm64",
 )
 
 docker_container_push(
@@ -233,7 +233,7 @@ docker_container_push(
         deployment_docker["docker.organisation"],
         deployment_docker["docker.release.repository"],
     ),
-    tag = "latest",
+    tag_file = "//multiarch:version-x86_64",
 )
 
 docker_container_push(
