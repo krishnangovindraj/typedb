@@ -27,6 +27,7 @@ use storage::{
     snapshot::{CommittableSnapshot, ReadSnapshot},
     MVCCStorage,
 };
+use storage::snapshot::ReadableSnapshot;
 use test_utils_concept::{load_managers, setup_concept_storage};
 use test_utils_encoding::create_core_storage;
 
@@ -394,4 +395,67 @@ fn test_select() {
         assert!(named_outputs.contains_key("age"));
         assert!(!named_outputs.contains_key("p"));
     }
+}
+
+#[test]
+fn foo() {
+
+    let (_tmp_dir, mut storage) = create_core_storage();
+    setup_concept_storage(&mut storage);
+    let (type_manager, thing_manager) = load_managers(storage.clone(), None);
+    let function_manager = FunctionManager::new(Arc::new(DefinitionKeyGenerator::new()), None);
+    let query_manager = QueryManager::new();
+
+    let define_str = r#"
+    define
+        entity user;
+        entity group;
+        entity admin sub user;
+        user owns username;
+        group owns name;
+        attribute id @abstract, value string;
+        attribute username sub id;
+        attribute name sub id;
+        relation membership @abstract, relates parent, relates member;
+        relation group-membership sub membership;
+        group-membership relates group as parent;
+        group-membership relates group-member as member;
+        user plays group-membership:group-member;
+        group plays group-membership:group;
+    "#;
+    let insert_str = r#"
+        insert
+            $james isa user, has username "james";
+            $christoph isa admin, has username "christoph";
+            $research isa group, has name "research";
+            (group: $research, group-member: $james) isa group-membership;
+            (group: $research, group-member: $christoph) isa group-membership;
+    "#;
+    let mut snapshot = storage.clone().open_snapshot_schema();
+    let schema_query = typeql::parse_query(define_str).unwrap().into_schema();
+    query_manager.execute_schema(&mut snapshot, &type_manager, &thing_manager, schema_query).unwrap();
+    snapshot.commit().unwrap();
+
+    let mut snapshot = storage.clone().open_snapshot_write();
+    let insert_query = typeql::parse_query(insert_str).unwrap().into_pipeline();
+    let (pipeline, outputs) = query_manager.prepare_write_pipeline(snapshot, &type_manager, thing_manager.clone(), &function_manager, &insert_query).unwrap();
+    let (it, snapshot) = pipeline.into_iterator(ExecutionInterrupt::new_uninterruptible()).unwrap();
+    let inserted_batch = it.collect_owned().unwrap();
+    assert_eq!(1, inserted_batch.len());
+    let snapshot = Arc::into_inner(snapshot).unwrap();
+    snapshot.commit().unwrap();
+
+    let mut snapshot = Arc::new(storage.clone().open_snapshot_read());
+    let match_str = r#"
+        match
+            (group: $group, member: $member) isa group-membership;
+    "#;
+    let match_query = typeql::parse_query(match_str).unwrap().into_pipeline();
+    let (pipeline, outputs) = query_manager.prepare_read_pipeline(snapshot.clone(), &type_manager, thing_manager.clone(), &function_manager, &match_query).unwrap();
+    let (it,snapshot) = pipeline.into_iterator(ExecutionInterrupt::new_uninterruptible()).unwrap();
+    let read_batch = it.collect_owned().unwrap();
+    assert_eq!(2, read_batch.len());
+    Arc::into_inner(snapshot).unwrap().close_resources();
+
+
 }
