@@ -187,6 +187,7 @@ docker_container_image(
     visibility = ["//test:__subpackages__"],
     volumes = ["/opt/typedb-all-linux-x86_64/server/data/"],
     workdir = "/opt/typedb-all-linux-x86_64",
+    target_compatible_with = constraint_linux_x86_64,
 )
 
 docker_container_image(
@@ -207,7 +208,7 @@ docker_container_image(
     visibility = ["//test:__subpackages__"],
     volumes = ["/opt/typedb-all-linux-arm64/server/data/"],
     workdir = "/opt/typedb-all-linux-arm64",
-
+    target_compatible_with = constraint_linux_arm64,
 )
 
 docker_container_push(
@@ -220,6 +221,7 @@ docker_container_push(
         deployment_docker["docker.release.repository"],
     ),
     tag_file = "//docker:version-x86_64",
+    target_compatible_with = constraint_linux_x86_64,
 )
 
 # bazel run  --@io_bazel_rules_docker//transitions:enable=false --platforms=//docker:linux-arm64 //:deploy-docker-release-arm64
@@ -237,6 +239,7 @@ docker_container_push(
         deployment_docker["docker.release.repository"],
     ),
     tag_file = "//docker:version-arm64",
+    target_compatible_with = constraint_linux_arm64,
 )
 
 # validation & tests
