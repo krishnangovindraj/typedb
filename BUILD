@@ -209,12 +209,12 @@ docker_container_push(
         deployment_docker["docker.organisation"],
         deployment_docker["docker.release.repository"],
     ),
-    tag_file = "//multiarch:version-x86_64",
+    tag_file = "//docker:version-x86_64",
 )
 
-# bazel run  --@io_bazel_rules_docker//transitions:enable=false --platforms=//multiarch:linux-arm64 //:deploy-docker-release-arm64
-# bazel run  --@io_bazel_rules_docker//transitions:enable=false --platforms=//multiarch:linux-x86_64 //:deploy-docker-release-x86_64
-# docker manifest create vaticle/typedb-snapshot:<version>-multiarch --amend vaticle/typedb-snapshot:<version>-x86_64 --amend vaticle/typedb-snapshot:<version>-arm64
+# bazel run  --@io_bazel_rules_docker//transitions:enable=false --platforms=//docker:linux-arm64 //:deploy-docker-release-arm64
+# bazel run  --@io_bazel_rules_docker//transitions:enable=false --platforms=//docker:linux-x86_64 //:deploy-docker-release-x86_64
+# docker manifest create vaticle/typedb-snapshot:<version> --amend vaticle/typedb-snapshot:<version>-x86_64 --amend vaticle/typedb-snapshot:<version>-arm64
 # docker manifest push vaticle/typedb-snapshot:<version>
 # docker manifest push vaticle/typedb-snapshot:latest
 docker_container_push(
@@ -226,7 +226,7 @@ docker_container_push(
         deployment_docker["docker.organisation"],
         deployment_docker["docker.release.repository"],
     ),
-    tag_file = "//multiarch:version-arm64",
+    tag_file = "//docker:version-arm64",
 )
 
 # validation & tests

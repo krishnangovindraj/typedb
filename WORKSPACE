@@ -134,7 +134,7 @@ bazel_rules_docker_repositories()
 load("@io_bazel_rules_docker//repositories:deps.bzl", bazel_rules_docker_container_deps = "deps")
 bazel_rules_docker_container_deps()
 
-load("//multiarch:images.bzl", docker_base_images = "base_images")
+load("//docker:images.bzl", docker_base_images = "base_images")
 docker_base_images()
 
 #####################################
