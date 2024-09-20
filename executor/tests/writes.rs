@@ -11,6 +11,8 @@ use compiler::{
     match_::inference::{annotated_functions::IndexedAnnotatedFunctions, type_inference::infer_types},
     VariablePosition,
 };
+use compiler::match_::inference::annotated_functions::AnnotatedUnindexedFunctions;
+use compiler::match_::inference::type_inference::infer_types_for_match_block;
 use concept::{
     thing::{object::ObjectAPI, relation::Relation, thing_manager::ThingManager},
     type_::{object_type::ObjectType, type_manager::TypeManager, Ordering, OwnerAPI, PlayerAPI},
@@ -97,13 +99,14 @@ fn execute_insert(
         .map(|(i, v)| (*translation_context.visible_variables.get(*v).unwrap(), VariablePosition::new(i as u32)))
         .collect::<HashMap<_, _>>();
 
-    let (entry_annotations, _) = infer_types(
+    let entry_annotations = infer_types_for_match_block(
         &block,
-        vec![],
+        &translation_context.variable_registry,
         snapshot,
         type_manager,
+        &HashMap::new(),
         &IndexedAnnotatedFunctions::empty(),
-        &translation_context.variable_registry,
+        &AnnotatedUnindexedFunctions::empty(),
     )
     .unwrap();
 
@@ -151,7 +154,7 @@ fn execute_delete(
     input_rows: Vec<Vec<VariableValue<'static>>>,
 ) -> Result<Vec<Vec<VariableValue<'static>>>, WriteError> {
     let mut translation_context = TranslationContext::new();
-    let (entry_annotations, _) = {
+    let entry_annotations = {
         let typeql_match = typeql::parse_query(mock_match_string_for_annotations)
             .unwrap()
             .into_pipeline()
@@ -166,13 +169,14 @@ fn execute_delete(
         )
         .unwrap()
         .finish();
-        compiler::match_::inference::type_inference::infer_types(
+        infer_types_for_match_block(
             &block,
-            vec![],
+            &translation_context.variable_registry,
             snapshot,
             type_manager,
+            &HashMap::new(),
             &IndexedAnnotatedFunctions::empty(),
-            &translation_context.variable_registry,
+            &AnnotatedUnindexedFunctions::empty()
         )
         .unwrap()
     };

@@ -157,7 +157,7 @@ impl AsWriteInstruction for compiler::delete::instructions::ThingInstruction {
             }
         }
         let ThingSource(position) = &self.thing;
-        row.set(*position, VariableValue::Empty);
+        row.unset(*position);
         Ok(())
     }
 }
