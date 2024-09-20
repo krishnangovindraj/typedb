@@ -232,6 +232,7 @@ jobs:
     executor: linux-x86_64-amazonlinux-2
     steps:
       - checkout
+      - install-deps-yum
       - deploy-docker-release-multiarch
 
   # generic
