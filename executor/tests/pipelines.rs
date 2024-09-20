@@ -397,6 +397,39 @@ fn test_select() {
     }
 }
 
+fn run_adhoc(storage: Arc<MVCCStorage<WALClient>>, define_opt: Option<&str>, insert_opt: Option<&str>, match_opt: Option<&str>) {
+    let (type_manager, thing_manager) = load_managers(storage.clone(), None);
+    let function_manager = FunctionManager::new(Arc::new(DefinitionKeyGenerator::new()), None);
+    let query_manager = QueryManager::new();
+
+    if let Some(define_str) = define_opt {
+        let mut snapshot = storage.clone().open_snapshot_schema();
+        let schema_query = typeql::parse_query(define_str).unwrap().into_schema();
+        query_manager.execute_schema(&mut snapshot, &type_manager, &thing_manager, schema_query).unwrap();
+        snapshot.commit().unwrap();
+    }
+    if let Some(insert_str) = insert_opt {
+        let mut snapshot = storage.clone().open_snapshot_write();
+        let insert_query = typeql::parse_query(insert_str).unwrap().into_pipeline();
+        let (pipeline, outputs) = query_manager.prepare_write_pipeline(snapshot, &type_manager, thing_manager.clone(), &function_manager, &insert_query).unwrap();
+        let (it, snapshot) = pipeline.into_iterator(ExecutionInterrupt::new_uninterruptible()).unwrap();
+        let inserted_batch = it.collect_owned().unwrap();
+        assert_eq!(1, inserted_batch.len());
+        let snapshot = Arc::into_inner(snapshot).unwrap();
+        snapshot.commit().unwrap();
+    }
+
+    if let Some(match_str) = match_opt {
+        let mut snapshot = Arc::new(storage.clone().open_snapshot_read());
+        let match_query = typeql::parse_query(match_str).unwrap().into_pipeline();
+        let (pipeline, outputs) = query_manager.prepare_read_pipeline(snapshot.clone(), &type_manager, thing_manager.clone(), &function_manager, &match_query).unwrap();
+        let (it, snapshot) = pipeline.into_iterator(ExecutionInterrupt::new_uninterruptible()).unwrap();
+        let read_batch = it.collect_owned().unwrap();
+        assert_eq!(2, read_batch.len());
+        Arc::into_inner(snapshot).unwrap().close_resources();
+    }
+}
+
 #[test]
 fn foo() {
 
@@ -456,4 +489,85 @@ fn foo() {
     let read_batch = it.collect_owned().unwrap();
     assert_eq!(2, read_batch.len());
     Arc::into_inner(snapshot).unwrap().close_resources();
+}
+
+#[test]
+fn foo1() {
+
+    let (_tmp_dir, mut storage) = create_core_storage();
+    setup_concept_storage(&mut storage);
+    let define_str =
+    r#"define
+  entity user,
+    owns id @key,
+    owns name,
+    owns birth-date,
+    plays purchase:buyer;
+  entity order,
+    owns id @key,
+    owns timestamp,
+    owns status,
+    plays purchase:order;
+
+  relation purchase,
+    relates order,
+    relates buyer;
+
+  attribute id, value string;
+  attribute name, value string;
+  attribute birth-date, value date;
+  attribute timestamp, value datetime;
+  attribute status,
+    value string
+    @regex("^(paid|dispatched|delivered|returned|canceled)$");"#;
+
+    let insert_str = r#"
+    insert
+  $user-1 isa user,
+    has id "u0001",
+    has name "Kevin Morrison",
+    has birth-date 1995-10-29;
+  $user-2 isa user,
+    has id "u0002",
+    has name "Cameron Osborne",
+    has birth-date 1954-11-11;
+  $user-3 isa user,
+    has id "u0003",
+    has name "Keyla Pineda";
+  $order-1 isa order,
+    has id "o0001",
+    has timestamp 2022-08-03T19:51:24.324,
+    has status "canceled";
+  $order-2 isa order,
+    has id "o0002",
+    has timestamp 2021-04-27T05:02:39.672,
+    has status "dispatched";
+  $order-6 isa order,
+    has id "o0006",
+    has timestamp 2020-08-19T20:21:54.194,
+    has status "paid";
+   $p1 isa purchase, links (order: $order-1, buyer: $user-1);
+   $p2 isa purchase, links (order: $order-2, buyer: $user-1);
+   $p3 isa purchase, links (order: $order-6, buyer: $user-2);
+"#;
+
+    let match_str = r#"
+    match $x isa purchase, links ($y);
+    "#;
+
+    run_adhoc(storage.clone(), Some(define_str), Some(insert_str), None);
+
+    let delete_str = r#"
+        match
+$order-6 isa order,
+  has id "o0006",
+  has status $old-status;
+  $order-2 isa order, has id "o0002";
+delete
+  $order-2;
+  $old-status of $order-6;
+insert
+  $order-6 has status "dispatched";"#;
+
+    run_adhoc(storage.clone(), None, Some(delete_str), Some(match_str));
 }
