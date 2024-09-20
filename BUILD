@@ -2,7 +2,17 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-load("@vaticle_dependencies//distribution:deployment.bzl", "deployment")
+#load("@vaticle_dependencies//distribution:deployment.bzl", "deployment")
+deployment = {
+    "artifact" : {
+        "release" : {
+            "upload" : "cloudsmith://typedb/private-snapshot"
+        },
+        "snapshot": {
+            "upload" : "cloudsmith://typedb/private-snapshot"
+        },
+    },
+}
 load("//:deployment.bzl", deployment_docker = "deployment", deployment_github = "deployment")
 load("@vaticle_dependencies//tool/checkstyle:rules.bzl", "checkstyle_test")
 load("@vaticle_dependencies//tool/release/deps:rules.bzl", "release_validate_deps")
