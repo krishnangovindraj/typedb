@@ -232,7 +232,8 @@ jobs:
     executor: linux-x86_64-amazonlinux-2
     steps:
       - checkout
-      - install-deps-yum
+      - install-deps-yum:
+          bazel-arch: x86_64
       - deploy-docker-release-multiarch
 
   # generic
