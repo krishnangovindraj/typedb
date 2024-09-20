@@ -125,4 +125,3 @@ release:
         git checkout -b release
         git push -f origin release
         echo "Successfully pushed branch 'release', which triggers a release workflow in CircleCI. The progress of the release can be tracked there."
-    # TODO: Docker release, but that probably needs to be CircleCI so we can do both amd64 and arm64
