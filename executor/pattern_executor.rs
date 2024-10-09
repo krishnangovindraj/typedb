@@ -22,12 +22,11 @@ use crate::{
     ExecutionInterrupt,
 };
 use crate::batch::FixedBatchRowIterator;
+use crate::read::{EntryStep, prepare_executors, Step};
 
 pub struct MatchExecutor {
     input: Option<MaybeOwnedRow<'static>>,
-    step_executors: Vec<StepExecutor>,
-    // modifiers: Modifier,
-    output: Option<FixedBatch>,
+    step_executors: Vec<Step>,
 }
 
 impl MatchExecutor {
@@ -37,17 +36,11 @@ impl MatchExecutor {
         thing_manager: &Arc<ThingManager>,
         input: MaybeOwnedRow<'_>,
     ) -> Result<Self, ConceptReadError> {
-        let step_executors = match_executable
-            .steps()
-            .iter()
-            .map(|step| StepExecutor::new(step, snapshot, thing_manager))
-            .try_collect()?;
-
+        let step_executors = prepare_executors(match_executable, snapshot, thing_manager)?;
         Ok(Self {
             input: Some(input.into_owned()),
             step_executors,
             // modifiers:
-            output: None,
         })
     }
 
@@ -81,11 +74,15 @@ impl MatchExecutor {
                 return Err(ReadExecutionError::Interrupted { interrupt });
             }
 
-            let executor = &mut self.step_executors[current_step];
-            let next_batch = if last_step_batch.is_some() {
-                executor.batch_from(last_step_batch.take().unwrap(), context, interrupt)?
-            } else {
-                executor.batch_continue(context)?
+            let next_batch = match &mut self.step_executors[current_step] {
+                Step::Fundamental(executor) => {
+                    if last_step_batch.is_some() {
+                        executor.batch_from(last_step_batch.take().unwrap(), context, interrupt)?
+                    } else {
+                        executor.batch_continue(context)?
+                    }
+                }
+                _ => todo!()
             };
 
             if let Some(batch) = next_batch {
@@ -156,3 +153,45 @@ impl<Snapshot: ReadableSnapshot + 'static> LendingIterator for PatternIterator<S
         self.iterator.next()
     }
 }
+
+//
+// // PatternStack
+//
+// pub struct StackFrame {
+//     steps: Vec<Step>,
+//     return_index: usize,
+// }
+//
+// pub struct PatternStack {
+//     inner: Vec<StackFrame>,
+// }
+//
+// impl PatternStack {
+//     fn new(entry: EntryStep) -> Self {
+//         let base_frame = StackFrame { steps: vec![Step::Entry(entry)] , return_index: 0 };
+//         Self { inner: vec![base_frame] }
+//     }
+//
+//     fn is_empty(&self) -> bool {
+//         self.inner.len() > 1 // Does not consider the base-frame
+//     }
+//
+//     fn push_frame(&mut self, steps: Vec<Step>, return_index: usize) {
+//         self.inner.push(StackFrame { steps, return_index })
+//     }
+//
+//     fn pop_frame(&mut self) -> StackFrame {
+//         self.inner.pop().unwrap()
+//     }
+//
+//     fn step_at(&mut self, step_index: i64) -> &mut Step {
+//         let steps = &mut self.inner.last_mut().unwrap().steps;
+//         if step_index < 0 {
+//             self.step_pop_failure.as_mut().unwrap()
+//         } else if step_index as usize >= steps.len() {
+//             self.step_yield.as_mut().unwrap()
+//         } else {
+//             steps.get_mut(step_index as usize).unwrap()
+//         }
+//     }
+// }
