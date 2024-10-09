@@ -126,10 +126,13 @@ impl RecursiveQueryExecutor {
         input_batch: FixedBatch,
     ) -> Result<(usize, Option<FixedBatch>), ReadExecutionError> {
         match &mut self.instruction_at(current_step) {
-            StackInstruction::Executable(executor) => match executor.batch_from(input_batch, context, interrupt)? {
-                Some(batch) => Ok((current_step + 1, Some(batch))),
-                None => Ok((current_step - 1, None)),
-            },
+            StackInstruction::Executable(executor) => {
+                executor.prepare(input_batch, context)?;
+                match executor.batch_continue(context, interrupt)? {
+                    Some(batch) => Ok((current_step + 1, Some(batch))),
+                    None => Ok((current_step - 1, None)),
+                }
+            }
             StackInstruction::PatternStart => Ok((current_step + 1, Some(input_batch))),
             StackInstruction::Yield => self.pop_to_subpattern_step(Some(input_batch)),
             _ => todo!(),
@@ -143,7 +146,7 @@ impl RecursiveQueryExecutor {
         current_step: usize,
     ) -> Result<(usize, Option<FixedBatch>), ReadExecutionError> {
         match &mut self.instruction_at(current_step) {
-            StackInstruction::Executable(executor) => match executor.batch_continue(context)? {
+            StackInstruction::Executable(executor) => match executor.batch_continue(context, interrupt)? {
                 Some(batch) => Ok((current_step + 1, Some(batch))),
                 None => Ok((current_step - 1, None)),
             },
