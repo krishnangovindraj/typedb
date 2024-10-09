@@ -14,14 +14,17 @@ use crate::{
     batch::FixedBatch,
     error::ReadExecutionError,
     pipeline::stage::ExecutionContext,
-    read::{step_executors::StepExecutor, subpattern_executor::SubPatternExecutor},
+    read::{
+        step_executors::StepExecutor,
+        subpattern_executor::{EntryStep, SubPatternStep, SubPatternTrait},
+    },
     row::MaybeOwnedRow,
     ExecutionInterrupt,
 };
 
 pub(super) enum StackInstruction {
     Executable(StepExecutor),
-    SubPattern(SubPatternExecutor),
+    SubPattern(SubPatternStep),
 
     // Internal markers which make the executor code simpler
     PatternStart,
@@ -82,7 +85,8 @@ impl RecursiveQueryExecutor {
         input: MaybeOwnedRow<'_>,
     ) -> Result<Self, ConceptReadError> {
         let entry_steps = jit(match_executable, snapshot, thing_manager)?;
-        let base_frame = StackFrame { steps: entry_steps, return_index: 0 };
+        let entry_instruction = StackInstruction::SubPattern(SubPatternStep::Entry(EntryStep::new(entry_steps)));
+        let base_frame = StackFrame { steps: vec![entry_instruction], return_index: 0 };
         Ok(Self { stack: vec![base_frame], input: Some(input.into_owned()) })
     }
 
@@ -91,49 +95,101 @@ impl RecursiveQueryExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         interrupt: &mut ExecutionInterrupt,
     ) -> Result<Option<FixedBatch>, ReadExecutionError> {
+        let StackInstruction::SubPattern(SubPatternStep::Entry(entry)) = self.instruction_at(0) else { unreachable!() };
+        let entry_pattern = entry.take_pattern().unwrap();
+        self.push_into_subpattern(entry_pattern, 0);
+
         let (mut current_step, mut last_step_batch) = match self.input.take() {
             Some(row) => (0, Some(FixedBatch::from(row))),
             None => (self.stack.last().unwrap().steps.len() - 1, None),
         };
 
-        loop {
+        while self.stack.len() > 1 {
             // TODO: inject interrupt into Checkers that could filter out many rows without ending as well.
             if let Some(interrupt) = interrupt.check() {
                 return Err(ReadExecutionError::Interrupted { interrupt });
             }
-
-            let next_batch = match &mut self.instruction_at(current_step) {
-                StackInstruction::Executable(executor) => {
-                    if last_step_batch.is_some() {
-                        executor.batch_from(last_step_batch.take().unwrap(), context, interrupt)?
-                    } else {
-                        executor.batch_continue(context)?
-                    }
-                }
-                StackInstruction::PatternStart => {
-                    // TODO: This is executed for the entry only. Not subpatterns
-                    if last_step_batch.is_some() {
-                        last_step_batch
-                    } else {
-                        return Ok(None);
-                    }
-                }
-                StackInstruction::Yield => {
-                    // TODO: This is executed for the entry only. Not subpatterns
-                    if last_step_batch.is_some() {
-                        return Ok(last_step_batch);
-                    } else {
-                        None
-                    }
-                }
-                _ => todo!(),
+            let (next_step, next_batch) = match last_step_batch {
+                Some(batch) => self.execute_forward(context, interrupt, current_step, batch)?,
+                None => self.execute_backward(context, interrupt, current_step)?,
             };
-            current_step = if next_batch.is_some() { current_step + 1 } else { current_step - 1 };
-            last_step_batch = next_batch;
+            (current_step, last_step_batch) = (next_step, next_batch);
+        }
+        Ok(last_step_batch)
+    }
+
+    fn execute_forward(
+        &mut self,
+        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+        interrupt: &mut ExecutionInterrupt,
+        current_step: usize,
+        input_batch: FixedBatch,
+    ) -> Result<(usize, Option<FixedBatch>), ReadExecutionError> {
+        match &mut self.instruction_at(current_step) {
+            StackInstruction::Executable(executor) => match executor.batch_from(input_batch, context, interrupt)? {
+                Some(batch) => Ok((current_step + 1, Some(batch))),
+                None => Ok((current_step - 1, None)),
+            },
+            StackInstruction::PatternStart => Ok((current_step + 1, Some(input_batch))),
+            StackInstruction::Yield => self.pop_to_subpattern_step(Some(input_batch)),
+            _ => todo!(),
+        }
+    }
+
+    fn execute_backward(
+        &mut self,
+        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+        interrupt: &mut ExecutionInterrupt,
+        current_step: usize,
+    ) -> Result<(usize, Option<FixedBatch>), ReadExecutionError> {
+        match &mut self.instruction_at(current_step) {
+            StackInstruction::Executable(executor) => match executor.batch_continue(context)? {
+                Some(batch) => Ok((current_step + 1, Some(batch))),
+                None => Ok((current_step - 1, None)),
+            },
+            StackInstruction::PatternStart => self.pop_to_subpattern_step(None),
+            StackInstruction::Yield => Ok((current_step - 1, None)),
+            _ => todo!(),
         }
     }
 
     fn instruction_at(&mut self, step_index: usize) -> &mut StackInstruction {
         self.stack.last_mut().unwrap().steps.get_mut(step_index).unwrap()
+    }
+
+    fn pop_to_subpattern_step(
+        &mut self,
+        subpattern_return: Option<FixedBatch>,
+    ) -> Result<(usize, Option<FixedBatch>), ReadExecutionError> {
+        let StackFrame { steps, return_index } = self.stack.pop().unwrap();
+        let StackInstruction::SubPattern(subpattern) = self.instruction_at(return_index) else {
+            todo!("Could still be tabledCall");
+        };
+        let (ptr_update, next_batch) = match subpattern_return {
+            None => subpattern.record_pattern_exhausted(steps),
+            Some(batch) => subpattern.record_pattern_result(steps, batch),
+        };
+        Ok((ptr_update.apply_to(return_index), next_batch))
+    }
+
+    fn push_into_subpattern(&mut self, subpattern: Vec<StackInstruction>, subpattern_index: usize) {
+        let frame = StackFrame { steps: subpattern, return_index: subpattern_index };
+        self.stack.push(frame);
+    }
+}
+
+pub(super) enum InstructionPointerUpdate {
+    Forward,
+    Remain,
+    Backward,
+}
+
+impl InstructionPointerUpdate {
+    fn apply_to(self, index: usize) -> usize {
+        match self {
+            InstructionPointerUpdate::Forward => index + 1,
+            InstructionPointerUpdate::Remain => index,
+            InstructionPointerUpdate::Backward => index - 1,
+        }
     }
 }
