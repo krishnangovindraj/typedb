@@ -25,11 +25,11 @@ use storage::snapshot::ReadableSnapshot;
 use crate::{
     batch::{FixedBatch, FixedBatchRowIterator},
     error::ReadExecutionError,
-    ExecutionInterrupt,
     instruction::{iterator::TupleIterator, Checker, InstructionExecutor},
     pattern_executor::MatchExecutor,
     pipeline::stage::ExecutionContext,
-    row::{MaybeOwnedRow, Row}, SelectedPositions,
+    row::{MaybeOwnedRow, Row},
+    ExecutionInterrupt, SelectedPositions,
 };
 
 pub(crate) enum StepExecutor {

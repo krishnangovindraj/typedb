@@ -20,10 +20,10 @@ pub mod error;
 pub(crate) mod instruction;
 pub mod pattern_executor;
 pub mod pipeline;
+pub mod read;
 pub(crate) mod reduce_executor;
 pub mod row;
 pub mod write;
-pub mod read;
 
 // TODO: use a bit-vec, since we have a continuously allocated range of positions
 // ---> for now, using a byte vec, which is 8x wasteful and on the heap!
