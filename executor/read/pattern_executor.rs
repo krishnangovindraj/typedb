@@ -18,7 +18,7 @@ use crate::{
     pipeline::stage::ExecutionContext,
     read::{
         nested_pattern_executor::{BaseNestedPatternExecutor, NestedPatternController, NestedPatternExecutor},
-        step_executor::{create_executors_recursive, StepExecutors},
+        step_executor::{create_executors_for_match, StepExecutors},
     },
     ExecutionInterrupt,
 };
@@ -42,7 +42,7 @@ impl StackInstruction {
         match self {
             StackInstruction::Start(batch_opt) => Ok(batch_opt.take()),
             StackInstruction::Execute(InstructionIndex(idx)) => {
-                pattern_instructions[*idx].unwrap_executable().batch_continue(context, interrupt)
+                pattern_instructions[*idx].unwrap_immediate().batch_continue(context, interrupt)
             }
             StackInstruction::NestedPatternBranch(InstructionIndex(idx), BranchIndex(branch_index)) => {
                 match pattern_instructions[*idx].unwrap_nested_pattern_branch() {
@@ -56,6 +56,14 @@ impl StackInstruction {
                     NestedPatternExecutor::InlinedFunction(body) => {
                         debug_assert!(*branch_index == 0);
                         PatternExecutor::execute_nested_pattern(context, interrupt, body)
+                    }
+                    NestedPatternExecutor::Offset(inner) => {
+                        debug_assert!(*branch_index == 0);
+                        PatternExecutor::execute_nested_pattern(context, interrupt, inner)
+                    }
+                    NestedPatternExecutor::Limit(inner) => {
+                        debug_assert!(*branch_index == 0);
+                        PatternExecutor::execute_nested_pattern(context, interrupt, inner)
                     }
                 }
             }
@@ -79,14 +87,8 @@ pub(crate) struct PatternExecutor {
 }
 
 impl PatternExecutor {
-    pub(crate) fn build(
-        match_executable: &MatchExecutable,
-        snapshot: &Arc<impl ReadableSnapshot + 'static>,
-        thing_manager: &Arc<ThingManager>,
-        function_registry: &ExecutableFunctionRegistry,
-    ) -> Result<Self, ConceptReadError> {
-        let instructions = create_executors_recursive(match_executable, snapshot, thing_manager, function_registry)?;
-        Ok(PatternExecutor { instructions, stack: Vec::new() })
+    pub(crate) fn new(executors: Vec<StepExecutors>) -> Self {
+        PatternExecutor { instructions: executors, stack: Vec::new() }
     }
 
     pub(crate) fn compute_next_batch(

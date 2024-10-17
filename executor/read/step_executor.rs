@@ -20,7 +20,10 @@ use compiler::{
 use concept::{error::ConceptReadError, thing::thing_manager::ThingManager};
 use storage::snapshot::ReadableSnapshot;
 
-use crate::read::{immediate_executor::ImmediateExecutor, nested_pattern_executor::NestedPatternExecutor};
+use crate::read::{
+    immediate_executor::ImmediateExecutor, nested_pattern_executor::NestedPatternExecutor,
+    pattern_executor::PatternExecutor,
+};
 
 pub(super) enum StepExecutors {
     Immediate(ImmediateExecutor),
@@ -29,7 +32,7 @@ pub(super) enum StepExecutors {
 }
 
 impl StepExecutors {
-    pub(crate) fn unwrap_executable(&mut self) -> &mut ImmediateExecutor {
+    pub(crate) fn unwrap_immediate(&mut self) -> &mut ImmediateExecutor {
         match self {
             StepExecutors::Immediate(step) => step,
             _ => unreachable!(),
@@ -44,11 +47,11 @@ impl StepExecutors {
     }
 }
 
-pub(super) fn create_executors_recursive(
-    match_executable: &MatchExecutable,
+pub(super) fn create_executors_for_match(
     snapshot: &Arc<impl ReadableSnapshot + 'static>,
     thing_manager: &Arc<ThingManager>,
     function_registry: &ExecutableFunctionRegistry,
+    match_executable: &MatchExecutable,
 ) -> Result<Vec<StepExecutors>, ConceptReadError> {
     let mut steps = Vec::with_capacity(match_executable.steps().len());
     for step in match_executable.steps() {
@@ -88,17 +91,21 @@ pub(super) fn create_executors_recursive(
 }
 
 pub(super) fn create_executors_for_function(
-    executable_function: &ExecutableFunction,
     snapshot: &Arc<impl ReadableSnapshot + 'static>,
     thing_manager: &Arc<ThingManager>,
     function_registry: &ExecutableFunctionRegistry,
+    executable_function: &ExecutableFunction,
 ) -> Result<Vec<StepExecutors>, ConceptReadError> {
     // TODO: Support full pipelines
     debug_assert!(executable_function.executable_stages.len() == 1);
-    let ExecutableStage::Match(match_executable) = &executable_function.executable_stages[0] else {
-        unreachable!();
-    };
-    let mut steps = create_executors_recursive(match_executable, snapshot, thing_manager, function_registry)?;
+    let executable_stages = &executable_function.executable_stages;
+    let mut steps = create_executors_for_pipeline_stages(
+        snapshot,
+        thing_manager,
+        function_registry,
+        executable_stages,
+        executable_stages.len() - 1,
+    )?;
 
     // TODO: Add table writing step.
     match &executable_function.returns {
@@ -108,4 +115,47 @@ pub(super) fn create_executors_for_function(
         _ => todo!(),
     }
     Ok(steps)
+}
+
+pub(super) fn create_executors_for_pipeline_stages(
+    snapshot: &Arc<impl ReadableSnapshot + 'static>,
+    thing_manager: &Arc<ThingManager>,
+    function_registry: &ExecutableFunctionRegistry,
+    executable_stages: &Vec<ExecutableStage>,
+    at_index: usize,
+) -> Result<Vec<StepExecutors>, ConceptReadError> {
+    let mut previous_stage_steps = if at_index > 0 {
+        create_executors_for_pipeline_stages(
+            snapshot,
+            thing_manager,
+            function_registry,
+            executable_stages,
+            at_index - 1,
+        )?
+    } else {
+        vec![]
+    };
+
+    match &executable_stages[at_index] {
+        ExecutableStage::Match(match_executable) => {
+            let mut match_stages =
+                create_executors_for_match(snapshot, thing_manager, function_registry, match_executable)?;
+            previous_stage_steps.append(&mut match_stages);
+            Ok(previous_stage_steps)
+        }
+        ExecutableStage::Select(_) => todo!(),
+        ExecutableStage::Sort(_) => todo!(),
+        ExecutableStage::Offset(offset_executable) => {
+            let step =
+                NestedPatternExecutor::new_offset(PatternExecutor::new(previous_stage_steps), offset_executable)?;
+            Ok(vec![StepExecutors::NestedPattern(step)])
+        }
+        ExecutableStage::Limit(limit_executable) => {
+            let step = NestedPatternExecutor::new_limit(PatternExecutor::new(previous_stage_steps), limit_executable)?;
+            Ok(vec![StepExecutors::NestedPattern(step)])
+        }
+        ExecutableStage::Require(_) => todo!(),
+        ExecutableStage::Reduce(_) => todo!(),
+        ExecutableStage::Insert(_) | ExecutableStage::Delete(_) => todo!("Or unreachable?"),
+    }
 }

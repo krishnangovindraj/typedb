@@ -12,6 +12,7 @@ use compiler::{
             function_plan::ExecutableFunctionRegistry,
             match_executable::{FunctionCallStep, NegationStep},
         },
+        modifiers::{LimitExecutable, OffsetExecutable},
         pipeline::ExecutableStage,
     },
     VariablePosition,
@@ -23,16 +24,18 @@ use crate::{
     batch::FixedBatch,
     error::ReadExecutionError,
     pipeline::stage::ExecutionContext,
-    read::pattern_executor::PatternExecutor,
-    row::{MaybeOwnedRow, Row},
+    read::{
+        create_executors_for_pipeline, pattern_executor::PatternExecutor, step_executor::create_executors_for_match,
+    },
+    row::MaybeOwnedRow,
 };
-use crate::batch::Batch;
-use crate::reduce_executor::GroupedReducer;
 
 pub(super) enum NestedPatternExecutor {
     Disjunction(Vec<BaseNestedPatternExecutor<DisjunctionController>>),
     Negation(BaseNestedPatternExecutor<NegationController>),
     InlinedFunction(BaseNestedPatternExecutor<InlinedFunctionController>),
+    Offset(BaseNestedPatternExecutor<OffsetController>),
+    Limit(BaseNestedPatternExecutor<LimitController>),
 }
 
 impl NestedPatternExecutor {
@@ -55,15 +58,25 @@ impl NestedPatternExecutor {
             NestedPatternExecutor::InlinedFunction(inner) => {
                 inner.prepare(as_rows);
             }
+            NestedPatternExecutor::Offset(inner) => {
+                debug_assert!(as_rows.len() == 1);
+                inner.prepare(as_rows);
+            }
+            NestedPatternExecutor::Limit(inner) => {
+                debug_assert!(as_rows.len() == 1);
+                inner.prepare(as_rows);
+            }
         }
         Ok(())
     }
 
     pub(crate) fn branch_count(&self) -> usize {
         match self {
-            NestedPatternExecutor::Negation(_) => 1,
             NestedPatternExecutor::Disjunction(branches) => branches.len(),
-            NestedPatternExecutor::InlinedFunction(_) => 1,
+            NestedPatternExecutor::Negation(_)
+            | NestedPatternExecutor::InlinedFunction(_)
+            | NestedPatternExecutor::Offset(_)
+            | NestedPatternExecutor::Limit(_) => 1,
         }
     }
 }
@@ -75,7 +88,12 @@ impl NestedPatternExecutor {
         thing_manager: &Arc<ThingManager>,
         function_registry: &ExecutableFunctionRegistry,
     ) -> Result<NestedPatternExecutor, ConceptReadError> {
-        let inner = PatternExecutor::build(&plan.negation, snapshot, thing_manager, function_registry)?;
+        let inner = PatternExecutor::new(create_executors_for_match(
+            snapshot,
+            thing_manager,
+            function_registry,
+            &plan.negation,
+        )?);
         Ok(Self::Negation(BaseNestedPatternExecutor::new(inner, NegationController::new())))
     }
 
@@ -88,11 +106,26 @@ impl NestedPatternExecutor {
         let function = function_registry.get(plan.function_id.clone());
         debug_assert!(!function.is_tabled);
         let ExecutableStage::Match(match_) = &function.executable_stages[0] else { todo!("Pipelines in functions") };
-        let inner = PatternExecutor::build(match_, snapshot, thing_manager, function_registry)?;
+        let inner =
+            create_executors_for_pipeline(snapshot, thing_manager, function_registry, &function.executable_stages)?;
         Ok(Self::InlinedFunction(BaseNestedPatternExecutor::new(
             inner,
             InlinedFunctionController::new(plan.arguments.clone(), plan.assigned.clone(), plan.output_width),
         )))
+    }
+
+    pub(crate) fn new_offset(
+        inner: PatternExecutor,
+        plan: &OffsetExecutable,
+    ) -> Result<NestedPatternExecutor, ConceptReadError> {
+        Ok(NestedPatternExecutor::Offset(BaseNestedPatternExecutor::new(inner, OffsetController::new(plan.offset))))
+    }
+
+    pub(crate) fn new_limit(
+        inner: PatternExecutor,
+        plan: &LimitExecutable,
+    ) -> Result<NestedPatternExecutor, ConceptReadError> {
+        Ok(NestedPatternExecutor::Limit(BaseNestedPatternExecutor::new(inner, LimitController::new(plan.limit))))
     }
 }
 
@@ -273,15 +306,15 @@ impl NestedPatternController for InlinedFunctionController {
 }
 
 // TODO: OffsetController & LimitController should be really easy.
-struct OffsetController {
+pub(super) struct OffsetController {
     is_active: bool,
-    required: usize,
-    current: usize,
+    required: u64,
+    current: u64,
 }
 
 impl OffsetController {
-    fn new(offset: usize) -> Self {
-        Self { is_active: false, required: offset, current: 0}
+    fn new(offset: u64) -> Self {
+        Self { is_active: false, required: offset, current: 0 }
     }
 }
 
@@ -305,15 +338,15 @@ impl NestedPatternController for OffsetController {
         if let Some(input_batch) = result {
             if self.current >= self.required {
                 NestedPatternControllerResult::Regular(Some(input_batch))
-            } else if (self.required - self.current) >= input_batch.len() as usize {
-                self.current += input_batch.len() as usize;
+            } else if (self.required - self.current) >= input_batch.len() as u64 {
+                self.current += input_batch.len() as u64;
                 NestedPatternControllerResult::Regular(None)
             } else {
                 let offset_in_batch = (self.required - self.current) as u32;
                 let mut output_batch = FixedBatch::new(input_batch.width());
                 for row_index in offset_in_batch..input_batch.len() {
                     output_batch.append(|mut output_row| {
-                        let input_row = input_batch.get_row(row_index as u32);
+                        let input_row = input_batch.get_row(row_index);
                         output_row.copy_from(input_row.row(), input_row.multiplicity())
                     });
                 }
@@ -327,18 +360,24 @@ impl NestedPatternController for OffsetController {
 }
 
 // TODO: OffsetController & LimitController should be really easy.
-struct LimitController {
-    limit: usize,
-    current: usize,
+pub(super) struct LimitController {
+    required: u64,
+    current: u64,
+}
+
+impl LimitController {
+    fn new(limit: u64) -> Self {
+        Self { required: limit, current: limit }
+    }
 }
 
 impl NestedPatternController for LimitController {
     fn reset(&mut self) {
-        self.current = self.limit; // Reset means make it fail.
+        self.current = self.required; // Reset means make it fail.
     }
 
     fn is_active(&self) -> bool {
-        self.current >= self.limit
+        self.current >= self.required
     }
 
     fn prepare_and_get_subpattern_input(&mut self, row: MaybeOwnedRow<'static>) -> MaybeOwnedRow<'static> {
@@ -348,15 +387,15 @@ impl NestedPatternController for LimitController {
 
     fn process_result(&mut self, result: Option<FixedBatch>) -> NestedPatternControllerResult {
         if let Some(input_batch) = result {
-            if self.current >= self.limit {
+            if self.current >= self.required {
                 NestedPatternControllerResult::Regular(None)
-            } else if (self.limit - self.current) >= input_batch.len() as usize {
-                self.limit += input_batch.len() as usize;
+            } else if (self.required - self.current) >= input_batch.len() as u64 {
+                self.current += input_batch.len() as u64;
                 NestedPatternControllerResult::Regular(Some(input_batch))
             } else {
                 let mut output_batch = FixedBatch::new(input_batch.width());
                 let mut i = 0;
-                while self.current < self.limit {
+                while self.current < self.required {
                     output_batch.append(|mut output_row| {
                         let input_row = input_batch.get_row(i);
                         output_row.copy_from(input_row.row(), input_row.multiplicity())
@@ -364,7 +403,7 @@ impl NestedPatternController for LimitController {
                     i += 1;
                     self.current += 1;
                 }
-                debug_assert!(self.current == self.limit);
+                debug_assert!(self.current == self.required);
                 NestedPatternControllerResult::Regular(Some(output_batch))
             }
         } else {
