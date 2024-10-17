@@ -15,6 +15,7 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::read::{pattern_executor::PatternExecutor, step_executor::create_executors_for_pipeline_stages};
 
+mod collecting_stage_executor;
 pub mod expression_executor;
 mod immediate_executor;
 mod nested_pattern_executor;

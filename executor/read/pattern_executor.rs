@@ -17,6 +17,7 @@ use crate::{
     error::ReadExecutionError,
     pipeline::stage::ExecutionContext,
     read::{
+        collecting_stage_executor::{CollectingStageController, CollectingStageExecutor},
         nested_pattern_executor::{BaseNestedPatternExecutor, NestedPatternController, NestedPatternExecutor},
         step_executor::{create_executors_for_match, StepExecutors},
     },
@@ -30,6 +31,7 @@ pub(super) enum StackInstruction {
     Start(Option<FixedBatch>),
     Execute(InstructionIndex),
     NestedPatternBranch(InstructionIndex, BranchIndex),
+    CollectingStage(InstructionIndex),
 }
 
 impl StackInstruction {
@@ -67,6 +69,16 @@ impl StackInstruction {
                     }
                 }
             }
+            StackInstruction::CollectingStage(InstructionIndex(idx)) => {
+                match pattern_instructions[*idx].unwrap_collecting_stage() {
+                    CollectingStageExecutor::Reduce(inner, controller) => {
+                        PatternExecutor::execute_collecting_stage(context, interrupt, inner, controller)
+                    }
+                    CollectingStageExecutor::Sort(inner, controller) => {
+                        PatternExecutor::execute_collecting_stage(context, interrupt, inner, controller)
+                    }
+                }
+            }
         }
     }
 }
@@ -77,6 +89,7 @@ impl StackInstruction {
             StackInstruction::Start(_) => InstructionIndex(0),
             StackInstruction::Execute(InstructionIndex(idx)) => InstructionIndex(idx + 1),
             StackInstruction::NestedPatternBranch(InstructionIndex(idx), _) => InstructionIndex(idx + 1),
+            StackInstruction::CollectingStage(InstructionIndex(idx)) => InstructionIndex(idx + 1),
         }
     }
 }
@@ -153,6 +166,22 @@ impl PatternExecutor {
         Ok(None)
     }
 
+    fn execute_collecting_stage(
+        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+        interrupt: &mut ExecutionInterrupt,
+        executor: &mut PatternExecutor,
+        controller: &mut impl CollectingStageController,
+    ) -> Result<Option<FixedBatch>, ReadExecutionError> {
+        if !executor.stack.is_empty() {
+            // TODO: Improve. This is a proxy to know if it's prepared but not collected.
+            while let Some(batch) = executor.batch_continue(context, interrupt)? {
+                controller.accept(batch, context);
+            }
+            controller.transform();
+        }
+        controller.batch_continue()
+    }
+
     fn prepare_and_push_to_stack(
         &mut self,
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
@@ -168,8 +197,12 @@ impl PatternExecutor {
             StepExecutors::NestedPattern(nested) => {
                 nested.prepare_all_branches(batch, context)?;
                 for i in 0..nested.branch_count() {
-                    self.stack.push(StackInstruction::NestedPatternBranch(InstructionIndex(index), BranchIndex(i)))
+                    self.stack.push(StackInstruction::NestedPatternBranch(InstructionIndex(index), BranchIndex(i)));
                 }
+            }
+            StepExecutors::CollectingStage(collecting_stage) => {
+                collecting_stage.prepare(batch);
+                self.stack.push(StackInstruction::CollectingStage(InstructionIndex(index)));
             }
             StepExecutors::ReshapeForReturn(_) => todo!(),
         }

@@ -21,13 +21,14 @@ use concept::{error::ConceptReadError, thing::thing_manager::ThingManager};
 use storage::snapshot::ReadableSnapshot;
 
 use crate::read::{
-    immediate_executor::ImmediateExecutor, nested_pattern_executor::NestedPatternExecutor,
-    pattern_executor::PatternExecutor,
+    collecting_stage_executor::CollectingStageExecutor, immediate_executor::ImmediateExecutor,
+    nested_pattern_executor::NestedPatternExecutor, pattern_executor::PatternExecutor,
 };
 
 pub(super) enum StepExecutors {
     Immediate(ImmediateExecutor),
     NestedPattern(NestedPatternExecutor),
+    CollectingStage(CollectingStageExecutor),
     ReshapeForReturn(Vec<VariablePosition>),
 }
 
@@ -42,6 +43,13 @@ impl StepExecutors {
     pub(crate) fn unwrap_nested_pattern_branch(&mut self) -> &mut NestedPatternExecutor {
         match self {
             StepExecutors::NestedPattern(step) => step,
+            _ => unreachable!(),
+        }
+    }
+
+    pub(crate) fn unwrap_collecting_stage(&mut self) -> &mut CollectingStageExecutor {
+        match self {
+            StepExecutors::CollectingStage(step) => step,
             _ => unreachable!(),
         }
     }
@@ -144,7 +152,6 @@ pub(super) fn create_executors_for_pipeline_stages(
             Ok(previous_stage_steps)
         }
         ExecutableStage::Select(_) => todo!(),
-        ExecutableStage::Sort(_) => todo!(),
         ExecutableStage::Offset(offset_executable) => {
             let step =
                 NestedPatternExecutor::new_offset(PatternExecutor::new(previous_stage_steps), offset_executable)?;
@@ -155,7 +162,15 @@ pub(super) fn create_executors_for_pipeline_stages(
             Ok(vec![StepExecutors::NestedPattern(step)])
         }
         ExecutableStage::Require(_) => todo!(),
-        ExecutableStage::Reduce(_) => todo!(),
+        ExecutableStage::Sort(sort_executable) => {
+            let step = CollectingStageExecutor::new_sort(PatternExecutor::new(previous_stage_steps), sort_executable);
+            Ok(vec![StepExecutors::CollectingStage(step)])
+        }
+        ExecutableStage::Reduce(reduce_executable) => {
+            let step =
+                CollectingStageExecutor::new_reduce(PatternExecutor::new(previous_stage_steps), reduce_executable);
+            Ok(vec![StepExecutors::CollectingStage(step)])
+        }
         ExecutableStage::Insert(_) | ExecutableStage::Delete(_) => todo!("Or unreachable?"),
     }
 }

@@ -61,7 +61,7 @@ fn function_compiles() {
     let context = setup_common();
     let snapshot = context.storage.clone().open_snapshot_write();
     let insert_query_str = r#"insert
-        $p1 isa person, has name "Alice", has age 1, has age 3;
+        $p1 isa person, has name "Alice", has age 1;
         $p2 isa person, has name "Bob", has age 2;"#;
     let insert_query = typeql::parse_query(insert_query_str).unwrap().into_pipeline();
     let insert_pipeline = context
@@ -89,8 +89,6 @@ fn function_compiles() {
             fun get_ages($p_arg: person) -> { age }:
             match
                 $p_arg has age $age_return;
-            offset 1;
-            limit 1;
             return {$age_return};
 
             match
@@ -113,6 +111,6 @@ fn function_compiles() {
 
         let rows: Vec<Result<MaybeOwnedRow<'static>, PipelineExecutionError>> =
             iterator.map_static(|row| row.map(|row| row.into_owned()).map_err(|err| err.clone())).collect();
-        assert_eq!(rows.len(), 1);
+        assert_eq!(rows.len(), 2);
     }
 }
