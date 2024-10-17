@@ -26,6 +26,8 @@ use crate::{
     read::pattern_executor::PatternExecutor,
     row::{MaybeOwnedRow, Row},
 };
+use crate::batch::Batch;
+use crate::reduce_executor::GroupedReducer;
 
 pub(super) enum NestedPatternExecutor {
     Disjunction(Vec<BaseNestedPatternExecutor<DisjunctionController>>),
@@ -269,3 +271,136 @@ impl NestedPatternController for InlinedFunctionController {
         }
     }
 }
+
+// TODO: OffsetController & LimitController should be really easy.
+struct OffsetController {
+    is_active: bool,
+    required: usize,
+    current: usize,
+}
+
+impl OffsetController {
+    fn new(offset: usize) -> Self {
+        Self { is_active: false, required: offset, current: 0}
+    }
+}
+
+impl NestedPatternController for OffsetController {
+    fn reset(&mut self) {
+        self.is_active = false;
+    }
+
+    fn is_active(&self) -> bool {
+        self.is_active
+    }
+
+    fn prepare_and_get_subpattern_input(&mut self, row: MaybeOwnedRow<'static>) -> MaybeOwnedRow<'static> {
+        self.is_active = true;
+        self.current = 0;
+        row
+    }
+
+    fn process_result(&mut self, result: Option<FixedBatch>) -> NestedPatternControllerResult {
+        debug_assert!(self.is_active);
+        if let Some(input_batch) = result {
+            if self.current >= self.required {
+                NestedPatternControllerResult::Regular(Some(input_batch))
+            } else if (self.required - self.current) >= input_batch.len() as usize {
+                self.current += input_batch.len() as usize;
+                NestedPatternControllerResult::Regular(None)
+            } else {
+                let offset_in_batch = (self.required - self.current) as u32;
+                let mut output_batch = FixedBatch::new(input_batch.width());
+                for row_index in offset_in_batch..input_batch.len() {
+                    output_batch.append(|mut output_row| {
+                        let input_row = input_batch.get_row(row_index as u32);
+                        output_row.copy_from(input_row.row(), input_row.multiplicity())
+                    });
+                }
+                self.current = self.required;
+                NestedPatternControllerResult::Regular(Some(output_batch))
+            }
+        } else {
+            NestedPatternControllerResult::Regular(None)
+        }
+    }
+}
+
+// TODO: OffsetController & LimitController should be really easy.
+struct LimitController {
+    limit: usize,
+    current: usize,
+}
+
+impl NestedPatternController for LimitController {
+    fn reset(&mut self) {
+        self.current = self.limit; // Reset means make it fail.
+    }
+
+    fn is_active(&self) -> bool {
+        self.current >= self.limit
+    }
+
+    fn prepare_and_get_subpattern_input(&mut self, row: MaybeOwnedRow<'static>) -> MaybeOwnedRow<'static> {
+        self.current = 0;
+        row
+    }
+
+    fn process_result(&mut self, result: Option<FixedBatch>) -> NestedPatternControllerResult {
+        if let Some(input_batch) = result {
+            if self.current >= self.limit {
+                NestedPatternControllerResult::Regular(None)
+            } else if (self.limit - self.current) >= input_batch.len() as usize {
+                self.limit += input_batch.len() as usize;
+                NestedPatternControllerResult::Regular(Some(input_batch))
+            } else {
+                let mut output_batch = FixedBatch::new(input_batch.width());
+                let mut i = 0;
+                while self.current < self.limit {
+                    output_batch.append(|mut output_row| {
+                        let input_row = input_batch.get_row(i);
+                        output_row.copy_from(input_row.row(), input_row.multiplicity())
+                    });
+                    i += 1;
+                    self.current += 1;
+                }
+                debug_assert!(self.current == self.limit);
+                NestedPatternControllerResult::Regular(Some(output_batch))
+            }
+        } else {
+            NestedPatternControllerResult::Regular(None)
+        }
+    }
+}
+
+// // The reducers & sort will need to pass through a regular Batch since there's no guarantee of it passing through a fixed batch.
+// // Maybe spawn off FixedBatch-es from a regular batch. This also means they can't be regular subpattern executors
+// struct ReducerController {
+//     input: Option<MaybeOwnedRow<'static>>,
+//     grouped_reducer: GroupedReducer,
+// }
+//
+// impl ReducerController {
+//     fn new(grouped_reducer: GroupedReducer) -> Self {
+//         Self { grouped_reducer, input: None }
+//     }
+// }
+//
+// impl CollectingStageController for ReducerController {
+//     fn reset(&mut self) {
+//         self.input = None;
+//     }
+//
+//     fn is_active(&self) -> bool {
+//         self.input.is_some()
+//     }
+//
+//     fn prepare_and_get_subpattern_input(&mut self, row: MaybeOwnedRow<'static>) -> MaybeOwnedRow<'static> {
+//         self.input = Some(row.clone());
+//         row
+//     }
+//
+//     fn process_result(&mut self, result: Option<FixedBatch>) -> NestedPatternControllerResult {
+//
+//     }
+// }
