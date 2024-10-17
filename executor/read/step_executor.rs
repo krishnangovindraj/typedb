@@ -4,6 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use compiler::{
@@ -18,6 +19,7 @@ use compiler::{
     VariablePosition,
 };
 use concept::{error::ConceptReadError, thing::thing_manager::ThingManager};
+use ir::pipeline::function_signature::FunctionID;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::read::{
@@ -60,6 +62,7 @@ pub(super) fn create_executors_for_match(
     thing_manager: &Arc<ThingManager>,
     function_registry: &ExecutableFunctionRegistry,
     match_executable: &MatchExecutable,
+    tmp__recursion_validation: &mut HashSet<FunctionID>,
 ) -> Result<Vec<StepExecutors>, ConceptReadError> {
     let mut steps = Vec::with_capacity(match_executable.steps().len());
     for step in match_executable.steps() {
@@ -83,12 +86,20 @@ pub(super) fn create_executors_for_match(
                 if function.is_tabled {
                     todo!()
                 } else {
-                    StepExecutors::NestedPattern(NestedPatternExecutor::new_inline_function(
+                    if tmp__recursion_validation.contains(&function_call.function_id) {
+                        todo!("Recursive functions are unsupported in this release. Continuing would overflow the stack")
+                    } else {
+                        tmp__recursion_validation.insert(function_call.function_id.clone());
+                    }
+                    let to_return = StepExecutors::NestedPattern(NestedPatternExecutor::new_inline_function(
                         function_call,
                         snapshot,
                         thing_manager,
                         function_registry,
-                    )?)
+                        tmp__recursion_validation
+                    )?);
+                    tmp__recursion_validation.remove(&function_call.function_id);
+                    to_return
                 }
             }
             _ => todo!(),
@@ -103,6 +114,7 @@ pub(super) fn create_executors_for_function(
     thing_manager: &Arc<ThingManager>,
     function_registry: &ExecutableFunctionRegistry,
     executable_function: &ExecutableFunction,
+    tmp__recursion_validation: &mut HashSet<FunctionID>
 ) -> Result<Vec<StepExecutors>, ConceptReadError> {
     // TODO: Support full pipelines
     debug_assert!(executable_function.executable_stages.len() == 1);
@@ -113,6 +125,7 @@ pub(super) fn create_executors_for_function(
         function_registry,
         executable_stages,
         executable_stages.len() - 1,
+        tmp__recursion_validation,
     )?;
 
     // TODO: Add table writing step.
@@ -131,6 +144,7 @@ pub(super) fn create_executors_for_pipeline_stages(
     function_registry: &ExecutableFunctionRegistry,
     executable_stages: &Vec<ExecutableStage>,
     at_index: usize,
+    tmp__recursion_validation: &mut HashSet<FunctionID>,
 ) -> Result<Vec<StepExecutors>, ConceptReadError> {
     let mut previous_stage_steps = if at_index > 0 {
         create_executors_for_pipeline_stages(
@@ -139,6 +153,7 @@ pub(super) fn create_executors_for_pipeline_stages(
             function_registry,
             executable_stages,
             at_index - 1,
+            tmp__recursion_validation,
         )?
     } else {
         vec![]
@@ -147,7 +162,7 @@ pub(super) fn create_executors_for_pipeline_stages(
     match &executable_stages[at_index] {
         ExecutableStage::Match(match_executable) => {
             let mut match_stages =
-                create_executors_for_match(snapshot, thing_manager, function_registry, match_executable)?;
+                create_executors_for_match(snapshot, thing_manager, function_registry, match_executable, tmp__recursion_validation)?;
             previous_stage_steps.append(&mut match_stages);
             Ok(previous_stage_steps)
         }

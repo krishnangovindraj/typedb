@@ -4,6 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use compiler::{
@@ -18,6 +19,7 @@ use compiler::{
     VariablePosition,
 };
 use concept::{error::ConceptReadError, thing::thing_manager::ThingManager};
+use ir::pipeline::function_signature::FunctionID;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
@@ -93,6 +95,7 @@ impl NestedPatternExecutor {
             thing_manager,
             function_registry,
             &plan.negation,
+            &mut HashSet::new()
         )?);
         Ok(Self::Negation(BaseNestedPatternExecutor::new(inner, NegationController::new())))
     }
@@ -102,12 +105,13 @@ impl NestedPatternExecutor {
         snapshot: &Arc<impl ReadableSnapshot + 'static>,
         thing_manager: &Arc<ThingManager>,
         function_registry: &ExecutableFunctionRegistry,
+        tmp__recursion_validation: &mut HashSet<FunctionID>
     ) -> Result<NestedPatternExecutor, ConceptReadError> {
         let function = function_registry.get(plan.function_id.clone());
         debug_assert!(!function.is_tabled);
         let ExecutableStage::Match(match_) = &function.executable_stages[0] else { todo!("Pipelines in functions") };
         let inner =
-            create_executors_for_pipeline(snapshot, thing_manager, function_registry, &function.executable_stages)?;
+            create_executors_for_pipeline(snapshot, thing_manager, function_registry, &function.executable_stages, tmp__recursion_validation)?;
         Ok(Self::InlinedFunction(BaseNestedPatternExecutor::new(
             inner,
             InlinedFunctionController::new(plan.arguments.clone(), plan.assigned.clone(), plan.output_width),

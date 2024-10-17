@@ -4,6 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use compiler::executable::{
@@ -11,6 +12,7 @@ use compiler::executable::{
     pipeline::ExecutableStage,
 };
 use concept::{error::ConceptReadError, thing::thing_manager::ThingManager};
+use ir::pipeline::function_signature::FunctionID;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::read::{pattern_executor::PatternExecutor, step_executor::create_executors_for_pipeline_stages};
@@ -29,7 +31,7 @@ pub(super) fn TODO_REMOVE_create_executors_for_match(
     match_executable: &MatchExecutable,
 ) -> Result<PatternExecutor, ConceptReadError> {
     let executors =
-        step_executor::create_executors_for_match(snapshot, thing_manager, function_registry, match_executable)?;
+        step_executor::create_executors_for_match(snapshot, thing_manager, function_registry, match_executable, &mut HashSet::new())?;
     Ok(PatternExecutor::new(executors))
 }
 
@@ -38,6 +40,7 @@ pub(super) fn create_executors_for_pipeline(
     thing_manager: &Arc<ThingManager>,
     function_registry: &ExecutableFunctionRegistry,
     executable_stages: &Vec<ExecutableStage>,
+    tmp__recursion_validation: &mut HashSet<FunctionID>,
 ) -> Result<PatternExecutor, ConceptReadError> {
     let executors = create_executors_for_pipeline_stages(
         snapshot,
@@ -45,6 +48,7 @@ pub(super) fn create_executors_for_pipeline(
         function_registry,
         executable_stages,
         executable_stages.len() - 1,
+        tmp__recursion_validation
     )?;
     Ok(PatternExecutor::new(executors))
 }
