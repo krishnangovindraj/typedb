@@ -69,7 +69,6 @@ pub(super) enum CollectingStageState {
 pub(super) trait CollectingStageController {
     fn prepare(&mut self);
     fn reset(&mut self);
-    fn state(&mut self) -> CollectingStageState;
     fn accept(&mut self, batch: FixedBatch, context: &ExecutionContext<impl ReadableSnapshot>);
     fn transform(&mut self);
     fn batch_continue(&mut self) -> Result<Option<FixedBatch>, ReadExecutionError>;
@@ -98,16 +97,6 @@ impl CollectingStageController for ReduceController {
     fn reset(&mut self) {
         self.active_reducer = None;
         self.output = None;
-    }
-
-    fn state(&mut self) -> CollectingStageState {
-        if self.output.is_some() {
-            CollectingStageState::Streaming
-        } else if self.active_reducer.is_some() {
-            CollectingStageState::Collecting
-        } else {
-            CollectingStageState::Inactive
-        }
     }
 
     fn accept(&mut self, batch: FixedBatch, context: &ExecutionContext<impl ReadableSnapshot>) {
@@ -172,17 +161,6 @@ impl CollectingStageController for SortController {
 
     fn reset(&mut self) {
         self.collector = None;
-    }
-
-    fn state(&mut self) -> CollectingStageState {
-        if self.sorted_indices.is_some() {
-            CollectingStageState::Streaming
-        } else if self.collector.is_some() || self.collector.is_none() {
-            // TODO: When we have the output_width
-            CollectingStageState::Collecting
-        } else {
-            CollectingStageState::Inactive
-        }
     }
 
     fn accept(&mut self, batch: FixedBatch, _: &ExecutionContext<impl ReadableSnapshot>) {
