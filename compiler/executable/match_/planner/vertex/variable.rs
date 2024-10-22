@@ -209,7 +209,7 @@ pub(crate) struct ThingPlanner {
 
 impl fmt::Debug for ThingPlanner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ThingPlanner").field("variable", &self.variable).finish()
+        f.debug_struct("ThingPlanner").field("variable", &self.variable).field("binding", &self.binding).finish()
     }
 }
 

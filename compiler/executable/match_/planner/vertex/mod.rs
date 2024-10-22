@@ -49,7 +49,7 @@ pub(super) enum PlannerVertex<'a> {
 
 impl PlannerVertex<'_> {
     pub(super) fn is_valid(&self, index: VertexId, ordered: &[VertexId], graph: &Graph<'_>) -> bool {
-        match self {
+        let is_valid = match self {
             Self::Variable(inner) => inner.is_valid(index, ordered, graph),
             Self::Constraint(inner) => inner.is_valid(index, ordered, graph),
 
@@ -63,7 +63,17 @@ impl PlannerVertex<'_> {
 
             Self::Negation(inner) => inner.is_valid(index, ordered, graph),
             Self::Disjunction(inner) => inner.is_valid(index, ordered, graph),
+        };
+        if !is_valid {
+            return false;
         }
+        let mut ordered = ordered.to_owned();
+        ordered.push(index);
+        self.variables().all(|var| {
+            ordered.contains(&VertexId::Variable(var))
+                || graph.elements()[&VertexId::Variable(var)].is_valid(VertexId::Variable(var), &ordered, graph)
+        })
+
     }
 
     pub(super) fn variables(&self) -> Box<dyn Iterator<Item = VariableVertexId> + '_> {
@@ -220,8 +230,8 @@ impl Costed for ExpressionPlanner<'_> {
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionCallPlanner<'a> {
     pub call_binding: &'a FunctionCallBinding<Variable>,
-    arguments: Vec<VariableVertexId>,
-    assigned: Vec<VariableVertexId>,
+    pub(super) arguments: Vec<VariableVertexId>,
+    pub(super) assigned: Vec<VariableVertexId>,
     cost: ElementCost,
 }
 
