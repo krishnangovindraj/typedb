@@ -73,7 +73,6 @@ impl PlannerVertex<'_> {
             ordered.contains(&VertexId::Variable(var))
                 || graph.elements()[&VertexId::Variable(var)].is_valid(VertexId::Variable(var), &ordered, graph)
         })
-
     }
 
     pub(super) fn variables(&self) -> Box<dyn Iterator<Item = VariableVertexId> + '_> {
