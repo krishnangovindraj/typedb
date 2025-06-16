@@ -658,8 +658,8 @@ impl<'a> ConjunctionPlanBuilder<'a> {
 
         const BEAM_REDUCTION_CYCLE: usize = 2;
         const EXTENSION_REDUCTION_CYCLE: usize = 2;
-        let mut beam_width = (num_patterns * 2).clamp(2, MAX_BEAM_WIDTH);
-        let mut extension_width = (num_patterns / 2) + 5; // ensure this is larger than (num_patterns / 2) or change narrowing logic (note, join options means patterns may appear twice as extensions)
+        let mut beam_width = (num_patterns * 10000 * 2).clamp(2, MAX_BEAM_WIDTH);
+        let mut extension_width = (num_patterns * 10000) + 5; // ensure this is larger than (num_patterns / 2) or change narrowing logic (note, join options means patterns may appear twice as extensions)
 
         let mut best_partial_plans = Vec::with_capacity(beam_width);
         best_partial_plans.push(PartialCostPlan::new(
@@ -668,10 +668,10 @@ impl<'a> ConjunctionPlanBuilder<'a> {
             self.input_variables(),
         ));
 
-        let mut extension_heap = BinaryHeap::with_capacity(extension_width); // reused
+        let mut extension_heap = Vec::with_capacity(extension_width); // reused
         for i in 0..num_patterns {
             event!(Level::TRACE, "{INDENT:4}PLANNER STEP {}", i);
-            let mut new_plans_heap = BinaryHeap::with_capacity(beam_width);
+            let mut new_plans_heap = Vec::with_capacity(beam_width);
             let mut new_plans_hashset = HashSet::with_capacity(beam_width);
 
             if i % BEAM_REDUCTION_CYCLE == 0 {
@@ -704,31 +704,21 @@ impl<'a> ConjunctionPlanBuilder<'a> {
                             extension.step_cost.cost,
                             extension.heuristic
                         );
-                        let mut plan = plan.clone();
-                        plan.add_to_stash(extension.pattern_id, &self.graph);
-                        if new_plans_heap.len() < beam_width {
-                            new_plans_heap.push(plan);
-                        } else if let Some(top) = new_plans_heap.peek() {
-                            if plan < *top {
-                                new_plans_heap.pop();
-                                new_plans_heap.push(plan);
-                            }
+                        let mut new_plan = plan.clone();
+                        new_plan.add_to_stash(extension.pattern_id, &self.graph);
+                        let hash = new_plan.hash();
+                        if !new_plans_hashset.contains(&hash) {
+                            new_plans_hashset.insert(hash);
+                            new_plans_heap.push(new_plan);
+                            extension_heap.clear();
+                            break;
                         }
-                        extension_heap.clear();
-                        break;
-                    }
-
-                    if extension_heap.len() < extension_width {
+                    } else {
                         extension_heap.push(extension);
-                    } else if let Some(top) = extension_heap.peek() {
-                        if extension < *top {
-                            extension_heap.pop();
-                            extension_heap.push(extension);
-                        }
                     }
                 }
 
-                for extension in extension_heap.drain() {
+                for extension in extension_heap.drain(..) {
                     event!(
                         Level::TRACE,
                         "{INDENT:12}Choice {:?} = {} <-- join: {:?}, cost: {:?}, heuristic: {:?} metadata: {:?}",
@@ -754,26 +744,17 @@ impl<'a> ConjunctionPlanBuilder<'a> {
 
                     let new_plan_hash = new_plan.hash();
                     if !new_plans_hashset.contains(&new_plan_hash) {
-                        if new_plans_heap.len() < beam_width {
-                            new_plans_heap.push(new_plan);
-                            new_plans_hashset.insert(new_plan_hash);
-                            event!(Level::TRACE, "{INDENT:16}(added)");
-                        } else if let Some(top) = new_plans_heap.peek() {
-                            if new_plan < *top {
-                                new_plans_heap.pop();
-                                new_plans_heap.push(new_plan);
-                                new_plans_hashset.insert(new_plan_hash);
-                                event!(Level::TRACE, "{INDENT:16}(added)");
-                            } else {
-                                event!(Level::TRACE, "{INDENT:16}(discarded)");
-                            }
-                        }
+                        new_plans_heap.push(new_plan);
+                        new_plans_hashset.insert(new_plan_hash);
+                        event!(Level::TRACE, "{INDENT:16}(added)");
                     } else {
                         event!(Level::TRACE, "{INDENT:16}(hash collision)");
                     }
                 }
+                debug_assert!(extension_heap.is_empty());
             }
-            best_partial_plans = new_plans_heap.into_vec();
+            best_partial_plans = new_plans_heap;
+            eprintln!("Through {}/{}. Fringe: {}", i, num_patterns, best_partial_plans.len());
         }
 
         let best_plan =
