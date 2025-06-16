@@ -706,6 +706,7 @@ impl<'a> ConjunctionPlanBuilder<'a> {
                         );
                         let mut new_plan = plan.clone();
                         new_plan.add_to_stash(extension.pattern_id, &self.graph);
+                        // let hash = new_plan.simpler_hash();
                         let hash = new_plan.hash();
                         if !new_plans_hashset.contains(&hash) {
                             new_plans_hashset.insert(hash);
@@ -743,6 +744,7 @@ impl<'a> ConjunctionPlanBuilder<'a> {
                     };
 
                     let new_plan_hash = new_plan.hash();
+                    // let new_plan_hash = new_plan.simpler_hash();
                     if !new_plans_hashset.contains(&new_plan_hash) {
                         new_plans_heap.push(new_plan);
                         new_plans_hashset.insert(new_plan_hash);
@@ -1196,6 +1198,14 @@ impl PartialCostPlan {
             ongoing_join: self.ongoing_step_join_var.is_some(),
         }
     }
+
+    fn simpler_hash(&self) -> SimplerPartialCostHash {
+        SimplerPartialCostHash {
+            planned_vertices: self.vertex_ordering.iter().filter_map(|v| v.as_pattern_id()).collect::<BTreeSet<_>>(),
+            ongoing_non_trivial_patterns: self.ongoing_step.iter().copied().collect::<BTreeSet<_>>(),
+        }
+    }
+
 }
 
 impl Eq for PartialCostPlan {}
@@ -1242,6 +1252,13 @@ impl Hash for PartialCostHash {
         self.ongoing_join.hash(state);
     }
 }
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub(super) struct SimplerPartialCostHash {
+    planned_vertices: BTreeSet<PatternVertexId>,
+    ongoing_non_trivial_patterns: BTreeSet<PatternVertexId>,
+}
+
 
 #[derive(Clone, PartialEq, Debug)]
 pub(super) struct StepExtension {
