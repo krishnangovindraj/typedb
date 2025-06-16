@@ -659,29 +659,28 @@ impl<'a> ConjunctionPlanBuilder<'a> {
         const BEAM_REDUCTION_CYCLE: usize = 2;
         const EXTENSION_REDUCTION_CYCLE: usize = 2;
         let mut beam_width = (num_patterns * 2).clamp(2, MAX_BEAM_WIDTH);
-        let mut extension_width = (num_patterns / 2) + 5; // ensure this is larger than (num_patterns / 2) or change narrowing logic (note, join options means patterns may appear twice as extensions)
 
-        let mut best_partial_plans = Vec::with_capacity(beam_width);
-        best_partial_plans.push(PartialCostPlan::new(
+        // Double buffer trick on the beam
+        let mut current_beam = Vec::with_capacity(beam_width);
+        let mut next_beam = Vec::with_capacity(beam_width);
+        current_beam.push(PartialCostPlan::new(
             self.graph.elements.len(),
             search_patterns.clone(),
             self.input_variables(),
         ));
 
-        let mut extension_heap = BinaryHeap::with_capacity(extension_width); // reused
         for i in 0..num_patterns {
+            let mut extension_heap: BinaryHeap<(StepExtension, &PartialCostPlan)> =
+                BinaryHeap::with_capacity(beam_width * num_patterns); // reused
             event!(Level::TRACE, "{INDENT:4}PLANNER STEP {}", i);
-            let mut new_plans_heap = BinaryHeap::with_capacity(beam_width);
             let mut new_plans_hashset = HashSet::with_capacity(beam_width);
 
+            // TODO: Does this really make a difference?
             if i % BEAM_REDUCTION_CYCLE == 0 {
                 beam_width = usize::max(beam_width.saturating_sub(1), 2);
             }
-            if i % EXTENSION_REDUCTION_CYCLE == 0 {
-                extension_width = usize::max(extension_width.saturating_sub(1), 2);
-            } // Narrow the beam until it greedy at the tail (for large queries)
 
-            for plan in best_partial_plans.drain(..) {
+            for plan in &current_beam {
                 event!(
                     Level::TRACE,
                     "{INDENT:8}PLAN: {:?} ONGOING: {:?} STASH: {:?} COST: {:?} + {:?} = {:?} HEURISTIC: {:?}",
@@ -696,7 +695,23 @@ impl<'a> ConjunctionPlanBuilder<'a> {
 
                 for extension in plan.extensions_iter(&self.graph)? {
                     if extension.is_trivial(&self.graph) {
-                        event!(
+                        // Any other plan can wait till the next step.
+                        // If this one doesn't make the beam, neither would the others.
+                        // If this one is a hash collision, the collider will lead to the others.
+                        extension_heap.clear();
+                        extension_heap.push((extension, plan));
+                        break;
+                    } else {
+                        extension_heap.push((extension, plan));
+                    }
+                }
+            }
+
+            while !extension_heap.is_empty() && current_beam.len() < beam_width {
+                let (extension, plan) = extension_heap.pop().unwrap();
+                // Extend plan with extension.
+                let new_plan = if extension.is_trivial(&self.graph) {
+                    event!(
                             Level::TRACE,
                             "{INDENT:12}Stash {:?} = {} <-- cost: {:?} heuristic: {:?}",
                             extension.pattern_id,
@@ -704,80 +719,43 @@ impl<'a> ConjunctionPlanBuilder<'a> {
                             extension.step_cost.cost,
                             extension.heuristic
                         );
-                        let mut plan = plan.clone();
-                        plan.add_to_stash(extension.pattern_id, &self.graph);
-                        if new_plans_heap.len() < beam_width {
-                            new_plans_heap.push(plan);
-                        } else if let Some(top) = new_plans_heap.peek() {
-                            if plan < *top {
-                                new_plans_heap.pop();
-                                new_plans_heap.push(plan);
-                            }
-                        }
-                        extension_heap.clear();
-                        break;
-                    }
-
-                    if extension_heap.len() < extension_width {
-                        extension_heap.push(extension);
-                    } else if let Some(top) = extension_heap.peek() {
-                        if extension < *top {
-                            extension_heap.pop();
-                            extension_heap.push(extension);
-                        }
-                    }
-                }
-
-                for extension in extension_heap.drain() {
+                    let mut new_plan = plan.clone();
+                    new_plan.add_to_stash(extension.pattern_id, &self.graph);
+                    new_plan
+                } else {
                     event!(
-                        Level::TRACE,
-                        "{INDENT:12}Choice {:?} = {} <-- join: {:?}, cost: {:?}, heuristic: {:?} metadata: {:?}",
-                        extension.pattern_id,
-                        self.graph.elements[&VertexId::Pattern(extension.pattern_id)],
-                        extension
-                            .step_join_var
-                            .map(|v| self.graph.elements[&VertexId::Variable(v)].as_variable().unwrap().variable()),
-                        extension.step_cost,
-                        extension.heuristic,
-                        extension.pattern_metadata
-                    );
-                    let new_plan = if !extension.is_constraint(&self.graph) {
+                            Level::TRACE,
+                            "{INDENT:12}Choice {:?} = {} <-- join: {:?}, cost: {:?}, heuristic: {:?} metadata: {:?}",
+                            extension.pattern_id,
+                            self.graph.elements[&VertexId::Pattern(extension.pattern_id)],
+                            extension
+                                .step_join_var
+                                .map(|v| self.graph.elements[&VertexId::Variable(v)].as_variable().unwrap().variable()),
+                            extension.step_cost,
+                            extension.heuristic,
+                            extension.pattern_metadata
+                        );
+                    if !extension.is_constraint(&self.graph) {
                         plan.clone_and_extend_with_new_step(extension, &self.graph)
                     } else if extension.step_join_var.is_some()
                         && (plan.ongoing_step_join_var.is_none()
-                            || plan.ongoing_step_join_var == extension.step_join_var)
+                        || plan.ongoing_step_join_var == extension.step_join_var)
                     {
                         plan.clone_and_extend_with_continued_step(extension, &self.graph)
                     } else {
                         plan.clone_and_extend_with_new_step(extension, &self.graph)
-                    };
-
-                    let new_plan_hash = new_plan.hash();
-                    if !new_plans_hashset.contains(&new_plan_hash) {
-                        if new_plans_heap.len() < beam_width {
-                            new_plans_heap.push(new_plan);
-                            new_plans_hashset.insert(new_plan_hash);
-                            event!(Level::TRACE, "{INDENT:16}(added)");
-                        } else if let Some(top) = new_plans_heap.peek() {
-                            if new_plan < *top {
-                                new_plans_heap.pop();
-                                new_plans_heap.push(new_plan);
-                                new_plans_hashset.insert(new_plan_hash);
-                                event!(Level::TRACE, "{INDENT:16}(added)");
-                            } else {
-                                event!(Level::TRACE, "{INDENT:16}(discarded)");
-                            }
-                        }
-                    } else {
-                        event!(Level::TRACE, "{INDENT:16}(hash collision)");
                     }
+                };
+                if new_plans_hashset.insert(new_plan.hash()) {
+                    next_beam.push(new_plan)
                 }
             }
-            best_partial_plans = new_plans_heap.into_vec();
+            current_beam.clear();
+            std::mem::swap(&mut current_beam, &mut next_beam);
         }
 
         let best_plan =
-            best_partial_plans.into_iter().min().ok_or(QueryPlanningError::ExpectedPlannableConjunction {})?;
+            current_beam.into_iter().min().ok_or(QueryPlanningError::ExpectedPlannableConjunction {})?;
         let complete_plan = best_plan.into_complete_plan(&self.graph);
         event!(
             Level::TRACE,
