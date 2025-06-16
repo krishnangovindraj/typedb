@@ -344,6 +344,9 @@ impl<'a> FunctionCallPlanner<'a> {
         Self { call_binding, arguments, assigned, cost }
     }
 
+    pub(super) fn cost(&self) -> Cost {
+        self.cost
+    }
     pub(crate) fn variables(&self) -> impl Iterator<Item = VariableVertexId> + '_ {
         self.arguments.iter().chain(self.assigned.iter()).copied()
     }
@@ -382,7 +385,6 @@ impl<'a> IsPlanner<'a> {
         let rhs = is.rhs().as_variable().unwrap();
         Self { is, lhs: variable_index[&lhs], rhs: variable_index[&rhs] }
     }
-
     fn is_valid(&self, ordered: &[VertexId], _graph: &Graph<'_>) -> bool {
         ordered.contains(&VertexId::Variable(self.lhs)) || ordered.contains(&VertexId::Variable(self.rhs))
     }

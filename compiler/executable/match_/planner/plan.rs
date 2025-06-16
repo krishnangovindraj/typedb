@@ -191,7 +191,6 @@ fn make_builder<'a>(
     plan_builder.register_constraints(conjunction, expressions, call_cost_provider);
     plan_builder.register_negations(negation_subplans);
     plan_builder.register_disjunctions(disjunction_planners);
-
     Ok(plan_builder)
 }
 
@@ -648,78 +647,114 @@ impl<'a> ConjunctionPlanBuilder<'a> {
     // (When a step has multiple pattern, the first such produced variable is always the join variable)
     // We record directionality information for each pattern in the plan, indicating which prefix index to use for pattern retrieval
 
-    fn beam_search_plan(
+    fn experimental__update_mst_fringe(&self, scheduled: &[VertexId], fringe: &mut BinaryHeap<GreedyFringeElement>) {
+        self.graph.elements.keys()
+            .filter(|vertex| self.graph.elements[&vertex].is_valid(**vertex, &scheduled, &self.graph))
+            .filter_map(|vertex| vertex.as_pattern_id())
+            .map(|vertex| {
+                let cost = self.graph.elements[&VertexId::Pattern(vertex)].cost_and_metadata(&scheduled, None, &self.graph).unwrap().0;
+                GreedyFringeElement { vertex: vertex, cost }
+            })
+            .for_each(|pair| fringe.push(pair));
+    }
+    fn experimental__astar_search_plan(
         &self,
+    ) -> Result<(Vec<VertexId>, HashMap<PatternVertexId, CostMetaData>, Cost), QueryPlanningError> {
+        let mut scheduled = Vec::new();
+        let mut fringe = BinaryHeap::new();
+        debug_assert!(GreedyFringeElement { vertex: PatternVertexId(0), cost: Cost { cost: 0.0, io_ratio: 10.0}} > GreedyFringeElement { vertex: PatternVertexId(0), cost: Cost { cost: 0.0, io_ratio: 100.0}} );
+        let mut actual_heuristics_based_on_greedy = HashMap::new();
+        self.experimental__update_mst_fringe(&scheduled, &mut fringe);
+        while !fringe.is_empty() && scheduled.len() != self.graph.elements.len() {
+            let some = fringe.pop().unwrap();
+            if scheduled.contains(&VertexId::Pattern(some.vertex)) {
+                continue;
+            } else {
+                scheduled.push(VertexId::Pattern(some.vertex));
+                actual_heuristics_based_on_greedy.insert(VertexId::Pattern(some.vertex), some.cost);
+                self.graph.pattern_to_variable[&some.vertex].iter().for_each(|variable| {
+                    if !scheduled.contains(&VertexId::Variable(*variable)) {
+                        scheduled.push(VertexId::Variable(*variable))
+                    }
+                });
+                self.experimental__update_mst_fringe(&scheduled, &mut fringe);
+            }
+        }
+        debug_assert!(scheduled.len() == self.graph.elements.len());
+        let ret = self.experimental__astar_search_plan_impl(&actual_heuristics_based_on_greedy);
+        eprintln!("{}", self.graph);
+        eprintln!("ACTUAL_HEURSITICS:\n{:?}", actual_heuristics_based_on_greedy);
+        eprintln!("GREEDY SCHEDULE:\n{:?}", scheduled);
+        ret
+    }
+
+    fn experimental__astar_search_plan_impl(
+        &self,
+        heuristic_cache: &HashMap<VertexId, Cost>,
     ) -> Result<(Vec<VertexId>, HashMap<PatternVertexId, CostMetaData>, Cost), QueryPlanningError> {
         const INDENT: &str = "";
 
         let search_patterns: HashSet<_> = self.graph.pattern_to_variable.keys().copied().collect();
         let num_patterns = search_patterns.len();
-
-        const BEAM_REDUCTION_CYCLE: usize = 2;
-        const EXTENSION_REDUCTION_CYCLE: usize = 2;
-        let mut beam_width = (num_patterns * 10000 * 2).clamp(2, MAX_BEAM_WIDTH);
-        let mut extension_width = (num_patterns * 10000) + 5; // ensure this is larger than (num_patterns / 2) or change narrowing logic (note, join options means patterns may appear twice as extensions)
-
-        let mut best_partial_plans = Vec::with_capacity(beam_width);
-        best_partial_plans.push(PartialCostPlan::new(
+        let mut DBG_PLANS = 0;
+        let mut fringe = BinaryHeap::new();
+        fringe.push(PartialCostPlan::new(
             self.graph.elements.len(),
             search_patterns.clone(),
             self.input_variables(),
         ));
 
-        let mut extension_heap = Vec::with_capacity(extension_width); // reused
-        for i in 0..num_patterns {
+        let mut new_plans_hashset = HashSet::new();
+        let mut i = 0;
+        while !fringe.is_empty() {
             event!(Level::TRACE, "{INDENT:4}PLANNER STEP {}", i);
-            let mut new_plans_heap = Vec::with_capacity(beam_width);
-            let mut new_plans_hashset = HashSet::with_capacity(beam_width);
-
-            if i % BEAM_REDUCTION_CYCLE == 0 {
-                beam_width = usize::max(beam_width.saturating_sub(1), 2);
+            i += 1;
+            let plan = fringe.pop().unwrap();
+            if !new_plans_hashset.insert(plan.hash()) {
+                continue;
             }
-            if i % EXTENSION_REDUCTION_CYCLE == 0 {
-                extension_width = usize::max(extension_width.saturating_sub(1), 2);
-            } // Narrow the beam until it greedy at the tail (for large queries)
-
-            for plan in best_partial_plans.drain(..) {
+            if plan.remaining_patterns.len() == 0 {
+                let complete_plan = plan.into_complete_plan(&self.graph);
+                event!(Level::DEBUG, "Found plan in {i} steps with leftover fringe size {}", fringe.len());
                 event!(
                     Level::TRACE,
-                    "{INDENT:8}PLAN: {:?} ONGOING: {:?} STASH: {:?} COST: {:?} + {:?} = {:?} HEURISTIC: {:?}",
-                    plan.vertex_ordering,
-                    plan.ongoing_step,
-                    plan.ongoing_step_stash,
-                    plan.cumulative_cost,
-                    plan.ongoing_step_cost,
-                    plan.cumulative_cost.chain(plan.ongoing_step_cost),
-                    plan.heuristic
+                    "\n Final plan (cost: {:?}) (before lowering):\n --> Order: {:?} --> MetaData \n {:?}",
+                    complete_plan.cumulative_cost,
+                    complete_plan.vertex_ordering,
+                    complete_plan.pattern_metadata
                 );
-
-                for extension in plan.extensions_iter(&self.graph)? {
-                    if extension.is_trivial(&self.graph) {
-                        event!(
-                            Level::TRACE,
-                            "{INDENT:12}Stash {:?} = {} <-- cost: {:?} heuristic: {:?}",
-                            extension.pattern_id,
-                            self.graph.elements[&VertexId::Pattern(extension.pattern_id)],
-                            extension.step_cost.cost,
-                            extension.heuristic
-                        );
-                        let mut new_plan = plan.clone();
-                        new_plan.add_to_stash(extension.pattern_id, &self.graph);
-                        // let hash = new_plan.simpler_hash();
-                        let hash = new_plan.hash();
-                        if !new_plans_hashset.contains(&hash) {
-                            new_plans_hashset.insert(hash);
-                            new_plans_heap.push(new_plan);
-                            extension_heap.clear();
-                            break;
-                        }
-                    } else {
-                        extension_heap.push(extension);
+                eprintln!("Total nodes added to fringe: {DBG_PLANS}");
+                return Ok((complete_plan.vertex_ordering, complete_plan.pattern_metadata, complete_plan.cumulative_cost))
+            }
+            event!(
+                Level::TRACE,
+                "{INDENT:8}PLAN: {:?} ONGOING: {:?} STASH: {:?} COST: {:?} + {:?} = {:?} (COST+HEURISTIC): {:?}",
+                plan.vertex_ordering,
+                plan.ongoing_step,
+                plan.ongoing_step_stash,
+                plan.cumulative_cost,
+                plan.ongoing_step_cost,
+                plan.cumulative_cost.chain(plan.ongoing_step_cost),
+                plan.heuristic
+            );
+            for extension in plan.extensions_iter(&self.graph, &heuristic_cache)? {
+                if extension.is_trivial(&self.graph) {
+                    event!(
+                        Level::TRACE,
+                        "{INDENT:12}Stash {:?} = {} <-- cost: {:?} heuristic: {:?}",
+                        extension.pattern_id,
+                        self.graph.elements[&VertexId::Pattern(extension.pattern_id)],
+                        extension.step_cost.cost,
+                        extension.heuristic
+                    );
+                    let mut trivially_extended_plan = plan.clone();
+                    trivially_extended_plan.add_to_stash(extension.pattern_id, &self.graph);
+                    if !new_plans_hashset.contains(&trivially_extended_plan.hash()) {
+                        // We cannot insert the hash here (unless our heuristic is... consistent?)
+                        DBG_PLANS += 1;
+                        fringe.push(trivially_extended_plan);
                     }
-                }
-
-                for extension in extension_heap.drain(..) {
+                } else {
                     event!(
                         Level::TRACE,
                         "{INDENT:12}Choice {:?} = {} <-- join: {:?}, cost: {:?}, heuristic: {:?} metadata: {:?}",
@@ -743,38 +778,24 @@ impl<'a> ConjunctionPlanBuilder<'a> {
                         plan.clone_and_extend_with_new_step(extension, &self.graph)
                     };
 
-                    let new_plan_hash = new_plan.hash();
-                    // let new_plan_hash = new_plan.simpler_hash();
-                    if !new_plans_hashset.contains(&new_plan_hash) {
-                        new_plans_heap.push(new_plan);
-                        new_plans_hashset.insert(new_plan_hash);
-                        event!(Level::TRACE, "{INDENT:16}(added)");
+                    if !new_plans_hashset.contains(&new_plan.hash()) {
+                        // We cannot insert the hash here (unless our heuristic is... consistent?)
+                        DBG_PLANS += 1;
+                        fringe.push(new_plan);
                     } else {
                         event!(Level::TRACE, "{INDENT:16}(hash collision)");
                     }
                 }
-                debug_assert!(extension_heap.is_empty());
             }
-            best_partial_plans = new_plans_heap;
-            eprintln!("Through {}/{}. Fringe: {}", i, num_patterns, best_partial_plans.len());
         }
 
-        let best_plan =
-            best_partial_plans.into_iter().min().ok_or(QueryPlanningError::ExpectedPlannableConjunction {})?;
-        let complete_plan = best_plan.into_complete_plan(&self.graph);
-        event!(
-            Level::TRACE,
-            "\n Final plan (before lowering):\n --> Order: {:?} --> MetaData \n {:?}",
-            complete_plan.vertex_ordering,
-            complete_plan.pattern_metadata
-        );
-        Ok((complete_plan.vertex_ordering, complete_plan.pattern_metadata, complete_plan.cumulative_cost))
+        Err(QueryPlanningError::ExpectedPlannableConjunction {})
     }
 
     // Execute plans
     pub(super) fn plan(self) -> Result<ConjunctionPlan<'a>, QueryPlanningError> {
         // Beam plan
-        let (ordering, metadata, cost) = self.beam_search_plan()?;
+        let (ordering, metadata, cost) = self.experimental__astar_search_plan()?;
 
         let element_to_order = ordering.iter().copied().enumerate().map(|(order, index)| (index, order)).collect();
 
@@ -908,7 +929,7 @@ impl PartialCostPlan {
         }
     }
 
-    fn extensions_iter<'a>(&'a self, graph: &'a Graph<'_>) -> Result<Vec<StepExtension>, QueryPlanningError> {
+    fn extensions_iter<'a>(&'a self, graph: &'a Graph<'_>, experimental__heuristic_cost_cache: &HashMap<VertexId, Cost>) -> Result<Vec<StepExtension>, QueryPlanningError> {
         let mut all_available_vars = self.vertex_ordering.clone();
         all_available_vars.extend(
             chain(&self.ongoing_step_produced_vars, &self.ongoing_step_stash_produced_vars)
@@ -953,7 +974,7 @@ impl PartialCostPlan {
 
                 let cost_including_extension = cost_before_extension.chain(added_cost);
 
-                let heuristic = cost_including_extension.chain(self.heuristic_plan_completion_cost(extension, graph));
+                let heuristic = cost_including_extension.chain(self.heuristic_plan_completion_cost(extension, graph, experimental__heuristic_cost_cache));
 
                 Ok(StepExtension {
                     pattern_id: extension,
@@ -1028,7 +1049,33 @@ impl PartialCostPlan {
         Ok((updated_cost, extension_metadata))
     }
 
-    fn heuristic_plan_completion_cost(&self, pattern: PatternVertexId, graph: &Graph<'_>) -> Cost {
+
+    fn experimental__heuristic_plan_completion_cost(&self, extended_by_pattern: PatternVertexId, experimental__heuristic_cost_cache: &HashMap<VertexId, Cost>) -> Cost {
+        let remaining_patterns_len = self.remaining_patterns.len() as f64;
+        let folded = self.remaining_patterns.iter()
+            .filter(|pattern| pattern != &&extended_by_pattern)
+            .map(|pattern| experimental__heuristic_cost_cache[&VertexId::Pattern(*pattern)])
+            .fold(Cost::NOOP, |acc, item| {
+                Cost { cost: (acc.cost +  item.cost), io_ratio: acc.io_ratio * item.io_ratio }
+            }); // not really a cost
+        // Do NOT consider the current cost anywhere, since this is being chained.
+        // Very handwavy and pessimistic. Heuristics should ideally be optimistic.s
+        let final_cost = folded.io_ratio * (folded.cost/remaining_patterns_len);
+        // eprintln!("Heuristic cost ({final_cost}, {})", folded.io_ratio);
+        Cost { cost: final_cost , io_ratio: folded.io_ratio }
+    }
+    fn heuristic_plan_completion_cost(&self, extended_by_pattern: PatternVertexId, graph: &Graph<'_>, experimental__heuristic_cost_cache: &HashMap<VertexId, Cost>) -> Cost {
+        // self.zero__heuristic_plan_completion_cost(extended_by_pattern, graph)
+        // self.default__heuristic_plan_completion_cost(extended_by_pattern, graph)
+        self.experimental__heuristic_plan_completion_cost(extended_by_pattern, experimental__heuristic_cost_cache)
+    }
+
+    fn zero__heuristic_plan_completion_cost(&self, extended_by_pattern: PatternVertexId, graph: &Graph<'_>) -> Cost {
+        Cost { cost: 0.0, io_ratio: 1.0 } // Does io_ratio even come into play?
+    }
+
+    fn default__heuristic_plan_completion_cost(&self, pattern: PatternVertexId, graph: &Graph<'_>) -> Cost {
+
         let num_remaining = self.remaining_patterns.len();
         if num_remaining == 1 {
             Cost::NOOP // after the last extension there is nothing left to do... we need the actual cost now!
@@ -1219,7 +1266,8 @@ impl PartialOrd for PartialCostPlan {
 
 impl Ord for PartialCostPlan {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.heuristic.cost.partial_cmp(&other.heuristic.cost).unwrap_or(Ordering::Greater)
+        // Reverse because we need a min-heap, but I should template it with cmp::Reverse instead
+        self.heuristic.cost.partial_cmp(&other.heuristic.cost).unwrap_or(Ordering::Greater).reverse()
     }
 }
 
@@ -2212,5 +2260,34 @@ impl<'a> Graph<'a> {
 
     pub(super) fn elements(&self) -> &HashMap<VertexId, PlannerVertex<'a>> {
         &self.elements
+    }
+}
+
+
+struct GreedyFringeElement {
+    vertex: PatternVertexId,
+    cost: Cost,
+}
+
+impl Eq for GreedyFringeElement {}
+
+impl PartialEq<Self> for GreedyFringeElement {
+    fn eq(&self, other: &Self) -> bool {
+        return self.vertex == other.vertex && self.cost == other.cost
+    }
+}
+
+impl PartialOrd<Self> for GreedyFringeElement {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for GreedyFringeElement {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.cost.io_ratio.total_cmp(&other.cost.io_ratio)
+            .then(self.cost.cost.total_cmp(&other.cost.cost))
+            .then(self.vertex.cmp(&other.vertex))
+            .reverse() // Because we want it in a minheap
     }
 }
