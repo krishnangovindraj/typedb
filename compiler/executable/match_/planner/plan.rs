@@ -1201,6 +1201,7 @@ impl PartialCostPlan {
 
     fn simpler_hash(&self) -> SimplerPartialCostHash {
         SimplerPartialCostHash {
+            n_remaining_patterns: self.remaining_patterns.len() as u32,
             planned_vertices: self.vertex_ordering.iter().filter_map(|v| v.as_pattern_id()).collect::<BTreeSet<_>>(),
             ongoing_non_trivial_patterns: self.ongoing_step.iter().copied().collect::<BTreeSet<_>>(),
         }
@@ -1255,6 +1256,7 @@ impl Hash for PartialCostHash {
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub(super) struct SimplerPartialCostHash {
+    n_remaining_patterns: u32, // Needed for continuous search (A*), but not step-based (beam)
     planned_vertices: BTreeSet<PatternVertexId>,
     ongoing_non_trivial_patterns: BTreeSet<PatternVertexId>,
 }
