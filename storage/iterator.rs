@@ -5,6 +5,7 @@
  */
 
 use std::{cmp::Ordering, error::Error, fmt, sync::Arc};
+use tracing::log::Log;
 
 use bytes::byte_array::ByteArray;
 use lending_iterator::{LendingIterator, Peekable, Seekable};
@@ -17,6 +18,8 @@ use crate::{
     keyspace::{iterator::KeyspaceRangeIterator, IteratorPool, KeyspaceError, KeyspaceId},
     sequence_number::SequenceNumber,
 };
+use crate::key_range::RangeEnd;
+use crate::keyspace::Keyspace;
 
 pub(crate) struct MVCCRangeIterator {
     storage_name: Arc<String>,
@@ -43,7 +46,8 @@ impl MVCCRangeIterator {
     ) -> Self {
         let keyspace = storage.get_keyspace(range.start().get_value().keyspace_id());
         let mapped_range = range.map(|key| key.as_bytes(), |fixed_width| fixed_width);
-        let iterator = keyspace.iterate_range(iterpool, &mapped_range, storage_counters.clone());
+        let can_use_prefix = Self::can_use_prefix(keyspace, range);
+        let iterator = keyspace.iterate_range(iterpool, &mapped_range, storage_counters.clone(), can_use_prefix);
         MVCCRangeIterator {
             storage_name: storage.name(),
             keyspace_id: keyspace.id(),
@@ -85,6 +89,23 @@ impl MVCCRangeIterator {
             }
         }
         false
+    }
+    fn can_use_prefix<const PS: usize>(keyspace: &Keyspace, range: &KeyRange<StorageKey<'_, PS>>) -> bool {
+        let Some(prefix_length) = keyspace.prefix_length() else { return false; };
+        let start = range.start().get_value();
+        if start.length() < prefix_length { return false; };
+        match range.end() {
+            RangeEnd::WithinStartAsPrefix => true,
+            RangeEnd::EndPrefixInclusive(end) => {
+                end.length() >= prefix_length &&
+                    end.bytes()[0..prefix_length] == start.bytes()[0..prefix_length]
+            }
+            RangeEnd::EndPrefixExclusive(end) => { // TODO: Take previous key
+                end.length() >= prefix_length &&
+                    end.bytes()[0..prefix_length] == start.bytes()[0..prefix_length]
+            }
+            RangeEnd::Unbounded => false
+        }
     }
 }
 

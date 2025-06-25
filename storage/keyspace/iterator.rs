@@ -34,10 +34,8 @@ impl KeyspaceRangeIterator {
         iterpool: &IteratorPool,
         range: &KeyRange<Bytes<'a, INLINE_BYTES>>,
         storage_counters: StorageCounters,
+        prefixed: bool,
     ) -> Self {
-        // TODO: if self.has_prefix_extractor_for(prefix), we can enable bloom filters
-        // read_opts.set_prefix_same_as_start(true);
-
         let start_prefix = match range.start() {
             RangeStart::Inclusive(bytes) => Bytes::Reference(bytes.as_ref()),
             RangeStart::ExcludeFirstWithPrefix(bytes) => Bytes::Reference(bytes.as_ref()),
@@ -47,12 +45,12 @@ impl KeyspaceRangeIterator {
                 Bytes::Array(cloned)
             }
         };
-
-        let mut iterator = raw_iterator::DBIterator::new_from(
-            iterpool.get_iterator(keyspace),
-            start_prefix.as_ref(),
-            storage_counters,
-        );
+        let raw_iterator = if prefixed {
+            iterpool.get_iterator_prefixed(keyspace)
+        } else {
+            iterpool.get_iterator_unprefixed(keyspace)
+        };
+        let mut iterator = raw_iterator::DBIterator::new_from(raw_iterator, start_prefix.as_ref(), storage_counters);
         if matches!(range.start(), RangeStart::ExcludeFirstWithPrefix(_)) {
             Self::may_skip_start(&mut iterator, range.start().get_value());
         }

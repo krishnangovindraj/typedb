@@ -479,11 +479,13 @@ impl<Durability> MVCCStorage<Durability> {
         iterator_pool: &IteratorPool,
         range: KeyRange<StorageKey<'this, PREFIX_INLINE>>,
         storage_counters: StorageCounters,
+        prefixed: bool,
     ) -> KeyspaceRangeIterator {
         self.keyspaces.get(range.start().get_value().keyspace_id()).iterate_range(
             iterator_pool,
             &range.map(|k| k.as_bytes(), |fixed| fixed),
             storage_counters,
+            prefixed,
         )
     }
 

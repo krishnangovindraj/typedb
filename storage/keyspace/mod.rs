@@ -19,7 +19,8 @@ impl Poolable for DBRawIterator<'static> {}
 
 #[derive(Default)]
 pub struct IteratorPool {
-    pools_per_keyspace: [SinglePool<DBRawIterator<'static>>; KEYSPACE_MAXIMUM_COUNT],
+    unprefixed_iterators_per_keyspace: [SinglePool<DBRawIterator<'static>>; KEYSPACE_MAXIMUM_COUNT],
+    prefixed_iterators_per_keyspace: [SinglePool<DBRawIterator<'static>>; KEYSPACE_MAXIMUM_COUNT],
 }
 
 impl IteratorPool {
@@ -27,10 +28,20 @@ impl IteratorPool {
         Self::default()
     }
 
-    fn get_iterator(&self, keyspace: &Keyspace) -> PoolRecycleGuard<DBRawIterator<'static>> {
-        self.pools_per_keyspace[keyspace.id().0 as usize].get_or_create(|| {
+    fn get_iterator_unprefixed(&self, keyspace: &Keyspace) -> PoolRecycleGuard<DBRawIterator<'static>> {
+        self.unprefixed_iterators_per_keyspace[keyspace.id().0 as usize].get_or_create(|| {
             let kv_storage: &'static DB = unsafe { std::mem::transmute(&keyspace.kv_storage) };
-            kv_storage.raw_iterator_opt(keyspace.new_read_options()) // It is safe to read later RocksDB snapshots since our MVCC will
+            kv_storage.raw_iterator_opt(keyspace.new_read_options())
+        })
+    }
+
+    fn get_iterator_prefixed(&self, keyspace: &Keyspace) -> PoolRecycleGuard<DBRawIterator<'static>> {
+        self.prefixed_iterators_per_keyspace[keyspace.id().0 as usize].get_or_create(|| {
+            let kv_storage: &'static DB = unsafe { std::mem::transmute(&keyspace.kv_storage) };
+            let mut read_options = keyspace.new_read_options();
+            read_options.set_prefix_same_as_start(true);
+            read_options.set_total_order_seek(false);
+            kv_storage.raw_iterator_opt(read_options)
         })
     }
 }
