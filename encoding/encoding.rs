@@ -90,9 +90,10 @@ impl KeyspaceSet for EncodingKeyspace {
     fn rocks_configuration(&self, cache: &rocksdb::Cache) -> rocksdb::Options {
         let mut options = rocksdb::Options::default();
 
+        // TODO: Disable
         // Enable if we wanted to check bloom filter usage, cache hits, etc.
-        // options.enable_statistics();
-        // options.set_stats_dump_period_sec(100);
+        options.enable_statistics();
+        options.set_stats_dump_period_sec(30);
 
         options.create_if_missing(true);
         options.create_missing_column_families(true);
@@ -122,7 +123,7 @@ impl KeyspaceSet for EncodingKeyspace {
         block_options.set_block_size(16 * 1024);
         block_options.set_whole_key_filtering(false);
 
-        block_options.set_bloom_filter(5.0, false);
+        block_options.set_bloom_filter(10.0, false);
         // block_options.set_partition_filters(true);
         block_options.set_index_type(BlockBasedIndexType::TwoLevelIndexSearch);
         block_options.set_optimize_filters_for_memory(true);
