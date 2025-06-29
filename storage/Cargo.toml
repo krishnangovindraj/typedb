@@ -168,6 +168,10 @@ features = {}
 	name = "test_snapshot"
 
 [[test]]
+	path = "tests/test_bloom.rs"
+	name = "test_bloom"
+
+[[test]]
 	path = "tests/test_mvcc.rs"
 	name = "test_mvcc"
 

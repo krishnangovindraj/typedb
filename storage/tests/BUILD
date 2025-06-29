@@ -130,6 +130,23 @@ rust_test(
     ]
 )
 
+rust_test(
+    name = "test_bloom",
+    crate_root = "test_bloom.rs",
+    srcs = glob([
+        "test_bloom.rs",
+    ]),
+    deps = [
+        "//util/test:test_utils",
+        "@crates//:rand",
+        "@crates//:tracing",
+        "@crates//:rocksdb",
+        "@crates//:rand_core",
+        "@crates//:xoshiro",
+        "@crates//:itertools",
+    ]
+)
+
 checkstyle_test(
     name = "checkstyle",
     include = glob(["*", "*/*", "*/*/*"]),
