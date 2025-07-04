@@ -69,7 +69,10 @@ impl Disjunction {
     }
 
     pub fn required_inputs(&self, block_context: &BlockContext) -> impl Iterator<Item = Variable> + '_ {
-        self.variable_dependency(block_context).into_iter().filter_map(|(v, dep)| dep.is_required().then_some(v))
+        self.variable_dependency(block_context).into_iter().filter_map(|(v, dep)| {
+            // TODO: Try: (dep.is_required() || dep.is_referencing()).then_some(v)
+            dep.is_required().then_some(v)
+        })
     }
 
     pub(crate) fn variable_dependency(
