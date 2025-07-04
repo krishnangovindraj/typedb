@@ -25,7 +25,7 @@ use storage::snapshot::ReadableSnapshot;
 use crate::{
     batch::{FixedBatch, FixedBatchRowIterator},
     error::ReadExecutionError,
-    instruction::{iterator::TupleIterator, Checker, InstructionExecutor},
+    instruction::{Checker, iterator::TupleIterator, InstructionExecutor},
     pipeline::stage::ExecutionContext,
     read::{
         expression_executor::{evaluate_expression, ExpressionValue},
