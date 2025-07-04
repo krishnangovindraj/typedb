@@ -35,12 +35,7 @@ pub(crate) fn add_patterns(
         typeql::Pattern::Conjunction(nested) => add_patterns(function_index, conjunction, &nested.patterns),
         typeql::Pattern::Disjunction(disjunction) => add_disjunction(function_index, conjunction, disjunction),
         typeql::Pattern::Negation(negation) => add_negation(function_index, conjunction, negation),
-        typeql::Pattern::Optional(optional) => {
-            // add_optional(function_index, conjunction, optional)
-            Err(Box::new(RepresentationError::UnimplementedLanguageFeature {
-                feature: error::UnimplementedFeature::Optionals,
-            }))
-        }
+        typeql::Pattern::Optional(optional) => add_optional(function_index, conjunction, optional),
         typeql::Pattern::Statement(statement) => add_statement(function_index, conjunction, statement),
     })?;
     Ok(())

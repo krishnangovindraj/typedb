@@ -5,7 +5,7 @@
  */
 
 use answer::variable::Variable;
-use error::needs_update_when_feature_is_implemented;
+use error::{needs_update_when_feature_is_implemented, UnimplementedFeature};
 use itertools::Itertools;
 use storage::snapshot::ReadableSnapshot;
 use typeql::{
@@ -65,6 +65,24 @@ pub fn translate_function_from(
             source_span: signature.ident.span(),
         }
     })?;
+
+    let output_types = match &signature.output {
+        Output::Stream(stream) => &stream.types,
+        Output::Single(single) => &single.types,
+    };
+
+    if let Some((source, _)) = output_types
+        .iter()
+        .map(|output_type| (output_type.span(), named_type_any_to_category_and_optionality(output_type)))
+        .filter(|(source, (_, optionality))| *optionality == VariableOptionality::Optional)
+        .next()
+     {
+        Err(FunctionRepresentationError::UnimplementedFunctionOptionals {
+            source_span: source.clone(),
+            feature: UnimplementedFeature::OptionalFunctions
+        })?;
+    }
+
     let argument_labels = signature.args.iter().map(|arg| arg.type_.clone()).collect();
     let args_sources_categories = signature
         .args
