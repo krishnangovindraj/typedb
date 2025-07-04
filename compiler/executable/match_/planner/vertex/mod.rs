@@ -73,19 +73,19 @@ impl PlannerVertex<'_> {
         }
     }
 
-    pub(super) fn variable_vertex_ids<'a>(&'a self) -> Box<dyn Iterator<Item = VariableVertexId> + 'a> {
+    pub(super) fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = VariableVertexId> + 'a> {
         match self {
             Self::Variable(_) => Box::new(iter::empty()),
-            Self::Constraint(inner) => Box::new(inner.variable_vertex_ids()),
-            Self::Is(inner) => Box::new(inner.variable_vertex_ids()),
-            Self::LinksDeduplication(inner) => Box::new(inner.variable_vertex_ids()),
-            Self::Comparison(inner) => Box::new(inner.variable_vertex_ids()),
-            Self::Expression(inner) => Box::new(inner.variable_vertex_ids()),
-            Self::FunctionCall(inner) => Box::new(inner.variable_vertex_ids()),
-            Self::Negation(inner) => Box::new(inner.variable_vertex_ids()),
-            Self::Disjunction(inner) => Box::new(inner.variable_vertex_ids()),
-            Self::Optional(inner) => Box::new(inner.variable_vertex_ids()),
-            Self::Unsatisfiable(inner) => Box::new(inner.variable_vertex_ids()),
+            Self::Constraint(inner) => Box::new(inner.variables()),
+            Self::Is(inner) => Box::new(inner.variables()),
+            Self::LinksDeduplication(inner) => Box::new(inner.variables()),
+            Self::Comparison(inner) => Box::new(inner.variables()),
+            Self::Expression(inner) => Box::new(inner.variables()),
+            Self::FunctionCall(inner) => Box::new(inner.variables()),
+            Self::Negation(inner) => Box::new(inner.variables()),
+            Self::Disjunction(inner) => Box::new(inner.variables()),
+            Self::Optional(inner) => Box::new(inner.variables()),
+            Self::Unsatisfiable(inner) => Box::new(inner.variables()),
         }
     }
 
@@ -319,7 +319,7 @@ impl<'a> ExpressionVertex<'a> {
         self.inputs.iter().all(|&input| ordered.contains(&VertexId::Variable(input)))
     }
 
-    pub(crate) fn variable_vertex_ids(&self) -> impl Iterator<Item = VariableVertexId> + '_ {
+    pub(crate) fn variables(&self) -> impl Iterator<Item = VariableVertexId> + '_ {
         self.inputs.iter().chain(iter::once(&self.output)).copied()
     }
 }
@@ -353,7 +353,7 @@ impl<'a> FunctionCallVertex<'a> {
         Self { call_binding, arguments, assigned, cost }
     }
 
-    pub(crate) fn variable_vertex_ids(&self) -> impl Iterator<Item = VariableVertexId> + '_ {
+    pub(crate) fn variables(&self) -> impl Iterator<Item = VariableVertexId> + '_ {
         self.arguments.iter().chain(self.assigned.iter()).copied()
     }
 
@@ -396,7 +396,7 @@ impl<'a> IsVertex<'a> {
         ordered.contains(&VertexId::Variable(self.lhs)) || ordered.contains(&VertexId::Variable(self.rhs))
     }
 
-    pub(crate) fn variable_vertex_ids(&self) -> impl Iterator<Item = VariableVertexId> {
+    pub(crate) fn variables(&self) -> impl Iterator<Item = VariableVertexId> {
         [self.lhs, self.rhs].into_iter()
     }
 
@@ -445,10 +445,10 @@ impl<'a> LinksDeduplicationVertex<'a> {
     }
 
     fn is_valid(&self, ordered: &[VertexId]) -> bool {
-        self.variable_vertex_ids().all(|v| ordered.contains(&VertexId::Variable(v)))
+        self.variables().all(|v| ordered.contains(&VertexId::Variable(v)))
     }
 
-    pub(crate) fn variable_vertex_ids(&self) -> impl Iterator<Item = VariableVertexId> {
+    pub(crate) fn variables(&self) -> impl Iterator<Item = VariableVertexId> {
         [self.role1, self.player1, self.role2, self.player2].into_iter()
     }
 
@@ -503,7 +503,7 @@ impl<'a> ComparisonVertex<'a> {
         true
     }
 
-    pub(crate) fn variable_vertex_ids(&self) -> impl Iterator<Item = VariableVertexId> {
+    pub(crate) fn variables(&self) -> impl Iterator<Item = VariableVertexId> {
         [self.lhs.as_variable(), self.rhs.as_variable()].into_iter().flatten()
     }
 
@@ -542,7 +542,7 @@ impl<'a> UnsatisfiableVertex<'a> {
         true
     }
 
-    fn variable_vertex_ids(&self) -> impl Iterator<Item = VariableVertexId> {
+    fn variables(&self) -> impl Iterator<Item = VariableVertexId> {
         iter::empty()
     }
 }
@@ -575,7 +575,7 @@ impl<'a> NegationVertex<'a> {
         self.referenced_parent_vertex_ids.iter().all(|var| ordered.contains(&VertexId::Variable(*var)))
     }
 
-    pub(crate) fn variable_vertex_ids(&self) -> impl Iterator<Item = VariableVertexId> + '_ {
+    pub(crate) fn variables(&self) -> impl Iterator<Item = VariableVertexId> + '_ {
         self.referenced_parent_vertex_ids.iter().copied()
     }
 
@@ -614,7 +614,7 @@ impl<'a> OptionalVertex<'a> {
         self.referenced_parent_vertex_ids.iter().all(|var| ordered.contains(&VertexId::Variable(*var)))
     }
 
-    pub(crate) fn variable_vertex_ids(&self) -> impl Iterator<Item = VariableVertexId> + '_ {
+    pub(crate) fn variables(&self) -> impl Iterator<Item = VariableVertexId> + '_ {
         chain!(self.referenced_parent_vertex_ids.iter(), self.optional_vertex_ids.iter()).copied()
     }
 
@@ -660,7 +660,7 @@ impl<'a> DisjunctionVertex<'a> {
         self.required_parent_vertex_ids.iter().all(|&var| ordered.contains(&VertexId::Variable(var)))
     }
 
-    pub(crate) fn variable_vertex_ids(&self) -> impl Iterator<Item = VariableVertexId> + '_ {
+    pub(crate) fn variables(&self) -> impl Iterator<Item = VariableVertexId> + '_ {
         self.referenced_parent_vertex_ids.iter().copied()
     }
 
