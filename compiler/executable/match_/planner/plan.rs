@@ -55,10 +55,10 @@ use crate::{
                 conjunction_executable::ExecutionStep,
                 vertex::{
                     constraint::{
-                        ConstraintVertex, HasPlanner, IidPlanner, IndexedRelationPlanner, IsaPlanner, LinksPlanner,
-                        OwnsPlanner, PlaysPlanner, RelatesPlanner, SubPlanner, TypeListPlanner,
+                        ConstraintVertex, HasVertex, IidVertex, IndexedRelationVertex, IsaVertex, LinksVertex,
+                        OwnsVertex, PlaysVertex, RelatesVertex, SubVertex, TypeListVertex,
                     },
-                    variable::{InputPlanner, ThingPlanner, TypePlanner, ValuePlanner, VariableVertex},
+                    variable::{InputVertex, ThingVertex, TypeVertex, ValueVertex, VariableVertex},
                     ComparisonVertex, Cost, CostMetaData, Costed, Direction, ExpressionVertex, FunctionCallVertex,
                     Input, IsVertex, LinksDeduplicationVertex, DisjunctionVertex, NegationVertex,
                     OptionalVertex, PlannerVertex, UnsatisfiableVertex,
@@ -316,7 +316,7 @@ impl<'a> ConjunctionPlanBuilder<'a> {
             if let Some(&id) = self.graph.variable_index.get(&var) {
                 self.graph.elements.insert(
                     VertexId::Variable(id),
-                    PlannerVertex::Variable(VariableVertex::Input(InputPlanner::from_variable(var))),
+                    PlannerVertex::Variable(VariableVertex::Input(InputVertex::from_variable(var))),
                 );
             }
         }
@@ -362,23 +362,23 @@ impl<'a> ConjunctionPlanBuilder<'a> {
     }
 
     fn register_input_var(&mut self, variable: Variable) {
-        let planner = InputPlanner::from_variable(variable);
+        let planner = InputVertex::from_variable(variable);
         self.graph.push_variable(variable, VariableVertex::Input(planner));
     }
 
     fn register_type_var(&mut self, variable: Variable) {
-        let planner = TypePlanner::from_variable(variable, self.local_annotations);
+        let planner = TypeVertex::from_variable(variable, self.local_annotations);
         self.graph.push_variable(variable, VariableVertex::Type(planner));
     }
 
     fn register_thing_var(&mut self, variable: Variable) {
-        let planner = ThingPlanner::from_variable(variable, self.local_annotations, self.statistics);
+        let planner = ThingVertex::from_variable(variable, self.local_annotations, self.statistics);
         self.planner_statistics.increment_var(planner.unrestricted_expected_size);
         self.graph.push_variable(variable, VariableVertex::Thing(planner));
     }
 
     fn register_value_var(&mut self, variable: Variable) {
-        let planner = ValuePlanner::from_variable(variable);
+        let planner = ValueVertex::from_variable(variable);
         self.graph.push_variable(variable, VariableVertex::Value(planner));
     }
 
@@ -420,34 +420,34 @@ impl<'a> ConjunctionPlanBuilder<'a> {
     }
 
     fn register_label(&mut self, label: &'a Label<Variable>) {
-        let planner = TypeListPlanner::from_label_constraint(label, &self.graph.variable_index, self.local_annotations);
+        let planner = TypeListVertex::from_label_constraint(label, &self.graph.variable_index, self.local_annotations);
         self.graph.push_constraint(ConstraintVertex::TypeList(planner));
     }
 
     fn register_role_name(&mut self, role_name: &'a RoleName<Variable>) {
         let planner =
-            TypeListPlanner::from_role_name_constraint(role_name, &self.graph.variable_index, self.local_annotations);
+            TypeListVertex::from_role_name_constraint(role_name, &self.graph.variable_index, self.local_annotations);
         self.graph.push_constraint(ConstraintVertex::TypeList(planner));
     }
 
     fn register_kind(&mut self, kind: &'a Kind<Variable>) {
-        let planner = TypeListPlanner::from_kind_constraint(kind, &self.graph.variable_index, self.local_annotations);
+        let planner = TypeListVertex::from_kind_constraint(kind, &self.graph.variable_index, self.local_annotations);
         self.graph.push_constraint(ConstraintVertex::TypeList(planner));
     }
 
     fn register_sub(&mut self, sub: &'a Sub<Variable>) {
-        let planner = SubPlanner::from_constraint(sub, &self.graph.variable_index, self.local_annotations);
+        let planner = SubVertex::from_constraint(sub, &self.graph.variable_index, self.local_annotations);
         self.graph.push_constraint(ConstraintVertex::Sub(planner));
     }
 
     fn register_owns(&mut self, owns: &'a Owns<Variable>) {
         let planner =
-            OwnsPlanner::from_constraint(owns, &self.graph.variable_index, self.local_annotations, self.statistics);
+            OwnsVertex::from_constraint(owns, &self.graph.variable_index, self.local_annotations, self.statistics);
         self.graph.push_constraint(ConstraintVertex::Owns(planner));
     }
 
     fn register_relates(&mut self, relates: &'a Relates<Variable>) {
-        let planner = RelatesPlanner::from_constraint(
+        let planner = RelatesVertex::from_constraint(
             relates,
             &self.graph.variable_index,
             self.local_annotations,
@@ -458,24 +458,24 @@ impl<'a> ConjunctionPlanBuilder<'a> {
 
     fn register_plays(&mut self, plays: &'a Plays<Variable>) {
         let planner =
-            PlaysPlanner::from_constraint(plays, &self.graph.variable_index, self.local_annotations, self.statistics);
+            PlaysVertex::from_constraint(plays, &self.graph.variable_index, self.local_annotations, self.statistics);
         self.graph.push_constraint(ConstraintVertex::Plays(planner));
     }
 
     fn register_value(&mut self, value: &'a Value<Variable>) {
-        let planner = TypeListPlanner::from_value_constraint(value, &self.graph.variable_index, self.local_annotations);
+        let planner = TypeListVertex::from_value_constraint(value, &self.graph.variable_index, self.local_annotations);
         self.graph.push_constraint(ConstraintVertex::TypeList(planner));
     }
 
     fn register_isa(&mut self, isa: &'a Isa<Variable>) {
         let planner =
-            IsaPlanner::from_constraint(isa, &self.graph.variable_index, self.local_annotations, self.statistics);
+            IsaVertex::from_constraint(isa, &self.graph.variable_index, self.local_annotations, self.statistics);
         self.graph.push_constraint(ConstraintVertex::Isa(planner));
     }
 
     fn register_iid(&mut self, iid: &'a Iid<Variable>) {
         let planner =
-            IidPlanner::from_constraint(iid, &self.graph.variable_index, self.local_annotations, self.statistics);
+            IidVertex::from_constraint(iid, &self.graph.variable_index, self.local_annotations, self.statistics);
         // TODO not setting exact bound for the var here as the checker can't currently take advantage of that
         //      so the cost would be misleading the planner
         self.graph.push_constraint(ConstraintVertex::Iid(planner));
@@ -483,20 +483,20 @@ impl<'a> ConjunctionPlanBuilder<'a> {
 
     fn register_has(&mut self, has: &'a Has<Variable>) {
         let planner =
-            HasPlanner::from_constraint(has, &self.graph.variable_index, self.local_annotations, self.statistics);
+            HasVertex::from_constraint(has, &self.graph.variable_index, self.local_annotations, self.statistics);
         self.planner_statistics.increment_has(planner.unbound_typed_expected_size);
         self.graph.push_constraint(ConstraintVertex::Has(planner));
     }
 
     fn register_links(&mut self, links: &'a Links<Variable>) {
         let planner =
-            LinksPlanner::from_constraint(links, &self.graph.variable_index, self.local_annotations, self.statistics);
+            LinksVertex::from_constraint(links, &self.graph.variable_index, self.local_annotations, self.statistics);
         self.planner_statistics.increment_links(planner.unbound_typed_expected_size);
         self.graph.push_constraint(ConstraintVertex::Links(planner));
     }
 
     fn register_indexed_relation(&mut self, indexed_relation: &'a IndexedRelation<Variable>) {
-        let planner = IndexedRelationPlanner::from_constraint(
+        let planner = IndexedRelationVertex::from_constraint(
             indexed_relation,
             &self.graph.variable_index,
             self.local_annotations,

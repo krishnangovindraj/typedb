@@ -20,11 +20,11 @@ use crate::{
 
 #[derive(Clone, Debug)]
 pub(crate) enum VariableVertex {
-    Input(InputPlanner),
+    Input(InputVertex),
 
-    Type(TypePlanner),
-    Thing(ThingPlanner),
-    Value(ValuePlanner),
+    Type(TypeVertex),
+    Thing(ThingVertex),
+    Value(ValueVertex),
 }
 
 impl VariableVertex {
@@ -135,17 +135,17 @@ impl VariableVertex {
 }
 
 #[derive(Clone)]
-pub(crate) struct InputPlanner {
+pub(crate) struct InputVertex {
     variable: Variable,
 }
 
-impl fmt::Debug for InputPlanner {
+impl fmt::Debug for InputVertex {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("InputPlanner").field("variable", &self.variable).finish()
+        f.debug_struct("InputVertex").field("variable", &self.variable).finish()
     }
 }
 
-impl InputPlanner {
+impl InputVertex {
     pub(crate) fn from_variable(variable: Variable) -> Self {
         Self { variable }
     }
@@ -156,20 +156,20 @@ impl InputPlanner {
 }
 
 #[derive(Clone)]
-pub(crate) struct TypePlanner {
+pub(crate) struct TypeVertex {
     variable: Variable,
     binding: Option<PatternVertexId>,
     restriction_exact: HashSet<VariableVertexId>, // Is constraint
     unrestricted_expected_size: f64,
 }
 
-impl fmt::Debug for TypePlanner {
+impl fmt::Debug for TypeVertex {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("TypePlanner").field("variable", &self.variable).field("binding", &self.binding).finish()
+        f.debug_struct("TypeVertex").field("variable", &self.variable).field("binding", &self.binding).finish()
     }
 }
 
-impl TypePlanner {
+impl TypeVertex {
     pub(crate) fn from_variable(variable: Variable, type_annotations: &TypeAnnotations) -> Self {
         let num_types = type_annotations.vertex_annotations_of(&Vertex::Variable(variable)).unwrap().len();
         Self {
@@ -206,7 +206,7 @@ impl TypePlanner {
 }
 
 #[derive(Clone)]
-pub(crate) struct ThingPlanner {
+pub(crate) struct ThingVertex {
     variable: Variable,
     binding: Option<PatternVertexId>,
     pub unrestricted_expected_size: f64,
@@ -219,13 +219,13 @@ pub(crate) struct ThingPlanner {
     restriction_from_above: HashSet<Input>,
 }
 
-impl fmt::Debug for ThingPlanner {
+impl fmt::Debug for ThingVertex {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ThingPlanner").field("variable", &self.variable).field("binding", &self.binding).finish()
+        f.debug_struct("ThingVertex").field("variable", &self.variable).field("binding", &self.binding).finish()
     }
 }
 
-impl ThingPlanner {
+impl ThingVertex {
     const RESTRICTION_BELOW_SELECTIVITY: f64 = 0.5;
     const RESTRICTION_ABOVE_SELECTIVITY: f64 = 0.5;
 
@@ -337,7 +337,7 @@ impl ThingPlanner {
 }
 
 #[derive(Clone)]
-pub(crate) struct ValuePlanner {
+pub(crate) struct ValueVertex {
     variable: Variable,
     binding: Option<PatternVertexId>,
 
@@ -346,13 +346,13 @@ pub(crate) struct ValuePlanner {
     restriction_value_above: HashSet<Input>,
 }
 
-impl fmt::Debug for ValuePlanner {
+impl fmt::Debug for ValueVertex {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ValuePlanner").field("variable", &self.variable).field("binding", &self.binding).finish()
+        f.debug_struct("ValueVertex").field("variable", &self.variable).field("binding", &self.binding).finish()
     }
 }
 
-impl ValuePlanner {
+impl ValueVertex {
     const RESTRICTION_EQUAL_SELECTIVITY: f64 = 0.1;
     const RESTRICTION_BELOW_SELECTIVITY: f64 = 0.5;
     const RESTRICTION_ABOVE_SELECTIVITY: f64 = 0.5;
