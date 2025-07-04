@@ -24,6 +24,7 @@ use crate::{
         vertex::{constraint::ConstraintVertex, variable::VariableVertex},
     },
 };
+use crate::executable::match_::planner::plan::OptionalPlan;
 
 pub(super) mod constraint;
 pub(super) mod variable;
@@ -51,6 +52,7 @@ pub(super) enum PlannerVertex<'a> {
 
     Negation(NegationVertex<'a>),
     Disjunction(DisjunctionVertex<'a>),
+    Optional(OptionalVertex<'a>),
 }
 
 impl PlannerVertex<'_> {
@@ -65,6 +67,7 @@ impl PlannerVertex<'_> {
             Self::FunctionCall(inner) => inner.is_valid(vertex_plan, graph),
             Self::Negation(inner) => inner.is_valid(vertex_plan, graph),
             Self::Disjunction(inner) => inner.is_valid(vertex_plan, graph),
+            Self::Optional(inner) => inner.is_valid(vertex_plan, graph),
             Self::Unsatisfiable(inner) => inner.is_valid(vertex_plan, graph),
         }
     }
@@ -80,6 +83,7 @@ impl PlannerVertex<'_> {
             Self::FunctionCall(inner) => Box::new(inner.variables()),
             Self::Negation(inner) => Box::new(inner.variables()),
             Self::Disjunction(inner) => Box::new(inner.variables()),
+            Self::Optional(inner) => Box::new(inner.variables()),
             Self::Unsatisfiable(inner) => Box::new(inner.variables()),
         }
     }
@@ -582,6 +586,45 @@ impl Costed for NegationVertex<'_> {
         _graph: &Graph<'_>,
     ) -> Result<(Cost, CostMetaData), QueryPlanningError> {
         Ok((self.plan.planner_statistics.query_cost, CostMetaData::None))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct OptionalVertex<'a> {
+    pub(super) plan: OptionalPlan<'a>,
+    pub(super) referenced_parent_vertex_ids: HashSet<VariableVertexId>,
+    pub(super) optional_vertex_ids: HashSet<VariableVertexId>,
+}
+
+impl<'a> OptionalVertex<'a> {
+    pub(super) fn new(plan: OptionalPlan<'a>, parent_variable_index: &HashMap<Variable, VariableVertexId>) -> Self {
+        let referenced_parent_vertex_ids: HashSet<_> =
+            plan.referenced_input_variables().map(|v| parent_variable_index[&v]).collect();
+        let optional_vertex_ids = plan.optional_variables().map(|v| parent_variable_index[&v]).collect();
+        Self { plan, referenced_parent_vertex_ids, optional_vertex_ids }
+    }
+
+    fn is_valid(&self, ordered: &[VertexId], _graph: &Graph<'_>) -> bool {
+        self.referenced_parent_vertex_ids.iter().all(|var| ordered.contains(&VertexId::Variable(*var)))
+    }
+
+    pub(crate) fn variables(&self) -> impl Iterator<Item = VariableVertexId> + '_ {
+        chain!(self.referenced_parent_vertex_ids.iter(), self.optional_vertex_ids.iter()).copied()
+    }
+
+    pub(super) fn plan(&self) -> &OptionalPlan<'a> {
+        &self.plan
+    }
+}
+
+impl Costed for OptionalVertex<'_> {
+    fn cost_and_metadata(
+        &self,
+        _vertex_ordering: &[VertexId],
+        _fix_dir: Option<Direction>,
+        _graph: &Graph<'_>,
+    ) -> Result<(Cost, CostMetaData), QueryPlanningError> {
+        Ok((self.plan.plan().planner_statistics.query_cost, CostMetaData::None))
     }
 }
 

@@ -31,7 +31,7 @@ use ir::{
 };
 use itertools::{chain, Itertools};
 use tracing::{event, Level};
-use ir::pattern::Pattern;
+
 use crate::{
     annotation::{
         expression::compiled_expression::ExecutableExpression,
@@ -147,7 +147,7 @@ fn make_builder<'a>(
                 let parent_bound_variables = negation
                     .conjunction()
                     .referenced_variables()
-                    .filter(|var| block_context.is_variable_available_in(conjunction.scope_id(), *var));
+                    .filter(|var| block_context.is_variable_available(conjunction.scope_id(), *var));
                 negation_subplans.push(
                     make_builder(
                         negation.conjunction(),
@@ -166,7 +166,7 @@ fn make_builder<'a>(
             NestedPattern::Optional(optional) => {
                 let parent_bound_variables: HashSet<_> = optional
                     .referenced_variables()
-                    .filter(|var| block_context.is_variable_available_in(conjunction.scope_id(), *var))
+                    .filter(|var| block_context.is_variable_available(conjunction.scope_id(), *var))
                     .collect();
                 let optional_vars = optional
                     .named_visible_binding_variables(block_context)
@@ -1416,14 +1416,17 @@ impl ConjunctionPlan<'_> {
                 }
                 PlannerVertex::Disjunction(disjunction) => {
                     let step_builder = disjunction
-                        .plan(conjunction_builder.produced_so_far.iter().filter(|&&v| v != variable).copied())?
-                        .lower(
-                            self.local_annotations.vertex_annotations(),
-                            conjunction_builder.row_variables().iter().copied(),
-                            conjunction_builder.current_outputs.clone(),
-                            conjunction_builder.position_mapping(),
-                            variable_registry,
-                        )?;
+                    .builder()
+                    .clone() // FIXME
+                    .plan(conjunction_builder.position_mapping().keys().copied())?
+                    .lower(
+                        self.local_annotations.vertex_annotations(),
+                        conjunction_builder.row_variables().iter().copied(),
+                        conjunction_builder.current_outputs.iter().copied(),
+                        conjunction_builder.position_mapping(),
+                        variable_registry,
+                    )?;
+
                     let variable_positions =
                         step_builder.branches.iter().flat_map(|x| x.index.iter().map(|(&k, &v)| (k, v))).collect();
                     conjunction_builder
@@ -1985,7 +1988,7 @@ impl ConjunctionPlan<'_> {
             let instruction = CheckInstruction::NotNone {
                 variables: optional_inputs_in_constraints.map(|var| conjunction_builder.position(var)).collect(),
             };
-            conjunction_builder.push_check(instruction);
+            conjunction_builder.push_check(instruction, &self.graph);
             conjunction_builder.finish_one();
         } else {
             drop(optional_inputs_in_constraints);
@@ -2011,6 +2014,18 @@ impl<'a> DisjunctionPlanBuilder<'a> {
 
     pub(super) fn branches(&self) -> &[ConjunctionPlanBuilder<'a>] {
         &self.branches
+    }
+    fn plan(
+        self,
+        input_variables: impl Iterator<Item = Variable> + Clone,
+    ) -> Result<DisjunctionPlan<'a>, QueryPlanningError> {
+        let Self { branch_ids, branches, .. } = self;
+        let branches = branches
+            .into_iter()
+            .map(|branch| branch.with_inputs(input_variables.clone()).plan())
+            .collect::<Result<Vec<_>, _>>()?;
+        let cost = branches.iter().map(ConjunctionPlan::cost).fold(Cost::EMPTY, Cost::combine_parallel);
+        Ok(DisjunctionPlan { branch_ids, branches, _cost: cost })
     }
 
     pub(super) fn required_inputs(&self) -> impl Iterator<Item = Variable> + '_ {
