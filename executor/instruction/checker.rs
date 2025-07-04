@@ -383,7 +383,7 @@ impl<T> Checker<T> {
                 Thing::Relation(relation) => *iid == *relation.vertex().to_bytes(),
                 Thing::Attribute(attribute) => *iid == *attribute.vertex().to_bytes(),
             },
-            VariableValue::None => false,
+            VariableValue::Empty => false,
             VariableValue::Type(_) => false,
             VariableValue::Value(_) => false, // or unreachable?
             VariableValue::ThingList(_) | VariableValue::ValueList(_) => unimplemented_feature!(Lists),
@@ -1107,14 +1107,14 @@ impl<T> Checker<T> {
                 row.get(*pos).clone().into_owned()
             })
             .collect();
-        Box::new(move |_value: &T| Ok(values.iter().all(|value| !value.is_none())))
+        Box::new(move |_value: &T| Ok(values.iter().all(|value| !value.is_empty())))
     }
 
     fn filter_not_none(row: &MaybeOwnedRow<'_>, variables: &[ExecutorVariable]) -> bool {
         variables.iter().all(|var| {
             let ExecutorVariable::RowPosition(pos) = var else { unreachable!() };
             let value = row.get(*pos);
-            !value.is_none()
+            !value.is_empty()
         })
     }
 
@@ -1148,7 +1148,7 @@ impl<T> Checker<T> {
             }
             VariableValue::Value(value) => Ok(value.into_owned()),
             VariableValue::ThingList(_) | VariableValue::ValueList(_) => unimplemented_feature!(Lists),
-            VariableValue::None | VariableValue::Type(_) | VariableValue::Thing(_) => unreachable!(),
+            VariableValue::Empty | VariableValue::Type(_) | VariableValue::Thing(_) => unreachable!(),
         };
         Box::new(move |value: &T| {
             // NOTE: Empty <op> Empty never matches
@@ -1159,7 +1159,7 @@ impl<T> Checker<T> {
                 }
                 VariableValue::Value(value) => value,
                 VariableValue::ThingList(_) | VariableValue::ValueList(_) => unimplemented_feature!(Lists),
-                VariableValue::None | VariableValue::Type(_) | VariableValue::Thing(_) => unreachable!(),
+                VariableValue::Empty | VariableValue::Type(_) | VariableValue::Thing(_) => unreachable!(),
             };
             let rhs = rhs.clone()?;
             if rhs.value_type().is_trivially_castable_to(lhs.value_type().category()) {
@@ -1200,7 +1200,7 @@ impl<T> Checker<T> {
             }
             VariableValue::Value(value) => value.as_reference(),
             VariableValue::ThingList(_) | VariableValue::ValueList(_) => unimplemented_feature!(Lists),
-            VariableValue::None | VariableValue::Type(_) | VariableValue::Thing(_) => unreachable!(),
+            VariableValue::Empty | VariableValue::Type(_) | VariableValue::Thing(_) => unreachable!(),
         };
         let lhs = match &lhs {
             VariableValue::Thing(Thing::Attribute(attr)) => {
@@ -1208,7 +1208,7 @@ impl<T> Checker<T> {
             }
             VariableValue::Value(value) => value.as_reference(),
             VariableValue::ThingList(_) | VariableValue::ValueList(_) => unimplemented_feature!(Lists),
-            VariableValue::None | VariableValue::Type(_) | VariableValue::Thing(_) => unreachable!(),
+            VariableValue::Empty | VariableValue::Type(_) | VariableValue::Thing(_) => unreachable!(),
         };
         if rhs.value_type().is_trivially_castable_to(lhs.value_type().category()) {
             Ok(Self::cmp_values_fn(&comparator)(&lhs, &rhs.cast(lhs.value_type().category()).unwrap()))

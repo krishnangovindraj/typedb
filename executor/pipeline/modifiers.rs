@@ -298,7 +298,7 @@ where
                     if self.retained_positions.contains(&VariablePosition::new(i as u32)) {
                         output.push(val);
                     } else {
-                        output.push(VariableValue::None);
+                        output.push(VariableValue::Empty);
                     }
                 }
                 MaybeOwnedRow::new_owned(output, mult, provenance)
@@ -364,7 +364,7 @@ where
                 None => return None,
                 Some(Err(err)) => return Some(Err(err.clone())),
                 Some(Ok(row)) => {
-                    if self.require.required.iter().all(|&pos| !row.get(pos).is_none()) {
+                    if self.require.required.iter().all(|&pos| !row.get(pos).is_empty()) {
                         break;
                     }
                 }
