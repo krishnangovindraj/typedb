@@ -164,14 +164,8 @@ fn make_builder<'a>(
                 )
             }
             NestedPattern::Optional(optional) => {
-                let parent_bound_variables: HashSet<_> = optional
-                    .referenced_variables()
-                    .filter(|var| block_context.is_variable_available(conjunction.scope_id(), *var))
-                    .collect();
-                let optional_vars = optional
-                    .named_visible_binding_variables(block_context)
-                    .filter(|var| !parent_bound_variables.contains(&var))
-                    .collect();
+                let parent_bound_variables: HashSet<_> = optional.required_inputs(block_context).collect();
+                let optional_vars = optional.optional_variables(block_context).collect();
                 optional_subplans.push(OptionalPlan::new(
                     optional.branch_id(),
                     optional_vars,
@@ -1422,7 +1416,7 @@ impl ConjunctionPlan<'_> {
                     .lower(
                         self.local_annotations.vertex_annotations(),
                         conjunction_builder.row_variables().iter().copied(),
-                        conjunction_builder.current_outputs.iter().copied(),
+                        conjunction_builder.current_outputs.iter().copied().collect(),
                         conjunction_builder.position_mapping(),
                         variable_registry,
                     )?;
@@ -1585,7 +1579,7 @@ impl ConjunctionPlan<'_> {
             }
 
             PlannerVertex::Disjunction(disjunction) => {
-                let step_builder = disjunction.plan(conjunction_builder.position_mapping().keys().copied())?.lower(
+                let step_builder = disjunction.builder().clone().plan(conjunction_builder.position_mapping().keys().copied())?.lower(
                     self.local_annotations.vertex_annotations(),
                     conjunction_builder.row_variables().iter().copied(),
                     conjunction_builder.current_outputs.clone(),
@@ -1975,24 +1969,7 @@ impl ConjunctionPlan<'_> {
         input_variables: impl IntoIterator<Item = Variable>,
         variable_registry: &VariableRegistry,
     ) {
-        let mut optional_inputs_in_constraints = input_variables
-            .into_iter()
-            .filter(|&var| {
-                variable_registry
-                    .get_variable_optionality(var)
-                    .is_some_and(|optionality| matches!(optionality, VariableOptionality::Optional))
-            })
-            .filter(|var| conjunction_builder.constraint_variables.contains(var))
-            .peekable();
-        if optional_inputs_in_constraints.peek().is_some() {
-            let instruction = CheckInstruction::NotNone {
-                variables: optional_inputs_in_constraints.map(|var| conjunction_builder.position(var)).collect(),
-            };
-            conjunction_builder.push_check(instruction, &self.graph);
-            conjunction_builder.finish_one();
-        } else {
-            drop(optional_inputs_in_constraints);
-        }
+        todo!()
     }
 }
 
@@ -2022,7 +1999,7 @@ impl<'a> DisjunctionPlanBuilder<'a> {
         let Self { branch_ids, branches, .. } = self;
         let branches = branches
             .into_iter()
-            .map(|branch| branch.with_inputs(input_variables.clone()).plan())
+            .map(|branch| branch.set_to_input(input_variables.clone()).plan())
             .collect::<Result<Vec<_>, _>>()?;
         let cost = branches.iter().map(ConjunctionPlan::cost).fold(Cost::EMPTY, Cost::combine_parallel);
         Ok(DisjunctionPlan { branch_ids, branches, _cost: cost })

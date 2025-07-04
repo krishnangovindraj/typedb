@@ -197,7 +197,7 @@ impl<'cx, 'reg> ConjunctionBuilder<'cx, 'reg> {
     pub fn add_optional(&mut self) -> ConjunctionBuilder<'_, 'reg> {
         let nested_scope_id =
             self.context.create_child_scope(self.conjunction.scope_id, ScopeTransparency::Transparent);
-        let optional = Optional::new(nested_scope_id);
+        let optional = Optional::new(nested_scope_id, self.context.next_branch_id());
         self.conjunction.nested_patterns.push(NestedPattern::Optional(optional));
         let Some(NestedPattern::Optional(optional)) = self.conjunction.nested_patterns.last_mut() else {
             unreachable!()

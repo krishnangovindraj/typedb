@@ -561,7 +561,7 @@ pub(super) struct NegationVertex<'a> {
 
 impl<'a> NegationVertex<'a> {
     pub(super) fn new(plan: ConjunctionPlan<'a>, variable_index: &HashMap<Variable, VariableVertexId>) -> Self {
-        let shared_variables = plan.shared_variables().iter().map(|v| variable_index[v]).collect();
+        let shared_variables = plan.referenced_input_variables().map(|v| variable_index[&v]).collect();
         Self { plan, shared_variables }
     }
 
