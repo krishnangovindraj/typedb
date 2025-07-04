@@ -122,7 +122,10 @@ fn make_builder<'a>(
     for pattern in conjunction.nested_patterns() {
         match pattern {
             NestedPattern::Disjunction(disjunction) => {
-                let shared_variables = disjunction.named_always_binding_variables(block_context).collect();
+                let shared_variables = disjunction.named_always_binding_variables(block_context).collect::<HashSet<_>>();
+                let required_inputs = disjunction.variable_binding_modes().iter()
+                    .filter(|(v,mode)| mode.is_locally_binding_in_child() && block_context.is_variable_available_in(conjunction.scope_id(), **v)).map(|(v,_)| *v)
+                    .chain(disjunction.required_inputs(block_context)).collect::<HashSet<_>>();
                 let planner = DisjunctionPlanBuilder::new(
                     shared_variables,
                     disjunction.conjunctions_by_branch_id().map(|(id, _)| *id).collect(),
@@ -142,6 +145,7 @@ fn make_builder<'a>(
                             )
                         })
                         .collect::<Result<Vec<_>, _>>()?,
+                    required_inputs
                 );
                 disjunction_planners.push(planner)
             }
@@ -2025,6 +2029,7 @@ pub(super) struct DisjunctionPlanBuilder<'a> {
     pub(super) branch_ids: Vec<BranchID>,
     pub(super) branches: Vec<ConjunctionPlanBuilder<'a>>,
     shared_variables: HashSet<Variable>,
+    required_variables: HashSet<Variable>,
 }
 
 impl<'a> DisjunctionPlanBuilder<'a> {
@@ -2032,8 +2037,9 @@ impl<'a> DisjunctionPlanBuilder<'a> {
         shared_variables: HashSet<Variable>,
         branch_ids: Vec<BranchID>,
         branches: Vec<ConjunctionPlanBuilder<'a>>,
+        required_variables: HashSet<Variable>,
     ) -> Self {
-        Self { branch_ids, branches, shared_variables }
+        Self { branch_ids, branches, shared_variables, required_variables }
     }
 
     pub(super) fn branches(&self) -> &[ConjunctionPlanBuilder<'a>] {
@@ -2042,6 +2048,10 @@ impl<'a> DisjunctionPlanBuilder<'a> {
 
     pub(super) fn shared_variables(&self) -> impl Iterator<Item = Variable> + '_ {
         self.shared_variables.iter().copied()
+    }
+
+    pub(super) fn required_inputs(&self) -> impl Iterator<Item = Variable> + '_ {
+        self.required_variables.iter().copied()
     }
 }
 
