@@ -584,6 +584,7 @@ impl<T> Checker<T> {
                     self.filter_comparison(context, row, lhs, rhs, comparator, storage_counters.clone())
                 }
                 CheckInstruction::Unsatisfiable => Box::new(|_: &T| Ok(false)),
+                CheckInstruction::NotNone {..} => todo!("REPLAY CHANGES HERE!"),
             };
             filters.push(filter);
         }

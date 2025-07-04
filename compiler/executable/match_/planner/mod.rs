@@ -131,6 +131,21 @@ impl NegationBuilder {
 }
 
 #[derive(Debug)]
+struct OptionalBuilder {
+    optional: ConjunctionExecutableBuilder,
+}
+
+impl OptionalBuilder {
+    fn new(optional: ConjunctionExecutableBuilder) -> Self {
+        Self { optional }
+    }
+
+    fn branch_id(&self) -> BranchID {
+        self.optional.branch_id.expect("Optionals must be assigned a branch ID")
+    }
+}
+
+#[derive(Debug)]
 struct DisjunctionBuilder {
     branch_ids: Vec<BranchID>,
     branches: Vec<ConjunctionExecutableBuilder>,
@@ -157,6 +172,7 @@ enum StepInstructionsBuilder {
     Check(CheckBuilder),
     Negation(NegationBuilder),
     Disjunction(DisjunctionBuilder),
+    Optional(OptionalBuilder),
     Expression(ExpressionBuilder),
     FunctionCall(FunctionCallBuilder),
 }
@@ -249,6 +265,16 @@ impl StepBuilder {
             StepInstructionsBuilder::Negation(NegationBuilder { negation }) => ExecutionStep::Negation(
                 NegationStep::new(negation.finish(variable_registry), selected_variables, output_width),
             ),
+            StepInstructionsBuilder::Optional(builder) => {
+                let branch_id = builder.branch_id();
+                let OptionalBuilder { optional } = builder;
+                ExecutionStep::Optional(OptionalStep::new(
+                    optional.finish(variable_registry),
+                    selected_variables,
+                    output_width,
+                    branch_id,
+                ))
+            }
             StepInstructionsBuilder::Disjunction(DisjunctionBuilder { branch_ids, branches }) => {
                 ExecutionStep::Disjunction(DisjunctionStep::new(
                     branch_ids,
