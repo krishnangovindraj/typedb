@@ -36,18 +36,18 @@ const MAX_SCAN_SIZE: f64 = 10e15;
 
 #[derive(Clone, Debug)]
 pub(crate) enum ConstraintVertex<'a> {
-    TypeList(TypeListPlanner<'a>),
-    Iid(IidPlanner<'a>),
+    TypeList(TypeListVertex<'a>),
+    Iid(IidVertex<'a>),
 
-    Isa(IsaPlanner<'a>),
-    Has(HasPlanner<'a>),
-    Links(LinksPlanner<'a>),
-    IndexedRelation(IndexedRelationPlanner<'a>),
+    Isa(IsaVertex<'a>),
+    Has(HasVertex<'a>),
+    Links(LinksVertex<'a>),
+    IndexedRelation(IndexedRelationVertex<'a>),
 
-    Sub(SubPlanner<'a>),
-    Owns(OwnsPlanner<'a>),
-    Relates(RelatesPlanner<'a>),
-    Plays(PlaysPlanner<'a>),
+    Sub(SubVertex<'a>),
+    Owns(OwnsVertex<'a>),
+    Relates(RelatesVertex<'a>),
+    Plays(PlaysVertex<'a>),
 }
 
 impl ConstraintVertex<'_> {
@@ -236,19 +236,19 @@ impl TypeListConstraint<'_> {
 }
 
 #[derive(Clone)]
-pub(crate) struct TypeListPlanner<'a> {
+pub(crate) struct TypeListVertex<'a> {
     constraint: TypeListConstraint<'a>,
     var: VariableVertexId,
     types: Arc<BTreeSet<Type>>,
 }
 
-impl fmt::Debug for TypeListPlanner<'_> {
+impl fmt::Debug for TypeListVertex<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("TypeListPlanner").field("constraint", &self.constraint).finish()
+        f.debug_struct("TypeListVertex").field("constraint", &self.constraint).finish()
     }
 }
 
-impl<'a> TypeListPlanner<'a> {
+impl<'a> TypeListVertex<'a> {
     fn variables(&self) -> impl Iterator<Item = VariableVertexId> {
         iter::once(self.var)
     }
@@ -319,7 +319,7 @@ impl<'a> TypeListPlanner<'a> {
     }
 }
 
-impl Costed for TypeListPlanner<'_> {
+impl Costed for TypeListVertex<'_> {
     fn cost_and_metadata(
         &self,
         _vertex_ordering: &[VertexId],
@@ -331,18 +331,18 @@ impl Costed for TypeListPlanner<'_> {
 }
 
 #[derive(Clone)]
-pub(crate) struct IidPlanner<'a> {
+pub(crate) struct IidVertex<'a> {
     iid: &'a Iid<Variable>,
     var: VariableVertexId,
 }
 
-impl fmt::Debug for IidPlanner<'_> {
+impl fmt::Debug for IidVertex<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("IidPlanner").field("iid", self.iid).finish()
+        f.debug_struct("IidVertex").field("iid", self.iid).finish()
     }
 }
 
-impl<'a> IidPlanner<'a> {
+impl<'a> IidVertex<'a> {
     pub(crate) fn from_constraint(
         iid: &'a Iid<Variable>,
         variable_index: &HashMap<Variable, VariableVertexId>,
@@ -362,7 +362,7 @@ impl<'a> IidPlanner<'a> {
     }
 }
 
-impl Costed for IidPlanner<'_> {
+impl Costed for IidVertex<'_> {
     fn cost_and_metadata(
         &self,
         vertex_ordering: &[VertexId],
@@ -379,20 +379,20 @@ impl Costed for IidPlanner<'_> {
 }
 
 #[derive(Clone)]
-pub(crate) struct IsaPlanner<'a> {
+pub(crate) struct IsaVertex<'a> {
     isa: &'a Isa<Variable>,
     thing: VariableVertexId,
     type_: Input,
     pub(crate) unrestricted_expected_size: f64,
 }
 
-impl fmt::Debug for IsaPlanner<'_> {
+impl fmt::Debug for IsaVertex<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("IsaPlanner").field("isa", self.isa).finish()
+        f.debug_struct("IsaVertex").field("isa", self.isa).finish()
     }
 }
 
-impl<'a> IsaPlanner<'a> {
+impl<'a> IsaVertex<'a> {
     pub(crate) fn from_constraint(
         isa: &'a Isa<Variable>,
         variable_index: &HashMap<Variable, VariableVertexId>,
@@ -465,7 +465,7 @@ impl<'a> IsaPlanner<'a> {
     }
 }
 
-impl Costed for IsaPlanner<'_> {
+impl Costed for IsaVertex<'_> {
     fn cost_and_metadata(
         &self,
         inputs: &[VertexId],
@@ -487,7 +487,7 @@ impl Costed for IsaPlanner<'_> {
 }
 
 #[derive(Clone)]
-pub(crate) struct HasPlanner<'a> {
+pub(crate) struct HasVertex<'a> {
     has: &'a Has<Variable>,
     pub owner: VariableVertexId,
     pub attribute: VariableVertexId,
@@ -498,13 +498,13 @@ pub(crate) struct HasPlanner<'a> {
     pub attribute_size: f64,
 }
 
-impl fmt::Debug for HasPlanner<'_> {
+impl fmt::Debug for HasVertex<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("HasPlanner").field("has", &self.has).finish()
+        f.debug_struct("HasVertex").field("has", &self.has).finish()
     }
 }
 
-impl<'a> HasPlanner<'a> {
+impl<'a> HasVertex<'a> {
     pub(crate) fn from_constraint(
         has: &'a Has<Variable>,
         variable_index: &HashMap<Variable, VariableVertexId>,
@@ -656,7 +656,7 @@ impl<'a> HasPlanner<'a> {
     }
 }
 
-impl Costed for HasPlanner<'_> {
+impl Costed for HasVertex<'_> {
     fn cost_and_metadata(
         &self,
         inputs: &[VertexId],
@@ -700,7 +700,7 @@ impl Costed for HasPlanner<'_> {
 }
 
 #[derive(Clone)]
-pub(crate) struct LinksPlanner<'a> {
+pub(crate) struct LinksVertex<'a> {
     links: &'a Links<Variable>,
     pub relation: VariableVertexId,
     pub player: VariableVertexId,
@@ -712,13 +712,13 @@ pub(crate) struct LinksPlanner<'a> {
     player_size: f64,
 }
 
-impl fmt::Debug for LinksPlanner<'_> {
+impl fmt::Debug for LinksVertex<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("LinksPlanner").field("links", &self.links).finish()
+        f.debug_struct("LinksVertex").field("links", &self.links).finish()
     }
 }
 
-impl<'a> LinksPlanner<'a> {
+impl<'a> LinksVertex<'a> {
     pub(crate) fn from_constraint(
         links: &'a Links<Variable>,
         variable_index: &HashMap<Variable, VariableVertexId>,
@@ -897,7 +897,7 @@ impl<'a> LinksPlanner<'a> {
     }
 }
 
-impl Costed for LinksPlanner<'_> {
+impl Costed for LinksVertex<'_> {
     fn cost_and_metadata(
         &self,
         inputs: &[VertexId],
@@ -942,7 +942,7 @@ impl Costed for LinksPlanner<'_> {
 }
 
 #[derive(Clone)]
-pub(crate) struct IndexedRelationPlanner<'a> {
+pub(crate) struct IndexedRelationVertex<'a> {
     indexed_relation: &'a IndexedRelation<Variable>,
     pub player_1: VariableVertexId,
     pub player_2: VariableVertexId,
@@ -954,13 +954,13 @@ pub(crate) struct IndexedRelationPlanner<'a> {
     player_2_size: f64,
 }
 
-impl fmt::Debug for IndexedRelationPlanner<'_> {
+impl fmt::Debug for IndexedRelationVertex<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("IndexedRelationPlanner").field("indexed_relation", &self.indexed_relation).finish()
+        f.debug_struct("IndexedRelationVertex").field("indexed_relation", &self.indexed_relation).finish()
     }
 }
 
-impl<'a> IndexedRelationPlanner<'a> {
+impl<'a> IndexedRelationVertex<'a> {
     pub(crate) fn from_constraint(
         indexed_relation: &'a IndexedRelation<Variable>,
         variable_index: &HashMap<Variable, VariableVertexId>,
@@ -1120,7 +1120,7 @@ impl<'a> IndexedRelationPlanner<'a> {
     }
 }
 
-impl Costed for IndexedRelationPlanner<'_> {
+impl Costed for IndexedRelationVertex<'_> {
     fn cost_and_metadata(
         &self,
         inputs: &[VertexId],
@@ -1159,13 +1159,13 @@ impl Costed for IndexedRelationPlanner<'_> {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct SubPlanner<'a> {
+pub(crate) struct SubVertex<'a> {
     sub: &'a Sub<Variable>,
     type_: Input,
     supertype: Input,
 }
 
-impl<'a> SubPlanner<'a> {
+impl<'a> SubVertex<'a> {
     pub(crate) fn from_constraint(
         sub: &'a Sub<Variable>,
         variable_index: &HashMap<Variable, VariableVertexId>,
@@ -1187,7 +1187,7 @@ impl<'a> SubPlanner<'a> {
     }
 }
 
-impl Costed for SubPlanner<'_> {
+impl Costed for SubVertex<'_> {
     fn cost_and_metadata(
         &self,
         _: &[VertexId],
@@ -1199,13 +1199,13 @@ impl Costed for SubPlanner<'_> {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct OwnsPlanner<'a> {
+pub(crate) struct OwnsVertex<'a> {
     owns: &'a Owns<Variable>,
     owner: Input,
     attribute: Input,
 }
 
-impl<'a> OwnsPlanner<'a> {
+impl<'a> OwnsVertex<'a> {
     pub(crate) fn from_constraint(
         owns: &'a Owns<Variable>,
         variable_index: &HashMap<Variable, VariableVertexId>,
@@ -1226,7 +1226,7 @@ impl<'a> OwnsPlanner<'a> {
     }
 }
 
-impl Costed for OwnsPlanner<'_> {
+impl Costed for OwnsVertex<'_> {
     fn cost_and_metadata(
         &self,
         _: &[VertexId],
@@ -1238,13 +1238,13 @@ impl Costed for OwnsPlanner<'_> {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct RelatesPlanner<'a> {
+pub(crate) struct RelatesVertex<'a> {
     relates: &'a Relates<Variable>,
     relation: Input,
     role_type: Input,
 }
 
-impl<'a> RelatesPlanner<'a> {
+impl<'a> RelatesVertex<'a> {
     pub(crate) fn from_constraint(
         relates: &'a Relates<Variable>,
         variable_index: &HashMap<Variable, VariableVertexId>,
@@ -1265,7 +1265,7 @@ impl<'a> RelatesPlanner<'a> {
     }
 }
 
-impl Costed for RelatesPlanner<'_> {
+impl Costed for RelatesVertex<'_> {
     fn cost_and_metadata(
         &self,
         _: &[VertexId],
@@ -1277,13 +1277,13 @@ impl Costed for RelatesPlanner<'_> {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct PlaysPlanner<'a> {
+pub(crate) struct PlaysVertex<'a> {
     plays: &'a Plays<Variable>,
     player: Input,
     role_type: Input,
 }
 
-impl<'a> PlaysPlanner<'a> {
+impl<'a> PlaysVertex<'a> {
     pub(crate) fn from_constraint(
         plays: &'a Plays<Variable>,
         variable_index: &HashMap<Variable, VariableVertexId>,
@@ -1304,7 +1304,7 @@ impl<'a> PlaysPlanner<'a> {
     }
 }
 
-impl Costed for PlaysPlanner<'_> {
+impl Costed for PlaysVertex<'_> {
     fn cost_and_metadata(
         &self,
         _: &[VertexId],

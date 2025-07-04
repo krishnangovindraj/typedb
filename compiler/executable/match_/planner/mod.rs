@@ -13,7 +13,7 @@ use answer::variable::Variable;
 use concept::thing::statistics::Statistics;
 use error::typedb_error;
 use ir::{
-    pattern::{constraint::ExpressionBinding, BranchID, Vertex},
+    pattern::{constraint::ExpressionBinding, variable_category::VariableOptionality, BranchID, Vertex},
     pipeline::{block::Block, function_signature::FunctionID, VariableRegistry},
 };
 use itertools::Itertools;
@@ -27,8 +27,8 @@ use crate::{
             instructions::{CheckInstruction, ConstraintInstruction},
             planner::{
                 conjunction_executable::{
-                    AssignmentStep, CheckStep, DisjunctionStep, ExecutionStep, FunctionCallStep, IntersectionStep,
-                    ConjunctionExecutable, NegationStep,
+                    AssignmentStep, CheckStep, ConjunctionExecutable, DisjunctionStep, ExecutionStep, FunctionCallStep,
+                    IntersectionStep, NegationStep, OptionalStep,
                 },
                 plan::{plan_conjunction, PlannerStatistics, QueryPlanningError},
             },
@@ -43,51 +43,51 @@ pub mod plan;
 pub(crate) mod vertex;
 
 typedb_error! {
-    pub MatchCompilationError(component = "Match compiler", prefix = "MCP") {
+    pub ConjunctionCompilationError(component = "Match compiler", prefix = "MCP") {
         PlanningError(1, "Error during planning of match stage.", typedb_source: QueryPlanningError),
     }
 }
 
 pub fn compile(
     block: &Block,
-    input_variable_annotations: &BTreeMap<Vertex<Variable>, Arc<BTreeSet<answer::Type>>>,
-    input_variables: &HashMap<Variable, VariablePosition>,
-    selected_variables: &HashSet<Variable>,
+    stage_input_annotations: &BTreeMap<Vertex<Variable>, Arc<BTreeSet<answer::Type>>>,
+    stage_input_positions: &HashMap<Variable, VariablePosition>,
+    selected_variables: HashSet<Variable>,
     type_annotations: &BlockAnnotations,
     variable_registry: &VariableRegistry,
     expressions: &HashMap<ExpressionBinding<Variable>, ExecutableExpression<Variable>>,
     statistics: &Statistics,
     call_cost_provider: &impl FunctionCallCostProvider,
-) -> Result<ConjunctionExecutable, MatchCompilationError> {
+) -> Result<ConjunctionExecutable, ConjunctionCompilationError> {
     let conjunction = block.conjunction();
     let block_context = block.block_context();
 
     debug!("Planning conjunction:\n{conjunction}");
 
     let assigned_identities =
-        input_variables.iter().map(|(&var, &position)| (var, ExecutorVariable::RowPosition(position))).collect();
+        stage_input_positions.iter().map(|(&var, &position)| (var, ExecutorVariable::RowPosition(position))).collect();
 
     let plan = plan_conjunction(
         conjunction,
         block_context,
-        input_variables,
-        selected_variables,
+        stage_input_positions,
+        &selected_variables,
         type_annotations,
         variable_registry,
         expressions,
         statistics,
         call_cost_provider,
     )
-    .map_err(|source| MatchCompilationError::PlanningError { typedb_source: source })?
+    .map_err(|source| ConjunctionCompilationError::PlanningError { typedb_source: source })?
     .lower(
-        input_variable_annotations,
-        input_variables.keys().copied(),
-        selected_variables.iter().copied(),
+        stage_input_annotations,
+        stage_input_positions.keys().copied(),
+        selected_variables,
         &assigned_identities,
         variable_registry,
         None,
     )
-    .map_err(|source| MatchCompilationError::PlanningError { typedb_source: source })?
+    .map_err(|source| ConjunctionCompilationError::PlanningError { typedb_source: source })?
     .finish(variable_registry);
 
     trace!("Finished planning conjunction:\n{conjunction}");
@@ -121,11 +121,11 @@ struct CheckBuilder {
 
 #[derive(Debug)]
 struct NegationBuilder {
-    negation: MatchExecutableBuilder,
+    negation: ConjunctionExecutableBuilder,
 }
 
 impl NegationBuilder {
-    fn new(negation: MatchExecutableBuilder) -> Self {
+    fn new(negation: ConjunctionExecutableBuilder) -> Self {
         Self { negation }
     }
 }
@@ -133,11 +133,11 @@ impl NegationBuilder {
 #[derive(Debug)]
 struct DisjunctionBuilder {
     branch_ids: Vec<BranchID>,
-    branches: Vec<MatchExecutableBuilder>,
+    branches: Vec<ConjunctionExecutableBuilder>,
 }
 
 impl DisjunctionBuilder {
-    fn new(branch_ids: Vec<BranchID>, branches: Vec<MatchExecutableBuilder>) -> Self {
+    fn new(branch_ids: Vec<BranchID>, branches: Vec<ConjunctionExecutableBuilder>) -> Self {
         Self { branch_ids, branches }
     }
 }
@@ -276,8 +276,8 @@ impl StepBuilder {
 }
 
 #[derive(Debug)]
-struct MatchExecutableBuilder {
-    selected_variables: Vec<Variable>,
+struct ConjunctionExecutableBuilder {
+    selected_variables: HashSet<Variable>,
     input_variables: Vec<Variable>,
     current_outputs: HashSet<Variable>,
     produced_so_far: HashSet<Variable>,
@@ -293,11 +293,11 @@ struct MatchExecutableBuilder {
     branch_id: Option<BranchID>,
 }
 
-impl MatchExecutableBuilder {
+impl ConjunctionExecutableBuilder {
     fn new(
         branch_id: Option<BranchID>,
         assigned_positions: &HashMap<Variable, ExecutorVariable>,
-        selected_variables: Vec<Variable>,
+        selected_variables: HashSet<Variable>,
         input_variables: Vec<Variable>,
         planner_statistics: PlannerStatistics,
     ) -> Self {

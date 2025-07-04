@@ -54,16 +54,16 @@ use crate::{
             planner::{
                 vertex::{
                     constraint::{
-                        ConstraintVertex, HasPlanner, IidPlanner, IndexedRelationPlanner, IsaPlanner, LinksPlanner,
-                        OwnsPlanner, PlaysPlanner, RelatesPlanner, SubPlanner, TypeListPlanner,
+                        ConstraintVertex, HasVertex, IidVertex, IndexedRelationVertex, IsaVertex, LinksVertex,
+                        OwnsVertex, PlaysVertex, RelatesVertex, SubVertex, TypeListVertex,
                     },
-                    variable::{InputPlanner, ThingPlanner, TypePlanner, ValuePlanner, VariableVertex},
-                    ComparisonPlanner, Cost, CostMetaData, Costed, Direction, DisjunctionPlanner, ExpressionPlanner,
-                    FunctionCallPlanner, Input, IsPlanner, LinksDeduplicationPlanner, NegationPlanner, PlannerVertex,
-                    UnsatisfiablePlanner,
+                    variable::{InputVertex, ThingVertex, TypeVertex, ValueVertex, VariableVertex},
+                    ComparisonVertex, Cost, CostMetaData, Costed, Direction, DisjunctionVertex, ExpressionVertex,
+                    FunctionCallVertex, Input, IsVertex, LinksDeduplicationVertex, NegationVertex, PlannerVertex,
+                    UnsatisfiableVertex,
                 },
                 DisjunctionBuilder, ExpressionBuilder, FunctionCallBuilder, IntersectionBuilder,
-                MatchExecutableBuilder, NegationBuilder, StepBuilder, StepInstructionsBuilder,
+                ConjunctionExecutableBuilder, NegationBuilder, StepBuilder, StepInstructionsBuilder,
             },
         },
     },
@@ -309,7 +309,7 @@ impl<'a> ConjunctionPlanBuilder<'a> {
             if let Some(&id) = self.graph.variable_index.get(&var) {
                 self.graph.elements.insert(
                     VertexId::Variable(id),
-                    PlannerVertex::Variable(VariableVertex::Input(InputPlanner::from_variable(var))),
+                    PlannerVertex::Variable(VariableVertex::Input(InputVertex::from_variable(var))),
                 );
             }
         }
@@ -387,23 +387,23 @@ impl<'a> ConjunctionPlanBuilder<'a> {
 
     fn register_input_var(&mut self, variable: Variable) {
         self.shared_variables.push(variable);
-        let planner = InputPlanner::from_variable(variable);
+        let planner = InputVertex::from_variable(variable);
         self.graph.push_variable(variable, VariableVertex::Input(planner));
     }
 
     fn register_type_var(&mut self, variable: Variable) {
-        let planner = TypePlanner::from_variable(variable, self.local_annotations);
+        let planner = TypeVertex::from_variable(variable, self.local_annotations);
         self.graph.push_variable(variable, VariableVertex::Type(planner));
     }
 
     fn register_thing_var(&mut self, variable: Variable) {
-        let planner = ThingPlanner::from_variable(variable, self.local_annotations, self.statistics);
+        let planner = ThingVertex::from_variable(variable, self.local_annotations, self.statistics);
         self.planner_statistics.increment_var(planner.unrestricted_expected_size);
         self.graph.push_variable(variable, VariableVertex::Thing(planner));
     }
 
     fn register_value_var(&mut self, variable: Variable) {
-        let planner = ValuePlanner::from_variable(variable);
+        let planner = ValueVertex::from_variable(variable);
         self.graph.push_variable(variable, VariableVertex::Value(planner));
     }
 
@@ -445,34 +445,34 @@ impl<'a> ConjunctionPlanBuilder<'a> {
     }
 
     fn register_label(&mut self, label: &'a Label<Variable>) {
-        let planner = TypeListPlanner::from_label_constraint(label, &self.graph.variable_index, self.local_annotations);
+        let planner = TypeListVertex::from_label_constraint(label, &self.graph.variable_index, self.local_annotations);
         self.graph.push_constraint(ConstraintVertex::TypeList(planner));
     }
 
     fn register_role_name(&mut self, role_name: &'a RoleName<Variable>) {
         let planner =
-            TypeListPlanner::from_role_name_constraint(role_name, &self.graph.variable_index, self.local_annotations);
+            TypeListVertex::from_role_name_constraint(role_name, &self.graph.variable_index, self.local_annotations);
         self.graph.push_constraint(ConstraintVertex::TypeList(planner));
     }
 
     fn register_kind(&mut self, kind: &'a Kind<Variable>) {
-        let planner = TypeListPlanner::from_kind_constraint(kind, &self.graph.variable_index, self.local_annotations);
+        let planner = TypeListVertex::from_kind_constraint(kind, &self.graph.variable_index, self.local_annotations);
         self.graph.push_constraint(ConstraintVertex::TypeList(planner));
     }
 
     fn register_sub(&mut self, sub: &'a Sub<Variable>) {
-        let planner = SubPlanner::from_constraint(sub, &self.graph.variable_index, self.local_annotations);
+        let planner = SubVertex::from_constraint(sub, &self.graph.variable_index, self.local_annotations);
         self.graph.push_constraint(ConstraintVertex::Sub(planner));
     }
 
     fn register_owns(&mut self, owns: &'a Owns<Variable>) {
         let planner =
-            OwnsPlanner::from_constraint(owns, &self.graph.variable_index, self.local_annotations, self.statistics);
+            OwnsVertex::from_constraint(owns, &self.graph.variable_index, self.local_annotations, self.statistics);
         self.graph.push_constraint(ConstraintVertex::Owns(planner));
     }
 
     fn register_relates(&mut self, relates: &'a Relates<Variable>) {
-        let planner = RelatesPlanner::from_constraint(
+        let planner = RelatesVertex::from_constraint(
             relates,
             &self.graph.variable_index,
             self.local_annotations,
@@ -483,24 +483,24 @@ impl<'a> ConjunctionPlanBuilder<'a> {
 
     fn register_plays(&mut self, plays: &'a Plays<Variable>) {
         let planner =
-            PlaysPlanner::from_constraint(plays, &self.graph.variable_index, self.local_annotations, self.statistics);
+            PlaysVertex::from_constraint(plays, &self.graph.variable_index, self.local_annotations, self.statistics);
         self.graph.push_constraint(ConstraintVertex::Plays(planner));
     }
 
     fn register_value(&mut self, value: &'a Value<Variable>) {
-        let planner = TypeListPlanner::from_value_constraint(value, &self.graph.variable_index, self.local_annotations);
+        let planner = TypeListVertex::from_value_constraint(value, &self.graph.variable_index, self.local_annotations);
         self.graph.push_constraint(ConstraintVertex::TypeList(planner));
     }
 
     fn register_isa(&mut self, isa: &'a Isa<Variable>) {
         let planner =
-            IsaPlanner::from_constraint(isa, &self.graph.variable_index, self.local_annotations, self.statistics);
+            IsaVertex::from_constraint(isa, &self.graph.variable_index, self.local_annotations, self.statistics);
         self.graph.push_constraint(ConstraintVertex::Isa(planner));
     }
 
     fn register_iid(&mut self, iid: &'a Iid<Variable>) {
         let planner =
-            IidPlanner::from_constraint(iid, &self.graph.variable_index, self.local_annotations, self.statistics);
+            IidVertex::from_constraint(iid, &self.graph.variable_index, self.local_annotations, self.statistics);
         // TODO not setting exact bound for the var here as the checker can't currently take advantage of that
         //      so the cost would be misleading the planner
         self.graph.push_constraint(ConstraintVertex::Iid(planner));
@@ -508,20 +508,20 @@ impl<'a> ConjunctionPlanBuilder<'a> {
 
     fn register_has(&mut self, has: &'a Has<Variable>) {
         let planner =
-            HasPlanner::from_constraint(has, &self.graph.variable_index, self.local_annotations, self.statistics);
+            HasVertex::from_constraint(has, &self.graph.variable_index, self.local_annotations, self.statistics);
         self.planner_statistics.increment_has(planner.unbound_typed_expected_size);
         self.graph.push_constraint(ConstraintVertex::Has(planner));
     }
 
     fn register_links(&mut self, links: &'a Links<Variable>) {
         let planner =
-            LinksPlanner::from_constraint(links, &self.graph.variable_index, self.local_annotations, self.statistics);
+            LinksVertex::from_constraint(links, &self.graph.variable_index, self.local_annotations, self.statistics);
         self.planner_statistics.increment_links(planner.unbound_typed_expected_size);
         self.graph.push_constraint(ConstraintVertex::Links(planner));
     }
 
     fn register_indexed_relation(&mut self, indexed_relation: &'a IndexedRelation<Variable>) {
-        let planner = IndexedRelationPlanner::from_constraint(
+        let planner = IndexedRelationVertex::from_constraint(
             indexed_relation,
             &self.graph.variable_index,
             self.local_annotations,
@@ -539,7 +539,7 @@ impl<'a> ConjunctionPlanBuilder<'a> {
         let output = self.graph.variable_index[&variable];
         let expression = &expressions[binding];
         let inputs = expression.variables().iter().map(|&var| self.graph.variable_index[&var]).unique().collect_vec();
-        self.graph.push_expression(output, ExpressionPlanner::from_expression(expression, inputs, output));
+        self.graph.push_expression(output, ExpressionVertex::from_expression(expression, inputs, output));
     }
 
     fn register_function_call_binding(
@@ -559,7 +559,7 @@ impl<'a> ConjunctionPlanBuilder<'a> {
             .collect();
         // TODO: Use the real cost when we have function planning
         let cost = call_cost_provider.get_call_cost(&call_binding.function_call().function_id());
-        self.graph.push_function_call(FunctionCallPlanner::from_constraint(call_binding, arguments, return_vars, cost));
+        self.graph.push_function_call(FunctionCallVertex::from_constraint(call_binding, arguments, return_vars, cost));
     }
 
     fn register_is(&mut self, is: &'a Is<Variable>) {
@@ -567,7 +567,7 @@ impl<'a> ConjunctionPlanBuilder<'a> {
         let rhs = self.graph.variable_index[&is.rhs().as_variable().unwrap()];
         self.graph.elements.get_mut(&VertexId::Variable(lhs)).unwrap().as_variable_mut().unwrap().add_is(rhs);
         self.graph.elements.get_mut(&VertexId::Variable(rhs)).unwrap().as_variable_mut().unwrap().add_is(lhs);
-        self.graph.push_is(IsPlanner::from_constraint(
+        self.graph.push_is(IsVertex::from_constraint(
             is,
             &self.graph.variable_index,
             self.local_annotations,
@@ -576,7 +576,7 @@ impl<'a> ConjunctionPlanBuilder<'a> {
     }
 
     fn register_links_deduplication(&mut self, links_deduplication: &'a LinksDeduplication<Variable>) {
-        self.graph.push_links_deduplication(LinksDeduplicationPlanner::from_constraint(
+        self.graph.push_links_deduplication(LinksDeduplicationVertex::from_constraint(
             links_deduplication,
             &self.graph.variable_index,
             self.local_annotations,
@@ -609,7 +609,7 @@ impl<'a> ConjunctionPlanBuilder<'a> {
                 Comparator::Contains => (),
             }
         }
-        self.graph.push_comparison(ComparisonPlanner::from_constraint(
+        self.graph.push_comparison(ComparisonVertex::from_constraint(
             comparison,
             &self.graph.variable_index,
             self.local_annotations,
@@ -618,7 +618,7 @@ impl<'a> ConjunctionPlanBuilder<'a> {
     }
 
     fn register_optimised_to_unsatisfiable(&mut self, optimised_unsatisfiable: &'a Unsatisfiable) {
-        let planner = UnsatisfiablePlanner::from_constraint(
+        let planner = UnsatisfiableVertex::from_constraint(
             optimised_unsatisfiable,
             &self.graph.variable_index,
             self.local_annotations,
@@ -629,13 +629,13 @@ impl<'a> ConjunctionPlanBuilder<'a> {
 
     fn register_disjunctions(&mut self, disjunctions: Vec<DisjunctionPlanBuilder<'a>>) {
         for disjunction in disjunctions {
-            self.graph.push_disjunction(DisjunctionPlanner::from_builder(disjunction, &self.graph.variable_index));
+            self.graph.push_disjunction(DisjunctionVertex::from_builder(disjunction, &self.graph.variable_index));
         }
     }
 
     fn register_negations(&mut self, negations: Vec<ConjunctionPlan<'a>>) {
         for negation_plan in negations {
-            self.graph.push_negation(NegationPlanner::new(negation_plan, &self.graph.variable_index));
+            self.graph.push_negation(NegationVertex::new(negation_plan, &self.graph.variable_index));
         }
     }
 
@@ -1310,8 +1310,8 @@ impl ConjunctionPlan<'_> {
         already_assigned_positions: &HashMap<Variable, ExecutorVariable>,
         variable_registry: &VariableRegistry,
         branch_id: Option<BranchID>,
-    ) -> Result<MatchExecutableBuilder, QueryPlanningError> {
-        let mut match_builder = MatchExecutableBuilder::new(
+    ) -> Result<ConjunctionExecutableBuilder, QueryPlanningError> {
+        let mut match_builder = ConjunctionExecutableBuilder::new(
             branch_id,
             already_assigned_positions,
             selected_variables.clone().into_iter().collect(),
@@ -1395,7 +1395,7 @@ impl ConjunctionPlan<'_> {
 
     fn may_make_variable_producing_step(
         &self,
-        match_builder: &mut MatchExecutableBuilder,
+        match_builder: &mut ConjunctionExecutableBuilder,
         var: VariableVertexId,
         variable_registry: &VariableRegistry,
     ) -> Result<(), QueryPlanningError> {
@@ -1497,7 +1497,7 @@ impl ConjunctionPlan<'_> {
 
     fn may_make_check_step(
         &self,
-        match_builder: &mut MatchExecutableBuilder,
+        match_builder: &mut ConjunctionExecutableBuilder,
         pattern: PatternVertexId,
         variable_registry: &VariableRegistry,
     ) -> Result<(), QueryPlanningError> {
@@ -1627,7 +1627,7 @@ impl ConjunctionPlan<'_> {
 
     fn lower_constraint(
         &self,
-        match_builder: &mut MatchExecutableBuilder,
+        match_builder: &mut ConjunctionExecutableBuilder,
         constraint: &ConstraintVertex<'_>,
         metadata: CostMetaData,
         inputs: Vec<Variable>,
@@ -1822,7 +1822,7 @@ impl ConjunctionPlan<'_> {
         }
     }
 
-    fn lower_constraint_check(&self, match_builder: &mut MatchExecutableBuilder, constraint: &ConstraintVertex<'_>) {
+    fn lower_constraint_check(&self, match_builder: &mut ConjunctionExecutableBuilder, constraint: &ConstraintVertex<'_>) {
         macro_rules! binary {
             ($((with $with:ident))? $lhs:ident $con:ident $rhs:ident, $fw:ident($fwi:ident), $bw:ident($bwi:ident)) => {{
                 let lhs = $con.$lhs();
@@ -1940,7 +1940,7 @@ impl ConjunctionPlan<'_> {
 
     fn may_make_input_check_step(
         &self,
-        match_builder: &mut MatchExecutableBuilder,
+        match_builder: &mut ConjunctionExecutableBuilder,
         input_variables: impl Iterator<Item = Variable>,
         input_variable_annotations: &BTreeMap<Vertex<Variable>, Arc<BTreeSet<answer::Type>>>,
         variable_registry: &VariableRegistry,
@@ -2105,7 +2105,7 @@ impl<'a> Graph<'a> {
         self.elements.insert(VertexId::Pattern(pattern_index), PlannerVertex::Constraint(constraint));
     }
 
-    fn push_is(&mut self, is: IsPlanner<'a>) {
+    fn push_is(&mut self, is: IsVertex<'a>) {
         let pattern_index = self.next_pattern_index();
         self.pattern_to_variable.entry(pattern_index).or_default().extend(is.variables());
         for var in is.variables() {
@@ -2114,7 +2114,7 @@ impl<'a> Graph<'a> {
         self.elements.insert(VertexId::Pattern(pattern_index), PlannerVertex::Is(is));
     }
 
-    fn push_links_deduplication(&mut self, deduplication: LinksDeduplicationPlanner<'a>) {
+    fn push_links_deduplication(&mut self, deduplication: LinksDeduplicationVertex<'a>) {
         let pattern_index = self.next_pattern_index();
         self.pattern_to_variable.entry(pattern_index).or_default().extend(deduplication.variables());
         for var in deduplication.variables() {
@@ -2123,7 +2123,7 @@ impl<'a> Graph<'a> {
         self.elements.insert(VertexId::Pattern(pattern_index), PlannerVertex::LinksDeduplication(deduplication));
     }
 
-    fn push_comparison(&mut self, comparison: ComparisonPlanner<'a>) {
+    fn push_comparison(&mut self, comparison: ComparisonVertex<'a>) {
         let pattern_index = self.next_pattern_index();
         self.pattern_to_variable.entry(pattern_index).or_default().extend(comparison.variables());
         for var in comparison.variables() {
@@ -2132,13 +2132,13 @@ impl<'a> Graph<'a> {
         self.elements.insert(VertexId::Pattern(pattern_index), PlannerVertex::Comparison(comparison));
     }
 
-    fn push_optimised_to_unsatisfiable(&mut self, optimised_unsatisfiable: UnsatisfiablePlanner<'a>) {
+    fn push_optimised_to_unsatisfiable(&mut self, optimised_unsatisfiable: UnsatisfiableVertex<'a>) {
         let pattern_index = self.next_pattern_index();
         self.pattern_to_variable.entry(pattern_index).or_default();
         self.elements.insert(VertexId::Pattern(pattern_index), PlannerVertex::Unsatisfiable(optimised_unsatisfiable));
     }
 
-    fn push_expression(&mut self, output: VariableVertexId, expression: ExpressionPlanner<'a>) {
+    fn push_expression(&mut self, output: VariableVertexId, expression: ExpressionVertex<'a>) {
         let pattern_index = self.next_pattern_index();
         self.pattern_to_variable.entry(pattern_index).or_default().extend(expression.variables());
         for var in expression.variables() {
@@ -2150,7 +2150,7 @@ impl<'a> Graph<'a> {
         output_planner.as_variable_mut().unwrap().set_binding(pattern_index);
     }
 
-    fn push_function_call(&mut self, function_call: FunctionCallPlanner<'a>) {
+    fn push_function_call(&mut self, function_call: FunctionCallVertex<'a>) {
         let pattern_index = self.next_pattern_index();
         self.pattern_to_variable.entry(pattern_index).or_default().extend(function_call.variables());
         for var in function_call.variables() {
@@ -2164,7 +2164,7 @@ impl<'a> Graph<'a> {
         })
     }
 
-    fn push_disjunction(&mut self, disjunction: DisjunctionPlanner<'a>) {
+    fn push_disjunction(&mut self, disjunction: DisjunctionVertex<'a>) {
         let pattern_index = self.next_pattern_index();
         self.pattern_to_variable.entry(pattern_index).or_default().extend(disjunction.variables());
         for var in disjunction.variables() {
@@ -2173,7 +2173,7 @@ impl<'a> Graph<'a> {
         self.elements.insert(VertexId::Pattern(pattern_index), PlannerVertex::Disjunction(disjunction));
     }
 
-    fn push_negation(&mut self, negation: NegationPlanner<'a>) {
+    fn push_negation(&mut self, negation: NegationVertex<'a>) {
         let pattern_index = self.next_pattern_index();
         self.pattern_to_variable.entry(pattern_index).or_default().extend(negation.variables());
         for var in negation.variables() {
