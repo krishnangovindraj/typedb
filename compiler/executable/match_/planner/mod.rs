@@ -71,7 +71,6 @@ pub fn compile(
         conjunction,
         block_context,
         stage_input_positions,
-        &selected_variables,
         type_annotations,
         variable_registry,
         expressions,

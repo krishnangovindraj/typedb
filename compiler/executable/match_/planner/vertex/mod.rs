@@ -160,6 +160,9 @@ impl<'a> fmt::Display for PlannerVertex<'a> {
             PlannerVertex::Disjunction(_) => {
                 write!(f, "|Disjunction|")
             } //TODO
+            PlannerVertex::Optional(_) => {
+                write!(f, "|Optional|")
+            } //TODO
             PlannerVertex::Unsatisfiable(_) => {
                 write!(f, "|Unsatisfiable|")
             }
@@ -241,6 +244,8 @@ impl Costed for PlannerVertex<'_> {
 
             Self::Negation(planner) => planner.cost_and_metadata(vertex_ordering, fix_dir, graph),
             Self::Disjunction(planner) => planner.cost_and_metadata(vertex_ordering, fix_dir, graph),
+            Self::Optional(planner) => planner.cost_and_metadata(vertex_ordering, fix_dir, graph),
+
             Self::Unsatisfiable(planner) => planner.cost_and_metadata(vertex_ordering, fix_dir, graph),
         }
     }
@@ -641,8 +646,8 @@ impl<'a> DisjunctionVertex<'a> {
         variable_index: &HashMap<Variable, VariableVertexId>,
     ) -> Self {
         let shared_variables: HashSet<_> =
-            builder.branches().iter().flat_map(|pb| pb.shared_variables()).map(|v| variable_index[v]).collect();
-        let input_variables = builder.required_inputs().iter().map(|v| variable_index[v]).collect();
+            builder.branches().iter().flat_map(|pb| pb.graph.referenced_input_variables()).map(|v| variable_index[&v]).collect();
+        let input_variables = builder.required_inputs().map(|v| variable_index[&v]).collect();
         Self { input_variables, shared_variables, builder }
     }
 
@@ -672,7 +677,7 @@ impl Costed for DisjunctionVertex<'_> {
             .builder()
             .branches()
             .iter()
-            .map(|branch| branch.clone().with_inputs(input_variables.clone()).plan().map(|plan| plan.cost()))
+            .map(|branch| branch.clone().set_to_input(input_variables.clone()).plan().map(|plan| plan.cost()))
             .collect::<Result<Vec<_>, _>>()
             .map(|costs| costs.into_iter().fold(Cost::EMPTY, |acc_cost, cost| acc_cost.combine_parallel(cost)))?;
         Ok((cost, CostMetaData::None))

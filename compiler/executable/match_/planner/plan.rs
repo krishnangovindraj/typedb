@@ -259,7 +259,7 @@ impl VertexId {
 #[derive(Clone)]
 pub(super) struct ConjunctionPlanBuilder<'a> {
     required_inputs: Vec<Variable>,
-    graph: Graph<'a>,
+    pub(crate) graph: Graph<'a>,
     local_annotations: &'a TypeAnnotations,
     statistics: &'a Statistics,
     planner_statistics: PlannerStatistics,
@@ -1969,7 +1969,29 @@ impl ConjunctionPlan<'_> {
         input_variables: impl IntoIterator<Item = Variable>,
         variable_registry: &VariableRegistry,
     ) {
-        todo!()
+        let mut optional_inputs_in_constraints = input_variables
+            .into_iter()
+            .filter(|&var| {
+                variable_registry
+                    .get_variable_optionality(var)
+                    .is_some_and(|optionality| matches!(optionality, VariableOptionality::Optional))
+            })
+            .filter(|var| {
+                eprintln!("TODO: FIX ME!!!");
+                self.referenced_input_variables().contains(var)
+                // conjunction_builder.constraint_variables.contains(var)
+            })
+            .peekable();
+        if optional_inputs_in_constraints.peek().is_some() {
+            let tmp__collected = optional_inputs_in_constraints.collect::<Vec<_>>();
+            let instruction = CheckInstruction::NotNone {
+                variables: tmp__collected.iter().copied().map(|var| conjunction_builder.position(var)).collect(),
+            };
+            conjunction_builder.push_check(&tmp__collected, instruction);
+            conjunction_builder.finish_one();
+        } else {
+            drop(optional_inputs_in_constraints);
+        }
     }
 }
 
