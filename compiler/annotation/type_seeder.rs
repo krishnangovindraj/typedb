@@ -31,6 +31,7 @@ use ir::{
     pipeline::{block::BlockContext, VariableRegistry},
 };
 use itertools::Itertools;
+use ir::pattern::Pattern;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::annotation::{
@@ -160,7 +161,7 @@ impl<'this, Snapshot: ReadableSnapshot> TypeGraphSeedingContext<'this, Snapshot>
             disjunction.conjunctions().iter().map(|conj| self.build_recursive(context, conj)).collect_vec();
         let shared_variables = disjunction
             .referenced_variables()
-            .filter(|var| context.is_variable_available(parent_conjunction.scope_id(), *var))
+            .filter(|var| context.is_variable_available_in(parent_conjunction.scope_id(), *var))
             .collect();
         NestedTypeInferenceGraphDisjunction {
             disjunction: nested_graphs,
