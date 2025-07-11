@@ -199,7 +199,7 @@ fn infer_types_in_negations_and_optionals(
     let optionals_in_conjunction = conjunction
         .variable_binding_modes()
         .iter()
-        .filter(|(var, mode)| mode.is_optionally_binding())
+        .filter(|(var, mode)| mode.is_optionally_binding() && !vertices.contains_key(&Vertex::Variable(**var)))
         .map(|(v, _)| Vertex::Variable(*v))
         .collect::<HashSet<_>>();
     nested_disjunctions.iter_mut().try_for_each(|disjunction| {
@@ -216,7 +216,6 @@ fn infer_types_in_negations_and_optionals(
             )
         })?;
         let optionals_in_this_disjunction = optionals_in_conjunction.iter()
-            .filter(|var| !vertices.contains_key(var))
             .filter(|var| disjunction.disjunction.iter().all(|branch| branch.vertices.contains_key(&var)))
             .cloned()
             .collect::<Vec<_>>();
