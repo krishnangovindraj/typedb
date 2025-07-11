@@ -170,7 +170,7 @@ fn infer_types_impl(
         is_write_stage,
     )?;
 
-    infer_types_in_negations_and_conjunctions(
+    infer_types_in_negations_and_optionals(
         snapshot,
         block_context,
         variable_registry,
@@ -185,7 +185,7 @@ fn infer_types_impl(
     Ok(())
 }
 
-fn infer_types_in_negations_and_conjunctions(
+fn infer_types_in_negations_and_optionals(
     snapshot: &impl ReadableSnapshot,
     block_context: &BlockContext,
     variable_registry: &VariableRegistry,
@@ -199,14 +199,12 @@ fn infer_types_in_negations_and_conjunctions(
     let optionals_in_conjunction = conjunction
         .variable_binding_modes()
         .iter()
-        .filter(|(var, mode)| {
-            mode.is_optionally_binding() && block_context.get_declaring_scope(var) != Some(ScopeId::INPUT)
-        })
+        .filter(|(var, mode)| mode.is_optionally_binding())
         .map(|(v, _)| Vertex::Variable(*v))
         .collect::<HashSet<_>>();
-    nested_disjunctions.iter_mut().flat_map(|disjunction| disjunction.disjunction.iter_mut()).try_for_each(
-        |nested| {
-            infer_types_in_negations_and_conjunctions(
+    nested_disjunctions.iter_mut().try_for_each(|disjunction| {
+        disjunction.disjunction.iter_mut().try_for_each(|nested| {
+            infer_types_in_negations_and_optionals(
                 snapshot,
                 block_context,
                 variable_registry,
@@ -216,8 +214,19 @@ fn infer_types_in_negations_and_conjunctions(
                 is_write_stage,
                 type_annotations_by_scope,
             )
-        },
-    )?;
+        })?;
+        let optionals_in_this_disjunction = optionals_in_conjunction.iter()
+            .filter(|var| !vertices.contains_key(var))
+            .filter(|var| disjunction.disjunction.iter().all(|branch| branch.vertices.contains_key(&var)))
+            .cloned()
+            .collect::<Vec<_>>();
+
+        optionals_in_this_disjunction.iter().for_each(|v| {
+            let combined_annotations = disjunction.disjunction.iter().flat_map(|branch| branch.vertices.annotations[v].iter());
+            disjunction.shared_vertex_annotations.annotations.insert(v.clone(), combined_annotations.copied().collect());
+        });
+        Ok(())
+    })?;
     for nested in conjunction.nested_patterns() {
         match nested {
             NestedPattern::Disjunction(_) => {} // Done above
@@ -252,7 +261,6 @@ fn infer_types_in_negations_and_conjunctions(
                     .iter()
                     .filter_map(|var| optional_root_annotations.get(var).map(|annotations| (var, annotations)))
                     .for_each(|(var, annotations)| {
-                        debug_assert!(!vertices.annotations.contains_key(var));
                         vertices.annotations.insert(var.clone(), (**annotations).clone());
                     });
             }
@@ -268,10 +276,7 @@ fn all_vertex_annotations_available(
     by_scope: &HashMap<ScopeId, TypeAnnotations>,
 ) -> bool {
     let conjunction_annotations = by_scope.get(&conjunction.scope_id()).unwrap();
-    (conjunction
-        .variable_binding_modes()
-        .iter()
-        .filter_map(|(v, mode)| (!mode.is_locally_binding_in_child()).then_some(*v))
+    (conjunction.constraints().iter().flat_map(|constraint| constraint.ids())
         .filter(|var| {
             let category = variable_registry.get_variable_category(*var).unwrap();
             category.is_category_type() || category.is_category_thing()
