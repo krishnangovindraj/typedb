@@ -222,8 +222,12 @@ fn infer_types_in_negations_and_optionals(
             .collect::<Vec<_>>();
 
         optionals_in_this_disjunction.iter().for_each(|v| {
-            let combined_annotations = disjunction.disjunction.iter().flat_map(|branch| branch.vertices.annotations[v].iter());
-            disjunction.shared_vertex_annotations.annotations.insert(v.clone(), combined_annotations.copied().collect());
+            let combined_annotations = disjunction.disjunction.iter().flat_map(|branch| {
+                branch.vertices.annotations[v].iter()
+            }).copied()
+            .collect::<BTreeSet<_>>();
+            disjunction.shared_vertex_annotations.annotations.insert(v.clone(), combined_annotations.clone());
+            vertices.insert(v.clone(), combined_annotations);
         });
         Ok(())
     })?;
