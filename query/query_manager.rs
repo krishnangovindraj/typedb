@@ -496,7 +496,6 @@ impl QueryManager {
         let query_structure_annotations = QueryStructureAnnotations::build(
             snapshot.as_ref(),
             type_manager,
-            &variable_registry,
             arced_parameters,
             source_query,
             &annotated_pipeline,
@@ -522,8 +521,6 @@ pub type FetchStructureAnnotations = HashMap<String, FetchObjectStructureAnnotat
 pub enum FetchObjectStructureAnnotations {
     Leaf(BTreeSet<ValueType>),
     Object(FetchStructureAnnotations),
-    SubFetch { pipeline: Option<PipelineStructureAnnotations>, fetch: FetchStructureAnnotations },
-    Function { pipeline: Option<PipelineStructureAnnotations>, returned: BTreeSet<ValueType> },
 }
 
 #[derive(Debug)]
@@ -543,7 +540,6 @@ impl QueryStructureAnnotations {
     pub fn build<Snapshot: ReadableSnapshot>(
         snapshot: &Snapshot,
         type_manager: &TypeManager,
-        variable_registry: &VariableRegistry,
         parameters: Arc<ParameterRegistry>,
         source_query: &str,
         annotated_pipeline: &AnnotatedPipeline,
@@ -554,9 +550,6 @@ impl QueryStructureAnnotations {
             None => (None, None),
             Some(pipeline_structure) => {
                 let pipeline = build_pipeline_annotations(
-                    variable_registry,
-                    parameters.clone(),
-                    source_query,
                     annotated_stages.as_slice(),
                     pipeline_structure,
                 );
@@ -578,17 +571,13 @@ impl QueryStructureAnnotations {
             }
         };
 
-        let preamble = annotated_pipeline
-            .annotated_preamble
+        let preamble = annotated_preamble
             .iter()
             .zip(query_structure.preamble.iter())
             .map(|(annotated_function, structure)| {
                 let signature = annotated_function.annotated_signature.clone();
                 let pipeline = structure.pipeline.as_ref().map(|pipeline_structure| {
                     build_pipeline_annotations(
-                        &annotated_function.variable_registry,
-                        Arc::new(annotated_function.parameter_registry.clone()),
-                        source_query,
                         annotated_function.stages.as_slice(),
                         pipeline_structure,
                     )
@@ -602,9 +591,6 @@ impl QueryStructureAnnotations {
 }
 
 fn build_pipeline_annotations(
-    variable_registry: &VariableRegistry,
-    parameters: Arc<ParameterRegistry>,
-    source_query: &str,
     stages: &[AnnotatedStage],
     structure: &PipelineStructure,
 ) -> PipelineStructureAnnotations {
@@ -755,11 +741,9 @@ fn build_fetch_entries_annotations<Snapshot: ReadableSnapshot>(
                 FetchObjectStructureAnnotations::Object(build_fetch_annotations(snapshot, type_manager, parameters.clone(), source_query, last_stage_annotations, inner)?)
             }
             AnnotatedFetchSome::ListSubFetch(sub_fetch) => {
-                let pipeline = todo!();
-                //QueryStructureAnnotations::build_pipeline(&sub_fetch.variable_registry, parameters.clone(), source_query, &sub_fetch.stages, todo!());
                 let last_stage_annotations = get_last_stage_annotations(sub_fetch.stages.as_slice());
                 let fetch = build_fetch_annotations(snapshot, type_manager, parameters.clone(), source_query, last_stage_annotations, &sub_fetch.fetch.object)?;
-                FetchObjectStructureAnnotations::SubFetch { pipeline , fetch }
+                FetchObjectStructureAnnotations::Object(fetch)
             }
             AnnotatedFetchSome::ListFunction(function)
             | AnnotatedFetchSome::SingleFunction(function) => {

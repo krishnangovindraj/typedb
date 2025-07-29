@@ -296,16 +296,14 @@ fn encode_fetch_strucure_annotations(
         .map(|(key, object)| {
             // TODO: We don't encode the pipeline anywhere
             let encoded = match object {
-                FetchObjectStructureAnnotations::Function { pipeline: _, returned: leaf }
-                | FetchObjectStructureAnnotations::Leaf(leaf) => {
+                FetchObjectStructureAnnotations::Leaf(leaf) => {
                     let value_types = leaf
                         .into_iter()
                         .map(|v| encode_value_type(v, snapshot, type_manager))
                         .collect::<Result<Vec<_>, _>>()?;
                     FetchStructureAnnotationsResponse::Leaf(value_types)
                 }
-                FetchObjectStructureAnnotations::SubFetch { pipeline: _, fetch: object }
-                | FetchObjectStructureAnnotations::Object(object) => FetchStructureAnnotationsResponse::Object(
+                FetchObjectStructureAnnotations::Object(object) => FetchStructureAnnotationsResponse::Object(
                     encode_fetch_strucure_annotations(snapshot, type_manager, object)?,
                 ),
             };

@@ -42,10 +42,6 @@ pub struct QueryStructure {
     pub pipeline: Option<PipelineStructure>,
     // fetch: Option<FetchStructure>, // TODO?
 }
-#[derive(Debug, Clone)]
-pub enum FunctionReturnStructure {
-    Stream,
-}
 
 #[derive(Debug, Clone)]
 pub struct FunctionStructure {
