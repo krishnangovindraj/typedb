@@ -587,22 +587,24 @@ fn encode_role_type_as_vertex(
 
 pub mod bdd {
     use itertools::Itertools;
-
+    struct FunctorContext {}
     pub trait FunctorEncoded {
-        fn encode_as_functor(&self) -> String;
+        fn encode_as_functor(&self, context: &FunctorContext) -> String;
     }
 
     pub mod functor_macros {
         macro_rules! encode_args {
-            ({ $( $arg:ident, )* } )   => {
+            ($context:ident, { $( $arg:ident, )* } )   => {
                 {
                     let arr: Vec<&dyn FunctorEncoded> = vec![ $($arg,)* ];
-                    arr.into_iter().map(|s| s.encode_as_functor()).join(", ")
+                    arr.into_iter().map(|s| s.encode_as_functor($context)).join(", ")
                 }
             }
         }
         macro_rules! encode_functor_impl {
-            ($func:ident $args:tt) => { std::format!("{}({})", std::stringify!($func), functor_macros::encode_args!($args)) }
+            ($context:ident, $func:ident $args:tt) => {
+                std::format!("{}({})", std::stringify!($func), functor_macros::encode_args!($context, $args))
+            }
         }
 
         macro_rules! add_ignored_fields {
@@ -612,24 +614,26 @@ pub mod bdd {
         }
 
         macro_rules! encode_functor {
-            ($what:ident as struct $struct_name:ident $fields:tt) => {
-                functor_macros::encode_functor!($what => [ $struct_name => $struct_name $fields, ])
+            ($context:ident, $what:ident as struct $struct_name:ident $fields:tt) => {
+                functor_macros::encode_functor!($context, $what => [ $struct_name => $struct_name $fields, ])
             };
-            ($what:ident as enum $enum_name:ident [ $($variant:ident $fields:tt |)* ]) => {
-                functor_macros::encode_functor!($what => [ $( $enum_name::$variant => $variant $fields ,)* ])
+            ($context:ident, $what:ident as enum $enum_name:ident [ $($variant:ident $fields:tt |)* ]) => {
+                functor_macros::encode_functor!($context, $what => [ $( $enum_name::$variant => $variant $fields ,)* ])
             };
-            ($what:ident => [ $($qualified:path => $func:ident $fields:tt, )* ]) => {
+            ($context:ident, $what:ident => [ $($qualified:path => $func:ident $fields:tt, )* ]) => {
                 match $what {
-                    $( functor_macros::add_ignored_fields!($qualified $fields) => { functor_macros::encode_functor_impl!($func $fields) })*
+                    $( functor_macros::add_ignored_fields!($qualified $fields) => {
+                        functor_macros::encode_functor_impl!($context, $func $fields)
+                    })*
                 }
             };
         }
 
 
         macro_rules! impl_functor_for_impl {
-            ($which:ident => |$self:ident| $block:block) => {
+            ($which:ident => |$self:ident, $context:ident| $block:block) => {
                 impl FunctorEncoded for $which {
-                    fn encode_as_functor($self:&Self) -> String {
+                    fn encode_as_functor($self:&Self, $context: &FunctorContext) -> String {
                         $block
                     }
                 }
@@ -638,17 +642,17 @@ pub mod bdd {
 
         macro_rules! impl_functor_for {
             (struct $struct_name:ident $fields:tt) => {
-                functor_macros::impl_functor_for_impl!($struct_name => |self| {
-                    functor_macros::encode_functor!(self as struct $struct_name $fields)
+                functor_macros::impl_functor_for_impl!($struct_name => |self, context| {
+                    functor_macros::encode_functor!(context, self as struct $struct_name $fields)
                 });
             };
             (enum $enum_name:ident [ $($func:ident $fields:tt |)* ]) => {
-                functor_macros::impl_functor_for_impl!($enum_name => |self| {
-                    functor_macros::encode_functor!(self as enum $enum_name [ $($func $fields |)* ])
+                functor_macros::impl_functor_for_impl!($enum_name => |self, context| {
+                    functor_macros::encode_functor!(context, self as enum $enum_name [ $($func $fields |)* ])
                 });
             };
             (primitive $primitive:ident) => {
-                functor_macros::impl_functor_for_impl!($primitive => |self| { self.to_string() });
+                functor_macros::impl_functor_for_impl!($primitive => |self, _context| { self.to_string() });
             };
         }
         pub(crate) use {
@@ -663,11 +667,11 @@ pub mod bdd {
     #[cfg(test)]
     pub mod test {
         use itertools::Itertools;
-        use super::functor_macros;
+        use super::{functor_macros, FunctorContext};
         use crate::service::http::message::query::query_structure::bdd::FunctorEncoded;
 
         fn print_encoded(x: impl FunctorEncoded) {
-            println!("{}", x.encode_as_functor());
+            println!("{}", x.encode_as_functor(&FunctorContext{}));
         }
 
         #[test]
