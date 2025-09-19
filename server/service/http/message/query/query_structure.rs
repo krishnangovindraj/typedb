@@ -122,10 +122,17 @@ pub struct StructureVariableInfo {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "tag")]
-enum StructureConstraint {
-    Isa(StructureConstraintIsaBase),
+pub(super) enum StructureConstraint {
+    Isa {
+        instance: StructureVertex,
+        r#type: StructureVertex,
+    },
+
     #[serde(rename = "isa!")]
-    IsaExact(StructureConstraintIsaBase),
+    IsaExact {
+        instance: StructureVertex,
+        r#type: StructureVertex,
+    },
     Has {
         owner: StructureVertex,
         attribute: StructureVertex,
@@ -136,9 +143,15 @@ enum StructureConstraint {
         role: StructureVertex,
     },
 
-    Sub(StructureConstraintSubBase),
+    Sub {
+        subtype: StructureVertex,
+        supertype: StructureVertex,
+    },
     #[serde(rename = "sub!")]
-    SubExact(StructureConstraintSubBase),
+    SubExact {
+        subtype: StructureVertex,
+        supertype: StructureVertex,
+    },
     Owns {
         owner: StructureVertex,
         attribute: StructureVertex,
@@ -200,20 +213,6 @@ enum StructureConstraint {
     Try {
         conjunction: QueryStructureConjunctionID,
     },
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct StructureConstraintIsaBase {
-    instance: StructureVertex,
-    r#type: StructureVertex,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct StructureConstraintSubBase {
-    subtype: StructureVertex,
-    supertype: StructureVertex,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -367,28 +366,24 @@ fn encode_structure_constraint(
         }
 
         Constraint::Isa(isa) => {
-            let constraint = StructureConstraintIsaBase {
-                instance: encode_structure_vertex(context, isa.thing())?,
-                r#type: encode_structure_vertex(context, isa.type_())?,
-            };
+            let instance = encode_structure_vertex(context, isa.thing())?;
+            let r#type = encode_structure_vertex(context, isa.type_())?;
             constraints.push(StructureConstraintWithSpan {
                 text_span: span,
                 constraint: match isa.isa_kind() {
-                    IsaKind::Exact => StructureConstraint::IsaExact(constraint),
-                    IsaKind::Subtype => StructureConstraint::Isa(constraint),
+                    IsaKind::Exact => StructureConstraint::IsaExact { instance, r#type },
+                    IsaKind::Subtype => StructureConstraint::Isa { instance, r#type },
                 },
             })
         }
         Constraint::Sub(sub) => {
-            let constraint = StructureConstraintSubBase {
-                subtype: encode_structure_vertex(context, sub.subtype())?,
-                supertype: encode_structure_vertex(context, sub.supertype())?,
-            };
+            let subtype = encode_structure_vertex(context, sub.subtype())?;
+            let supertype = encode_structure_vertex(context, sub.supertype())?;
             constraints.push(StructureConstraintWithSpan {
                 text_span: span,
                 constraint: match sub.sub_kind() {
-                    SubKind::Exact => StructureConstraint::SubExact(constraint),
-                    SubKind::Subtype => StructureConstraint::Sub(constraint),
+                    SubKind::Exact => StructureConstraint::SubExact { subtype, supertype },
+                    SubKind::Subtype => StructureConstraint::Sub { subtype, supertype },
                 },
             })
         }
@@ -587,7 +582,11 @@ fn encode_role_type_as_vertex(
 
 pub mod bdd {
     use itertools::Itertools;
-    struct FunctorContext {}
+    use compiler::query_structure::{QueryStructureConjunctionID};
+    use crate::service::http::message::query::query_structure::{PipelineStructureResponse, StructureConstraint, StructureConstraintWithSpan, StructureVertex};
+
+    type FunctorContext = PipelineStructureResponse;
+
     pub trait FunctorEncoded {
         fn encode_as_functor(&self, context: &FunctorContext) -> String;
     }
@@ -662,16 +661,63 @@ pub mod bdd {
 
     functor_macros::impl_functor_for!(primitive String);
     functor_macros::impl_functor_for!(primitive u64);
+    impl<T: FunctorEncoded> FunctorEncoded for Vec<T> {
+        fn encode_as_functor(&self, context: &FunctorContext) -> String {
+            std::format!("[{}]", self.iter().map(|v| v.encode_as_functor(context)).join(", "))
+        }
+    }
 
+    functor_macros::impl_functor_for!(enum StructureConstraint [
+        Isa { instance, r#type, } |
+        IsaExact { instance, r#type, } |
+        Has { owner, attribute, } |
+        Links { relation, player, role, } |
+        Sub { subtype, supertype, } |
+        SubExact { subtype, supertype, } |
+        Owns { owner, attribute, } |
+        Relates { relation, role, } |
+        Plays { player, role, } |
+        FunctionCall { name, assigned, arguments, } |
+        Expression { text, assigned, arguments, } |
+        Is { lhs, rhs, } |
+        Iid { concept, iid, } |
+        Comparison { lhs, rhs, comparator, } |
+        Kind { kind, r#type, } |
+        Label { r#type, label, } |
+        Value { attribute_type, value_type, } |
+        Or { branches, } |
+        Not { conjunction, } |
+        Try { conjunction, } |
+    ]);
+
+    impl FunctorEncoded for StructureVertex {
+        fn encode_as_functor(&self, context: &FunctorContext) -> String {
+            match self {
+                StructureVertex::Variable { id } => { context.variables[id].name.as_ref().unwrap().clone() }
+                StructureVertex::Label { r#type } => { r#type.as_object().unwrap()["label"].to_string() }
+                StructureVertex::Value(v) => { v.value.to_string() }
+            }
+        }
+    }
+
+    functor_macros::impl_functor_for_impl!(QueryStructureConjunctionID => |self, context| {
+        context.conjunctions[self.0 as usize].encode_as_functor(context)
+    });
+
+    functor_macros::impl_functor_for_impl!(StructureConstraintWithSpan => |self, context| {
+        self.constraint.encode_as_functor(context)
+    });
 
     #[cfg(test)]
     pub mod test {
+        use std::collections::HashMap;
         use itertools::Itertools;
         use super::{functor_macros, FunctorContext};
         use crate::service::http::message::query::query_structure::bdd::FunctorEncoded;
 
         fn print_encoded(x: impl FunctorEncoded) {
-            println!("{}", x.encode_as_functor(&FunctorContext{}));
+            let dummy = FunctorContext{ conjunctions: vec![], pipeline: vec![], variables: HashMap::new(), outputs: vec![] };
+            println!("{}", x.encode_as_functor(&dummy));
         }
 
         #[test]

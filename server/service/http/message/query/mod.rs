@@ -147,7 +147,7 @@ impl IntoResponse for QueryAnswer {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct AnalysedQueryResponse {
+pub struct AnalysedQueryResponse {
     structure: QueryStructureResponse,
     annotations: QueryStructureAnnotationsResponse,
 }
