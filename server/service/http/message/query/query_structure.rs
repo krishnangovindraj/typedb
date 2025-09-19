@@ -584,3 +584,109 @@ fn encode_role_type_as_vertex(
         encode_structure_vertex(context, role_type)
     }
 }
+
+pub mod bdd {
+    use itertools::Itertools;
+    pub trait FunctorEncoded {
+        fn encode_as_functor(&self) -> String;
+    }
+
+    macro_rules! encode_args {
+        ({ $( $arg:ident, )* } )   => {
+            {
+                let arr: Vec<&dyn FunctorEncoded> = vec![ $($arg,)* ];
+                arr.into_iter().map(|s| s.encode_as_functor()).join(", ")
+            }
+        }
+    }
+    macro_rules! encode_functor_impl {
+        ($func:ident $args:tt) => { std::format!("{}({})", std::stringify!($func), encode_args!($args)) }
+    }
+
+    macro_rules! add_ignored_fields {
+        ($qualified:path { $( $arg:ident, )* }) => {
+            $qualified { $( $arg, )* .. }
+        };
+    }
+
+    macro_rules! encode_functor {
+        ($what:ident as struct $struct_name:ident $fields:tt) => {
+            encode_functor!($what => [ $struct_name => $struct_name $fields, ])
+        };
+        ($what:ident as enum $enum_name:ident [ $($variant:ident $fields:tt |)* ]) => {
+            encode_functor!($what => [ $( $enum_name::$variant => $variant $fields ,)* ])
+        };
+        ($what:ident => [ $($qualified:path => $func:ident $fields:tt, )* ]) => {
+            match $what {
+                $( add_ignored_fields!($qualified $fields) => { encode_functor_impl!($func $fields) })*
+            }
+        };
+    }
+
+
+    macro_rules! impl_functor_for_impl {
+        ($which:ident => |$self:ident| $block:block) => {
+            impl FunctorEncoded for $which {
+                fn encode_as_functor($self:&Self) -> String {
+                    $block
+                }
+            }
+        };
+    }
+
+    macro_rules! impl_functor_for {
+        (struct $struct_name:ident $fields:tt) => {
+            impl_functor_for_impl!($struct_name => |self| {
+                encode_functor!(self as struct $struct_name $fields)
+            });
+        };
+        (enum $enum_name:ident [ $($func:ident $fields:tt |)* ]) => {
+            impl_functor_for_impl!($enum_name => |self| {
+                encode_functor!(self as enum $enum_name [ $($func $fields |)* ])
+            });
+        };
+        (primitive $primitive:ident) => {
+            impl_functor_for_impl!($primitive => |self| { self.to_string() });
+        };
+    }
+
+    // Impl helpers
+    impl_functor_for!(primitive String);
+    impl_functor_for!(primitive u64);
+
+    #[cfg(test)]
+    pub mod test {
+        use itertools::Itertools;
+
+        use crate::service::http::message::query::query_structure::bdd::FunctorEncoded;
+
+        fn print_encoded(x: impl FunctorEncoded) {
+            println!("{}", x.encode_as_functor());
+        }
+
+        #[test]
+        fn testme() {
+            print_encoded(TestMeStruct { field: "foo".to_owned() });
+            print_encoded(TestMeEnum::First { f1: "abc".to_owned() });
+            print_encoded(TestMeEnum::Second { f2: 123 });
+            print_encoded(TestMeEnum::Third { f3: TestMeStruct { field: "bar".to_owned() }, ignoreme: 0.456 });
+        }
+
+        struct TestMeStruct {
+            field: String,
+        }
+
+        enum TestMeEnum {
+            First { f1: String },
+            Second { f2: u64 },
+            Third { f3: TestMeStruct, ignoreme: f64 },
+        }
+
+        impl_functor_for!(struct TestMeStruct { field, } );
+        impl_functor_for!(
+            enum TestMeEnum [
+                First { f1, } |  Second { f2, } | Third {} |
+            ]
+        );
+    }
+}
