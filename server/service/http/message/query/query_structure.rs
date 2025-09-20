@@ -582,8 +582,8 @@ fn encode_role_type_as_vertex(
 
 pub mod bdd {
     use itertools::Itertools;
-    use compiler::query_structure::{QueryStructure, QueryStructureConjunctionID, QueryStructureStage, StructureVariableId};
-    use crate::service::http::message::query::query_structure::{PipelineStructureResponse, QueryStructureResponse, StructureConstraint, StructureConstraintWithSpan, StructureVertex};
+    use compiler::query_structure::{FunctionReturnStructure, QueryStructure, QueryStructureConjunctionID, QueryStructureStage, StructureVariableId};
+    use crate::service::http::message::query::query_structure::{FunctionStructureResponse, PipelineStructureResponse, QueryStructureResponse, StructureConstraint, StructureConstraintWithSpan, StructureVertex};
     use crate::service::http::message::query::query_structure::bdd::functor_macros::{encode_functor, encode_functor_impl};
 
     type FunctorContext = PipelineStructureResponse;
@@ -668,6 +668,12 @@ pub mod bdd {
         }
     }
 
+    impl<T: FunctorEncoded> FunctorEncoded for Option<T> {
+        fn encode_as_functor(&self, context: &FunctorContext) -> String {
+            self.as_ref().map(|inner| inner.encode_as_functor(context)).unwrap_or("<NONE>".to_owned())
+        }
+    }
+
     functor_macros::impl_functor_for!(enum QueryStructureStage [
         Match { block, } |
         Insert { block, } |
@@ -725,16 +731,29 @@ pub mod bdd {
         QueryStructureConjunctionID => { context.conjunctions[self.0 as usize].encode_as_functor(context) }
         StructureConstraintWithSpan => { self.constraint.encode_as_functor(context) }
         PipelineStructureResponse => { let pipeline = &self.pipeline; encode_functor_impl!(self, Pipeline { pipeline, }) }
+        FunctionStructureResponse => {
+            let FunctionStructureResponse { arguments, returns, body } = self;
+            let context = body.as_ref().unwrap();
+            encode_functor_impl!(context, Function { arguments, returns, body, })
+        }
     ]);
 
-    pub fn encode_query_structure_as_functor(structure: &QueryStructureResponse) -> String {
+    functor_macros::impl_functor_for!(enum FunctionReturnStructure [
+        Stream { variables, } |
+        Single { selector, variables, }  |
+        Check { }  |
+        Reduce {} |
+    ]);
+
+
+    pub fn encode_query_structure_as_functor(structure: &QueryStructureResponse) -> (String, Vec<String>) {
         let pipeline = structure.query.as_ref().unwrap();
         let query = pipeline.encode_as_functor(pipeline);
         let preamble = structure.preamble.iter().map(|func| {
             let pipeline = func.body.as_ref().unwrap();
-            pipeline.encode_as_functor(pipeline)
-        }).join(", ");
-        std::format!("QueryStructure(Query({}), Preamble([{}]))", query, preamble)
+            func.encode_as_functor(pipeline)
+        }).collect();
+        (query, preamble)
     }
 
     #[cfg(test)]
