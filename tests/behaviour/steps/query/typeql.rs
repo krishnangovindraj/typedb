@@ -32,6 +32,7 @@ use query::analyse::AnalysedQuery;
 use query::error::QueryError;
 use resource::profile::StorageCounters;
 use server::service::http::message::query::annotations::encode_query_structure_annotations;
+use server::service::http::message::query::query_structure::bdd::encode_query_structure_as_functor;
 use storage::snapshot::SnapshotDropGuard;
 use test_utils::assert_matches;
 
@@ -641,13 +642,17 @@ async fn get_answers_of_typeql_analyze_query(context: &mut Context, step: &Step)
 #[apply(generic_step)]
 #[step(expr = r"analyzed query structure is:")]
 async fn analyzed_query_structure_is(context: &mut Context, step: &Step) {
-    let expected_json = serde_json::Value::from_str(step.docstring().unwrap()).unwrap();
+    use server::service::http::message::query::query_structure::bdd::FunctorEncoded;
+    let expected_functor = step.docstring().unwrap();
     let analyzed = context.analyzed_query.as_ref().unwrap();
-    use server::service::http::message::query::query_structure::comparison_for_tests::compare_analyzed_query_structure;
-    assert!(
-        compare_analyzed_query_structure(&analyzed, &expected_json)
-        // "\nActual json: {:?}\nExpected json: {:?}", analyzed_as_json, expected_sub_json,
-    );
+    let actual_functor = encode_query_structure_as_functor(&analyzed.structure);
+    assert_eq_without_ws(expected_functor.clone(), actual_functor);
+}
+
+fn assert_eq_without_ws(mut expected_functor: String, mut actual_functor: String) {
+    expected_functor.retain(|c| !c.is_whitespace());
+    actual_functor.retain(|c| !c.is_whitespace());
+    assert_eq!(expected_functor.to_lowercase(), actual_functor.to_lowercase())
 }
 
 #[apply(generic_step)]

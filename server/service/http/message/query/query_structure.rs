@@ -77,7 +77,7 @@ pub(crate) struct FunctionStructureResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct QueryStructureResponse {
+pub struct QueryStructureResponse {
     query: Option<PipelineStructureResponse>,
     preamble: Vec<FunctionStructureResponse>,
 }
@@ -582,8 +582,9 @@ fn encode_role_type_as_vertex(
 
 pub mod bdd {
     use itertools::Itertools;
-    use compiler::query_structure::{QueryStructureConjunctionID};
-    use crate::service::http::message::query::query_structure::{PipelineStructureResponse, StructureConstraint, StructureConstraintWithSpan, StructureVertex};
+    use compiler::query_structure::{QueryStructure, QueryStructureConjunctionID, QueryStructureStage, StructureVariableId};
+    use crate::service::http::message::query::query_structure::{PipelineStructureResponse, QueryStructureResponse, StructureConstraint, StructureConstraintWithSpan, StructureVertex};
+    use crate::service::http::message::query::query_structure::bdd::functor_macros::{encode_functor, encode_functor_impl};
 
     type FunctorContext = PipelineStructureResponse;
 
@@ -667,6 +668,21 @@ pub mod bdd {
         }
     }
 
+    functor_macros::impl_functor_for!(enum QueryStructureStage [
+        Match { block, } |
+        Insert { block, } |
+        Delete { deleted_variables, block, } |
+        Put { block, } |
+        Update { block, } |
+        Select { variables, } |
+        Sort { } | // TODO
+        Offset { offset, } |
+        Limit { limit, } |
+        Require { variables, } |
+        Distinct { } |
+        Reduce { } | // TODO
+    ]);
+
     functor_macros::impl_functor_for!(enum StructureConstraint [
         Isa { instance, r#type, } |
         IsaExact { instance, r#type, } |
@@ -690,23 +706,36 @@ pub mod bdd {
         Try { conjunction, } |
     ]);
 
-    impl FunctorEncoded for StructureVertex {
-        fn encode_as_functor(&self, context: &FunctorContext) -> String {
-            match self {
-                StructureVertex::Variable { id } => { context.variables[id].name.as_ref().unwrap().clone() }
-                StructureVertex::Label { r#type } => { r#type.as_object().unwrap()["label"].to_string() }
-                StructureVertex::Value(v) => { v.value.to_string() }
-            }
-        }
+    macro_rules! impl_functor_for_multi {
+        (|$self:ident, $context:ident| [ $( $type_name:ident => $block:block )* ]) => {
+            $ (functor_macros::impl_functor_for_impl!($type_name => |$self, $context| $block); )*
+        };
     }
 
-    functor_macros::impl_functor_for_impl!(QueryStructureConjunctionID => |self, context| {
-        context.conjunctions[self.0 as usize].encode_as_functor(context)
+    functor_macros::impl_functor_for_impl!(StructureVertex => |self, context| {
+        match self {
+            StructureVertex::Variable { id } => { id.encode_as_functor(context) }
+            StructureVertex::Label { r#type } => { r#type.as_object().unwrap()["label"].as_str().unwrap().to_owned() }
+            StructureVertex::Value(v) => { v.value.to_string() }
+        }
     });
 
-    functor_macros::impl_functor_for_impl!(StructureConstraintWithSpan => |self, context| {
-        self.constraint.encode_as_functor(context)
-    });
+    impl_functor_for_multi!(|self, context| [
+        StructureVariableId =>  { format!("${}", context.variables[self].name.as_ref().map(|s| s.as_str()).unwrap_or("_")) }
+        QueryStructureConjunctionID => { context.conjunctions[self.0 as usize].encode_as_functor(context) }
+        StructureConstraintWithSpan => { self.constraint.encode_as_functor(context) }
+        PipelineStructureResponse => { let pipeline = &self.pipeline; encode_functor_impl!(self, Pipeline { pipeline, }) }
+    ]);
+
+    pub fn encode_query_structure_as_functor(structure: &QueryStructureResponse) -> String {
+        let pipeline = structure.query.as_ref().unwrap();
+        let query = pipeline.encode_as_functor(pipeline);
+        let preamble = structure.preamble.iter().map(|func| {
+            let pipeline = func.body.as_ref().unwrap();
+            pipeline.encode_as_functor(pipeline)
+        }).join(", ");
+        std::format!("QueryStructure(Query({}), Preamble([{}]))", query, preamble)
+    }
 
     #[cfg(test)]
     pub mod test {
@@ -739,10 +768,8 @@ pub mod bdd {
         }
 
         functor_macros::impl_functor_for!(struct TestMeStruct { field, } );
-        functor_macros::impl_functor_for!(
-            enum TestMeEnum [
-                First { f1, } |  Second { f2, } | Third { f3, } |
-            ]
-        );
+        functor_macros::impl_functor_for!(enum TestMeEnum [
+            First { f1, } |  Second { f2, } | Third { f3, } |
+        ]);
     }
 }

@@ -148,8 +148,8 @@ impl IntoResponse for QueryAnswer {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AnalysedQueryResponse {
-    structure: QueryStructureResponse,
-    annotations: QueryStructureAnnotationsResponse,
+    pub structure: QueryStructureResponse,
+    pub annotations: QueryStructureAnnotationsResponse,
 }
 
 impl IntoResponse for AnalysedQueryResponse {
