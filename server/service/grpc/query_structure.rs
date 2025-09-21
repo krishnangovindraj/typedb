@@ -314,6 +314,7 @@ fn query_structure_constraint(
         | Constraint::Comparison(_) => {}
         Constraint::RoleName(_) => {} // Handled separately via resolved_role_names
 
+
         // Constraints that probably don't need to be handled
         | Constraint::Kind(_)
         | Constraint::Label(_)
@@ -323,6 +324,7 @@ fn query_structure_constraint(
         // Optimisations don't represent the structure
         Constraint::LinksDeduplication(_) | Constraint::Unsatisfiable(_) => {}
     };
+    todo_but_compile_time!("This whole file may need an update. I def need to update kind");
     Ok(())
 }
 

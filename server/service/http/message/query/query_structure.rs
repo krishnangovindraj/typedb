@@ -493,7 +493,7 @@ fn encode_structure_constraint(
             text_span: span,
             constraint: StructureConstraint::Comparison {
                 lhs: encode_structure_vertex(context, comparison.lhs())?,
-                rhs: encode_structure_vertex(context, comparison.lhs())?,
+                rhs: encode_structure_vertex(context, comparison.rhs())?,
                 comparator: comparison.comparator().name().to_owned(),
             },
         }),
@@ -582,6 +582,7 @@ fn encode_role_type_as_vertex(
 
 pub mod bdd {
     use itertools::Itertools;
+    use serde_json::Value;
     use compiler::query_structure::{FunctionReturnStructure, QueryStructure, QueryStructureConjunctionID, QueryStructureStage, StructureVariableId};
     use crate::service::http::message::query::query_structure::{FunctionStructureResponse, PipelineStructureResponse, QueryStructureResponse, StructureConstraint, StructureConstraintWithSpan, StructureVertex};
     use crate::service::http::message::query::query_structure::bdd::functor_macros::{encode_functor, encode_functor_impl};
@@ -722,7 +723,12 @@ pub mod bdd {
         match self {
             StructureVertex::Variable { id } => { id.encode_as_functor(context) }
             StructureVertex::Label { r#type } => { r#type.as_object().unwrap()["label"].as_str().unwrap().to_owned() }
-            StructureVertex::Value(v) => { v.value.to_string() }
+            StructureVertex::Value(v) => {
+                match &v.value {
+                    Value::String(s) => std::format!("\"{}\"", s.to_string()),
+                    other => other.to_string(),
+                }
+            }
         }
     });
 
