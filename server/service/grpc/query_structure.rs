@@ -24,10 +24,10 @@ use crate::service::grpc::concept::{
 };
 
 macro_rules! todo_but_compile_time {
-    // ($msg:literal) => {todo!($msg)};
-    ($msg:literal) => {
-        compile_error!($msg)
-    };
+    ($msg:literal) => {todo!($msg)};
+    // ($msg:literal) => {
+    //     compile_error!($msg)
+    // };
 }
 
 pub(crate) struct PipelineStructureContext<'a, Snapshot: ReadableSnapshot> {
@@ -372,10 +372,19 @@ fn encode_structure_vertex_label_or_variable(
     match vertex {
         Vertex::Variable(_) => encode_structure_vertex_variable(vertex),
         Vertex::Label(label) => {
-            let type_ = context.get_type(label).expect("Expected all labels to be resolved");
-            let encoded_type = encode_structure_vertex_label(context.snapshot, context.type_manager, &type_)?;
+            let encoded_type = match context.get_type(label) {
+                Some(type_) => {
+                    let resolved = encode_structure_vertex_label(context.snapshot, context.type_manager, &type_)?;
+                    structure_vertex::label::Label::Resolved(resolved)
+                },
+                None => {
+                    let unresolved = label.scoped_name.as_str().to_owned();
+                    structure_vertex::label::Label::FailedInference(unresolved)
+                }
+            };
+            let label = structure_vertex::Label { label: Some(encoded_type) };
             Ok(typedb_protocol::conjunction_structure::StructureVertex {
-                vertex: Some(structure_vertex::Vertex::Label(encoded_type)),
+                vertex: Some(structure_vertex::Vertex::Label(label)),
             })
         }
         Vertex::Parameter(_) => unreachable!("Expected variable or label"),

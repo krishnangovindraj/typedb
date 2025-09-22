@@ -21,9 +21,7 @@ use ir::pattern::{
 use serde::{Deserialize, Serialize, Serializer};
 use storage::snapshot::ReadableSnapshot;
 
-use crate::service::http::message::query::concept::{
-    encode_type_concept, encode_value, RoleTypeResponse, ValueResponse,
-};
+use crate::service::http::message::query::concept::{encode_type_concept, encode_value, RoleTypeResponse, TypeFailedInferenceResponse, ValueResponse};
 
 struct PipelineStructureContext<'a, Snapshot: ReadableSnapshot> {
     pipeline_structure: &'a PipelineStructure,
@@ -399,7 +397,7 @@ fn encode_structure_constraint(
                 text_span: span,
                 constraint: StructureConstraint::Relates {
                     relation: encode_structure_vertex(context, relates.relation())?,
-                    role: encode_structure_vertex(context, relates.role_type())?,
+                    role: encode_role_type_as_vertex(context, relates.role_type())?,
                 },
             });
         }
@@ -408,7 +406,7 @@ fn encode_structure_constraint(
                 text_span: span,
                 constraint: StructureConstraint::Plays {
                     player: encode_structure_vertex(context, plays.player())?,
-                    role: encode_structure_vertex(context, plays.role_type())?,
+                    role: encode_structure_vertex(context, plays.role_type())?, // Doesn't have to be encode_role_type
                 },
             });
         }
@@ -555,10 +553,11 @@ fn encode_structure_vertex(
             StructureVertex::Variable { id: variable.into() }
         }
         Vertex::Label(label) => {
-            let type_ = context.get_type(label).unwrap();
-            StructureVertex::Label {
-                r#type: serde_json::json!(encode_type_concept(&type_, context.snapshot, context.type_manager)?),
-            }
+            let r#type = match context.get_type(label) {
+                Some(type_) => encode_type_concept(&type_, context.snapshot, context.type_manager)?,
+                None => serde_json::json!(TypeFailedInferenceResponse { label: label.scoped_name.as_str().to_owned() })
+            };
+            StructureVertex::Label { r#type }
         }
         Vertex::Parameter(param) => {
             let value = context.get_parameter_value(param).unwrap();
