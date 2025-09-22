@@ -582,7 +582,7 @@ fn encode_role_type_as_vertex(
 pub mod bdd {
     use itertools::Itertools;
     use serde_json::Value;
-    use compiler::query_structure::{FunctionReturnStructure, QueryStructure, QueryStructureConjunctionID, QueryStructureStage, StructureVariableId};
+    use compiler::query_structure::{FunctionReturnStructure, StructureSortVariable, QueryStructureConjunctionID, QueryStructureStage, StructureVariableId, StructureReduceAssign, StructureReducer};
     use crate::service::http::message::query::query_structure::{FunctionStructureResponse, PipelineStructureResponse, QueryStructureResponse, StructureConstraint, StructureConstraintWithSpan, StructureVertex};
     use crate::service::http::message::query::query_structure::bdd::functor_macros::{encode_functor, encode_functor_impl};
 
@@ -614,8 +614,11 @@ pub mod bdd {
         }
 
         macro_rules! encode_functor {
-            ($context:ident, $what:ident as struct $struct_name:ident $fields:tt) => {
+            ($context:ident, $what:ident as struct $struct_name:ident  $fields:tt) => {
                 functor_macros::encode_functor!($context, $what => [ $struct_name => $struct_name $fields, ])
+            };
+            ($context:ident, $what:ident as struct $struct_name:ident $fields:tt named $renamed:ident ) => {
+                functor_macros::encode_functor!($context, $what => [ $struct_name => $renamed $fields, ])
             };
             ($context:ident, $what:ident as enum $enum_name:ident [ $($variant:ident $fields:tt |)* ]) => {
                 functor_macros::encode_functor!($context, $what => [ $( $enum_name::$variant => $variant $fields ,)* ])
@@ -642,8 +645,11 @@ pub mod bdd {
 
         macro_rules! impl_functor_for {
             (struct $struct_name:ident $fields:tt) => {
+                functor_macros::impl_functor_for!(struct $struct_name $fields named $struct_name);
+            };
+            (struct $struct_name:ident $fields:tt named $renamed:ident) => {
                 functor_macros::impl_functor_for_impl!($struct_name => |self, context| {
-                    functor_macros::encode_functor!(context, self as struct $struct_name $fields)
+                    functor_macros::encode_functor!(context, self as struct $struct_name $fields named $renamed)
                 });
             };
             (enum $enum_name:ident [ $($func:ident $fields:tt |)* ]) => {
@@ -674,6 +680,9 @@ pub mod bdd {
         }
     }
 
+    functor_macros::impl_functor_for!(struct StructureReduceAssign { assigned, reducer,  } named ReduceAssign);
+    functor_macros::impl_functor_for!(struct StructureReducer { reducer, arguments, } named Reducer);
+
     functor_macros::impl_functor_for!(enum QueryStructureStage [
         Match { block, } |
         Insert { block, } |
@@ -681,12 +690,12 @@ pub mod bdd {
         Put { block, } |
         Update { block, } |
         Select { variables, } |
-        Sort { } | // TODO
+        Sort { variables, } |
         Offset { offset, } |
         Limit { limit, } |
         Require { variables, } |
         Distinct { } |
-        Reduce { } | // TODO
+        Reduce { reducers, groupby, } | // TODO
     ]);
 
     functor_macros::impl_functor_for!(enum StructureConstraint [
@@ -740,6 +749,13 @@ pub mod bdd {
             let FunctionStructureResponse { arguments, returns, body } = self;
             let context = body.as_ref().unwrap();
             encode_functor_impl!(context, Function { arguments, returns, body, })
+        }
+        StructureSortVariable => {
+            let Self { ascending, variable } = self;
+            match ascending {
+                true => encode_functor_impl!(context, Asc { variable, }),
+                false => encode_functor_impl!(context, Desc { variable, }),
+            }
         }
     ]);
 
