@@ -582,3 +582,92 @@ fn deserialize_using_from_string<'de, D: serde::de::Deserializer<'de>, T: FromSt
 
     deserializer.deserialize_any(Visitor { phantom: PhantomData })
 }
+
+#[cfg(debug_assertions)]
+pub mod functor_encoding {
+    use itertools::Itertools;
+    use crate::query_structure::{FunctionReturnStructure, StructureSortVariable, QueryStructureConjunctionID, QueryStructureStage, StructureVariableId, StructureReduceAssign, StructureReducer};
+    use test_utils::functor_encoding::functor_macros;
+
+    functor_macros::impl_functor_for!(struct StructureReduceAssign { assigned, reducer,  } named ReduceAssign);
+    functor_macros::impl_functor_for!(struct StructureReducer { reducer, arguments, } named Reducer);
+
+    functor_macros::impl_functor_for!(enum QueryStructureStage [
+        Match { block, } |
+        Insert { block, } |
+        Delete { deleted_variables, block, } |
+        Put { block, } |
+        Update { block, } |
+        Select { variables, } |
+        Sort { variables, } |
+        Offset { offset, } |
+        Limit { limit, } |
+        Require { variables, } |
+        Distinct { } |
+        Reduce { reducers, groupby, } | // TODO
+    ]);
+
+    functor_macros::impl_functor_for!(enum StructureConstraint [
+        Isa { instance, r#type, } |
+        IsaExact { instance, r#type, } |
+        Has { owner, attribute, } |
+        Links { relation, player, role, } |
+        Sub { subtype, supertype, } |
+        SubExact { subtype, supertype, } |
+        Owns { owner, attribute, } |
+        Relates { relation, role, } |
+        Plays { player, role, } |
+        FunctionCall { name, assigned, arguments, } |
+        Expression { text, assigned, arguments, } |
+        Is { lhs, rhs, } |
+        Iid { concept, iid, } |
+        Comparison { lhs, rhs, comparator, } |
+        Kind { kind, r#type, } |
+        Label { r#type, label, } |
+        Value { attribute_type, value_type, } |
+        Or { branches, } |
+        Not { conjunction, } |
+        Try { conjunction, } |
+    ]);
+
+
+    functor_macros::impl_functor_for_impl!(StructureVertex => |self, context| {
+        match self {
+            StructureVertex::Variable { id } => { id.encode_as_functor(context) }
+            StructureVertex::Label { r#type } => { r#type.as_object().unwrap()["label"].as_str().unwrap().to_owned() }
+            StructureVertex::Value(v) => {
+                match &v.value {
+                    Value::String(s) => std::format!("\"{}\"", s.to_string()),
+                    other => other.to_string(),
+                }
+            }
+        }
+    });
+
+    functor_macros::impl_functor_for_multi!(|self, context| [
+        StructureVariableId =>  { format!("${}", context.variables[self].name.as_ref().map(|s| s.as_str()).unwrap_or("_")) }
+        QueryStructureConjunctionID => { context.conjunctions[self.0 as usize].encode_as_functor(context) }
+        StructureConstraintWithSpan => { self.constraint.encode_as_functor(context) }
+        // TODO: Can we reimplement these with the named version of the macro?
+        PipelineStructureResponse => { let pipeline = &self.pipeline; functor_macros::encode_functor_impl!(self, Pipeline { pipeline, }) }
+        FunctionStructureResponse => {
+            let FunctionStructureResponse { arguments, returns, body } = self;
+            let context = body.as_ref().unwrap();
+            functor_macros::encode_functor_impl!(context, Function { arguments, returns, body, })
+        }
+        StructureSortVariable => {
+            let Self { ascending, variable } = self;
+            match ascending {
+                true => functor_macros::encode_functor_impl!(context, Asc { variable, }),
+                false => functor_macros::encode_functor_impl!(context, Desc { variable, }),
+            }
+        }
+    ]);
+
+    functor_macros::impl_functor_for!(enum FunctionReturnStructure [
+        Stream { variables, } |
+        Single { selector, variables, }  |
+        Check { }  |
+        Reduce {} |
+    ]);
+}

@@ -110,7 +110,7 @@ rust_test(
     crate = ":server",
     crate_features = ["bazel"],
     data = [":config.yml"],
-    deps = [],
+    deps = ["//util/test:test_utils"],
 )
 
 checkstyle_test(

@@ -642,7 +642,8 @@ async fn get_answers_of_typeql_analyze_query(context: &mut Context, step: &Step)
 #[apply(generic_step)]
 #[step(expr = r"analyzed query pipeline structure is:")]
 async fn analyzed_query_pipeline_is(context: &mut Context, step: &Step) {
-    use server::service::http::message::query::query_structure::bdd::FunctorEncoded;
+    use test_utils::functor_encoding::FunctorEncoded;
+    compiler::query_structure::test::foo();
     let expected_functor = step.docstring().unwrap();
     let analyzed = context.analyzed_query.as_ref().unwrap();
     let (actual_functor, _preamble) = encode_query_structure_as_functor(&analyzed.structure);
@@ -652,7 +653,7 @@ async fn analyzed_query_pipeline_is(context: &mut Context, step: &Step) {
 #[apply(generic_step)]
 #[step(expr = r"analyzed query preamble contains:")]
 async fn analyzed_query_preamble_contains(context: &mut Context, step: &Step) {
-    use server::service::http::message::query::query_structure::bdd::FunctorEncoded;
+    use test_utils::functor_encoding::FunctorEncoded;
     let expected_functor = step.docstring().unwrap();
     let analyzed = context.analyzed_query.as_ref().unwrap();
     let (_pipeline, preamble_functors) = encode_query_structure_as_functor(&analyzed.structure);
