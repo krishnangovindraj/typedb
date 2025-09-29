@@ -36,7 +36,7 @@ use executor::{
 use ir::pipeline::ParameterRegistry;
 use itertools::{Either, Itertools};
 use lending_iterator::LendingIterator;
-use options::{QueryOptions, QueryQueueOptions};
+use options::QueryOptions;
 use query::error::QueryError;
 use resource::profile::{EncodingProfile, QueryProfile, StorageCounters};
 use storage::snapshot::ReadableSnapshot;
@@ -1677,4 +1677,10 @@ impl QueryStreamTransmitter {
         );
         Continue(())
     }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum QueryQueueOptions {
+    Query(QueryOptions),
+    Analyze,
 }
