@@ -645,8 +645,7 @@ fn encode_pipeline_annotations(
     type_manager: &TypeManager,
     annotations: &PipelineStructureAnnotations
 ) -> Result<annotations_proto::PipelineAnnotations, Box<ConceptReadError>> {
-    let conjunctions = annotations.iter().enumerate().map(|(index, (conjunction_id, annotations))| {
-        debug_assert_eq!(index, conjunction_id.as_u32() as usize);
+    let conjunctions = annotations.iter().map(|annotations| {
         encode_conjunction_annotations(snapshot, type_manager, annotations)
     }).collect::<Result<Vec<_>, Box<ConceptReadError>>>()?;
     Ok(annotations_proto::PipelineAnnotations { conjunctions })
