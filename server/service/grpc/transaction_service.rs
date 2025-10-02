@@ -141,7 +141,11 @@ macro_rules! send_ok_message_else_return_break {
 enum ImmediateQueryResponse {
     NonFatalErr(typedb_protocol::Error),
     ResOk(typedb_protocol::query::initial_res::Ok),
-    ResAnalyse(typedb_protocol::analyze::Res),
+}
+
+enum ImmediateAnalyzeResponse {
+    NonFatalErr(typedb_protocol::Error),
+    ResAnalyse(typedb_protocol::analyze::res::AnalyzedQuery),
 }
 
 impl ImmediateQueryResponse {
@@ -152,8 +156,14 @@ impl ImmediateQueryResponse {
     fn ok(ok_message: typedb_protocol::query::initial_res::ok::Ok) -> Self {
         ImmediateQueryResponse::ResOk(typedb_protocol::query::initial_res::Ok { ok: Some(ok_message) })
     }
+}
 
-    fn analyzed_query(analyzed: typedb_protocol::analyze::Res) -> Self {
+impl ImmediateAnalyzeResponse {
+    fn non_fatal_err(error: impl IntoProtocolErrorMessage) -> Self {
+        Self::NonFatalErr(error.into_error_message())
+    }
+
+    fn analyzed_query(analyzed: typedb_protocol::analyze::res::AnalyzedQuery) -> Self {
         Self::ResAnalyse(analyzed)
     }
 }
@@ -463,11 +473,24 @@ impl TransactionService {
                 );
                 Continue(())
             }
-            ImmediateQueryResponse::ResAnalyse(res) => {
-                send_ok_message_else_return_break!(response_sender, transaction_server_res_analyze_res(req_id, res));
-                Continue(())
-            }
         }
+    }
+
+    async fn respond_analyze_response(
+        response_sender: &Sender<Result<ProtocolServer, Status>>,
+        req_id: Uuid,
+        immediate_analyze_response: ImmediateAnalyzeResponse,
+    ) -> ControlFlow<(), ()> {
+        let result = match immediate_analyze_response {
+            ImmediateAnalyzeResponse::NonFatalErr(err) => typedb_protocol::analyze::res::Result::Err(err),
+            ImmediateAnalyzeResponse::ResAnalyse(analyzed) => typedb_protocol::analyze::res::Result::Ok(analyzed),
+        };
+        let res = typedb_protocol::analyze::Res { result: Some(result) };
+        send_ok_message_else_return_break!(
+            response_sender,
+            transaction_server_res_analyze_res(req_id, res)
+        );
+        Continue(())
     }
 
     async fn handle_open(
@@ -821,18 +844,18 @@ impl TransactionService {
         let parsed = match parse_query(&query) {
             Ok(parsed) => parsed,
             Err(err) => {
-                let response = ImmediateQueryResponse::non_fatal_err(TransactionServiceError::QueryParseFailed {
+                let response = ImmediateAnalyzeResponse::non_fatal_err(TransactionServiceError::QueryParseFailed {
                     typedb_source: err,
                 });
-                return Ok(Self::respond_query_response(&self.response_sender, req_id, response).await);
+                return Ok(Self::respond_analyze_response(&self.response_sender, req_id, response).await);
             }
         };
         match parsed.into_structure() {
             typeql::query::QueryStructure::Schema(_) => {
                 // schema queries are handled immediately so there is a query response or a fatal Status
                 let response =
-                    ImmediateQueryResponse::non_fatal_err(TransactionServiceError::AnalyseQueryExpectsPipeline {});
-                Ok(Self::respond_query_response(&self.response_sender, req_id, response).await)
+                    ImmediateAnalyzeResponse::non_fatal_err(TransactionServiceError::AnalyseQueryExpectsPipeline {});
+                Ok(Self::respond_analyze_response(&self.response_sender, req_id, response).await)
             }
             typeql::query::QueryStructure::Pipeline(pipeline) => {
                 if !self.query_queue.is_empty() || self.running_write_query.is_some() {
@@ -958,13 +981,13 @@ impl TransactionService {
             let resp = match result {
                 Ok(analyzed) => {
                     match encode_analyzed_query(&*transaction.snapshot, &*transaction.type_manager, &analyzed) {
-                        Ok(encoded) => ImmediateQueryResponse::analyzed_query(encoded),
-                        Err(err) => ImmediateQueryResponse::non_fatal_err(err),
+                        Ok(encoded) => ImmediateAnalyzeResponse::analyzed_query(encoded),
+                        Err(err) => ImmediateAnalyzeResponse::non_fatal_err(err),
                     }
                 }
-                Err(err) => ImmediateQueryResponse::non_fatal_err(err),
+                Err(err) => ImmediateAnalyzeResponse::non_fatal_err(err),
             };
-            Self::respond_query_response(&self.response_sender, req_id, resp).await;
+            Self::respond_analyze_response(&self.response_sender, req_id, resp).await;
         });
     }
 

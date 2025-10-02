@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use typedb_protocol::analyze::res::{query_structure as structure_proto, query_annotations as annotations_proto};
+use typedb_protocol::analyze::res::analyzed_query::{query_structure as structure_proto, query_annotations as annotations_proto};
 
 use answer::{variable::Variable, Type};
 use compiler::query_structure::{FunctionReturnStructure, FunctionStructure, PipelineStructure, PipelineStructureAnnotations, PipelineVariableAnnotation, QueryStructure, QueryStructureConjunction, QueryStructureNestedPattern, QueryStructureStage, StructureVariableId};
@@ -62,24 +62,24 @@ pub fn encode_analyzed_query(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
     analyzed_query: &AnalysedQuery,
-) -> Result<typedb_protocol::analyze::Res, Box<ConceptReadError>> {
+) -> Result<typedb_protocol::analyze::res::AnalyzedQuery, Box<ConceptReadError>> {
     let structure = encode_query_structure(snapshot, type_manager, &analyzed_query.structure)?;
     let annotations = encode_query_annotations(snapshot, type_manager, &analyzed_query.annotations)?;
-    Ok(typedb_protocol::analyze::Res { structure: Some(structure), annotations: Some(annotations) })
+    Ok(typedb_protocol::analyze::res::AnalyzedQuery { structure: Some(structure), annotations: Some(annotations) })
 }
 
 pub fn encode_query_structure(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
     query_structure: &QueryStructure,
-) -> Result<typedb_protocol::analyze::res::QueryStructure, Box<ConceptReadError>> {
+) -> Result<typedb_protocol::analyze::res::analyzed_query::QueryStructure, Box<ConceptReadError>> {
     let query = encode_pipeline_structure(snapshot, type_manager, &query_structure.query)?;
     let preamble = query_structure
         .preamble
         .iter()
         .map(|func| encode_function_structure(snapshot, type_manager, func))
         .collect::<Result<_, _>>()?;
-    Ok(typedb_protocol::analyze::res::QueryStructure { query: Some(query), preamble })
+    Ok(typedb_protocol::analyze::res::analyzed_query::QueryStructure { query: Some(query), preamble })
 }
 
 fn encode_function_structure(
@@ -503,7 +503,7 @@ fn encode_role_as_vertex(
 ) -> Result<typedb_protocol::conjunction_structure::StructureVertex, Box<ConceptReadError>> {
     if let Some(label) = context.get_role_type(&role_type.as_variable().unwrap()) {
         // At present rolename could resolve to multiple types - Manually encode.
-        error::todo_must_implement!("This should encode rolename");
+        // error::todo_must_implement!("This should encode rolename");
         let label = structure_vertex::Label {
             label: Some(structure_vertex::label::Label::FailedInference(label.to_owned()))
         };
@@ -625,7 +625,7 @@ fn encode_query_annotations(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
     annotations: &QueryStructureAnnotations
-) -> Result<typedb_protocol::analyze::res::QueryAnnotations, Box<ConceptReadError>> {
+) -> Result<typedb_protocol::analyze::res::analyzed_query::QueryAnnotations, Box<ConceptReadError>> {
     let query = Some(encode_pipeline_annotations(snapshot, type_manager, &annotations.query)?);
     let preamble = annotations.preamble.iter().map(|f| {
         encode_function_annotations(snapshot, type_manager, f)
@@ -637,7 +637,7 @@ fn encode_query_annotations(
             }
         } )
     }).transpose()?;
-    Ok(typedb_protocol::analyze::res::QueryAnnotations { query, preamble, fetch })
+    Ok(typedb_protocol::analyze::res::analyzed_query::QueryAnnotations { query, preamble, fetch })
 }
 
 fn encode_pipeline_annotations(
@@ -646,7 +646,7 @@ fn encode_pipeline_annotations(
     annotations: &PipelineStructureAnnotations
 ) -> Result<annotations_proto::PipelineAnnotations, Box<ConceptReadError>> {
     let conjunctions = annotations.iter().enumerate().map(|(index, (conjunction_id, annotations))| {
-        debug_assert!(index == conjunction_id.as_u32() as usize);
+        debug_assert_eq!(index, conjunction_id.as_u32() as usize);
         encode_conjunction_annotations(snapshot, type_manager, annotations)
     }).collect::<Result<Vec<_>, Box<ConceptReadError>>>()?;
     Ok(annotations_proto::PipelineAnnotations { conjunctions })
