@@ -890,7 +890,7 @@ dependencies = [
  "test_utils_concept",
  "test_utils_encoding",
  "tracing",
- "typeql",
+ "typeql 3.5.0",
 ]
 
 [[package]]
@@ -921,7 +921,7 @@ dependencies = [
  "test_utils_concept",
  "test_utils_encoding",
  "tracing",
- "typeql",
+ "typeql 3.5.0",
 ]
 
 [[package]]
@@ -1219,7 +1219,7 @@ dependencies = [
  "test_utils",
  "tokio",
  "tracing",
- "typeql",
+ "typeql 3.5.0",
 ]
 
 [[package]]
@@ -1282,7 +1282,7 @@ dependencies = [
  "tokio",
  "tonic",
  "tonic-types",
- "typeql",
+ "typeql 3.5.0",
  "xxhash-rust",
 ]
 
@@ -1391,7 +1391,7 @@ dependencies = [
  "test_utils",
  "test_utils_encoding",
  "tracing",
- "typeql",
+ "typeql 3.5.0",
 ]
 
 [[package]]
@@ -1424,7 +1424,7 @@ name = "error"
 version = "0.0.0"
 dependencies = [
  "resource",
- "typeql",
+ "typeql 3.5.0",
 ]
 
 [[package]]
@@ -1495,7 +1495,7 @@ dependencies = [
  "test_utils_encoding",
  "tokio",
  "tracing",
- "typeql",
+ "typeql 3.5.0",
  "unicase",
 ]
 
@@ -1589,7 +1589,7 @@ dependencies = [
  "storage",
  "test_utils",
  "tracing",
- "typeql",
+ "typeql 3.5.0",
 ]
 
 [[package]]
@@ -2087,7 +2087,7 @@ dependencies = [
  "smol",
  "test_utils",
  "tokio",
- "typeql",
+ "typeql 3.5.0",
  "url",
  "uuid",
 ]
@@ -2494,7 +2494,7 @@ dependencies = [
  "structural_equality",
  "test_utils",
  "test_utils_storage",
- "typeql",
+ "typeql 3.5.0",
 ]
 
 [[package]]
@@ -3041,7 +3041,7 @@ dependencies = [
  "regex",
  "storage",
  "test_utils",
- "typeql",
+ "typeql 3.5.0",
 ]
 
 [[package]]
@@ -3133,9 +3133,9 @@ checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 
 [[package]]
 name = "pest"
-version = "2.8.0"
+version = "2.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "198db74531d58c70a361c42201efde7e2591e976d518caf7662a47dc5720e7b6"
+checksum = "1db05f56d34358a8b1066f67cbb203ee3e7ed2ba674a6263a1d5ec6db2204323"
 dependencies = [
  "memchr",
  "thiserror 2.0.12",
@@ -3144,9 +3144,9 @@ dependencies = [
 
 [[package]]
 name = "pest_derive"
-version = "2.8.0"
+version = "2.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d725d9cfd79e87dccc9341a2ef39d1b6f6353d68c4b33c177febbe1a402c97c5"
+checksum = "bb056d9e8ea77922845ec74a1c4e8fb17e7c218cc4fc11a15c5d25e189aa40bc"
 dependencies = [
  "pest",
  "pest_generator",
@@ -3154,9 +3154,9 @@ dependencies = [
 
 [[package]]
 name = "pest_generator"
-version = "2.8.0"
+version = "2.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db7d01726be8ab66ab32f9df467ae8b1148906685bbe75c82d1e65d7f5b3f841"
+checksum = "87e404e638f781eb3202dc82db6760c8ae8a1eeef7fb3fa8264b2ef280504966"
 dependencies = [
  "pest",
  "pest_meta",
@@ -3167,11 +3167,10 @@ dependencies = [
 
 [[package]]
 name = "pest_meta"
-version = "2.8.0"
+version = "2.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f9f832470494906d1fca5329f8ab5791cc60beb230c74815dff541cbd2b5ca0"
+checksum = "edd1101f170f5903fde0914f899bb503d9ff5271d7ba76bbb70bea63690cc0d5"
 dependencies = [
- "once_cell",
  "pest",
  "sha2 0.10.8",
 ]
@@ -3502,7 +3501,7 @@ dependencies = [
  "test_utils_encoding",
  "tokio",
  "tracing",
- "typeql",
+ "typeql 3.5.0",
 ]
 
 [[package]]
@@ -4282,7 +4281,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "typedb-protocol",
- "typeql",
+ "typeql 3.5.0",
  "user",
  "uuid",
  "xxhash-rust",
@@ -4502,7 +4501,7 @@ dependencies = [
  "storage",
  "test_utils",
  "tokio",
- "typeql",
+ "typeql 3.5.0",
 ]
 
 [[package]]
@@ -4530,7 +4529,7 @@ dependencies = [
  "test_utils",
  "test_utils_storage",
  "tracing",
- "typeql",
+ "typeql 3.5.0",
  "xoshiro",
 ]
 
@@ -4562,7 +4561,7 @@ version = "0.0.0"
 dependencies = [
  "paste",
  "serde",
- "typeql",
+ "typeql 3.5.0",
 ]
 
 [[package]]
@@ -4697,7 +4696,7 @@ dependencies = [
  "query",
  "resource",
  "storage",
- "typeql",
+ "typeql 3.5.0",
  "uuid",
 ]
 
@@ -5243,7 +5242,7 @@ dependencies = [
  "storage",
  "test_utils",
  "tokio",
- "typeql",
+ "typeql 0.0.0",
 ]
 
 [[package]]
@@ -5256,6 +5255,19 @@ checksum = "1dccffe3ce07af9386bfd29e80c0ab1a8205a2fc34e4bcd40364df902cfa8f3f"
 name = "typeql"
 version = "0.0.0"
 source = "git+https://github.com/typedb/typeql?tag=3.5.0#6dd83bd45775a061ddad76436caa18c385d11b2b"
+dependencies = [
+ "chrono",
+ "itertools 0.10.5",
+ "pest",
+ "pest_derive",
+ "regex",
+]
+
+[[package]]
+name = "typeql"
+version = "3.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f13e5c2b06cfcee35dd916f7354c6333b64cc3574b9695ff59c94b3699f7dc1b"
 dependencies = [
  "chrono",
  "itertools 0.10.5",
@@ -5361,7 +5373,7 @@ dependencies = [
  "resource",
  "storage",
  "system",
- "typeql",
+ "typeql 3.5.0",
 ]
 
 [[package]]

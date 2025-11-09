@@ -66,9 +66,11 @@ features = {}
 
 	[dependencies.typeql]
 		features = []
-		git = "https://github.com/typedb/typeql"
-		tag = "3.5.0"
+		#git = "https://github.com/typedb/typeql"
+		#tag = "3.5.0"
+		version = "3.5.0"
 		default-features = false
+
 
 	[dependencies.tonic]
 		features = ["channel", "codegen", "default", "prost", "router", "server", "tls", "tls-native-roots", "tls-roots", "transport"]
