@@ -288,6 +288,7 @@ fn validate_attribute_owned_and_scalar(
         .get_subtypes(snapshot, type_manager)
         .map_err(|err| AnnotationError::ConceptRead { typedb_source: err })?
         .iter()
+        .chain([attribute_type].iter())
         .try_for_each(|attr_subtype| {
             let attr_subtype_owners = attr_subtype
                 .get_owner_types(snapshot, type_manager)
