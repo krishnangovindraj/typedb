@@ -10,7 +10,9 @@ use std::{
 };
 
 use answer::{variable::Variable, Type};
-use concept::type_::{attribute_type::AttributeType, type_manager::TypeManager, OwnerAPI, TypeAPI};
+use concept::type_::{
+    attribute_type::AttributeType, object_type::ObjectType, type_manager::TypeManager, OwnerAPI, TypeAPI,
+};
 use encoding::graph::type_::Kind;
 use ir::{
     pattern::ParameterID,
@@ -281,6 +283,18 @@ fn validate_attribute_owned_and_scalar(
     attribute_type: AttributeType,
     source_span: Option<Span>,
 ) -> Result<(), AnnotationError> {
+    let mut allowed_owner_types = HashSet::<ObjectType>::new();
+    attribute_type
+        .get_subtypes(snapshot, type_manager)
+        .map_err(|err| AnnotationError::ConceptRead { typedb_source: err })?
+        .iter()
+        .try_for_each(|attr_subtype| {
+            let attr_subtype_owners = attr_subtype
+                .get_owner_types(snapshot, type_manager)
+                .map_err(|err| AnnotationError::ConceptRead { typedb_source: err })?;
+            allowed_owner_types.extend(attr_subtype_owners.keys());
+            Ok(())
+        })?;
     for owner_type in owner_types {
         if let kind @ (Kind::Attribute | Kind::Role) = owner_type.kind() {
             return Err(AnnotationError::FetchSingleAttributeCannotBeOwnedByKind {
@@ -291,11 +305,7 @@ fn validate_attribute_owned_and_scalar(
             });
         }
         let object_type = owner_type.as_object_type();
-        if object_type
-            .get_owns_attribute(snapshot, type_manager, attribute_type)
-            .map_err(|err| AnnotationError::ConceptRead { typedb_source: err })?
-            .is_none()
-        {
+        if !allowed_owner_types.contains(&object_type) {
             return Err(AnnotationError::FetchSingleAttributeNotOwned {
                 var: owner.to_owned(),
                 owner: owner_type.get_label(snapshot, type_manager).unwrap().name().as_str().to_owned(),
