@@ -248,6 +248,7 @@ fn is_builtin_value_function(typeql_id: &BuiltinFunctionName) -> bool {
             | Function::Max
             | Function::Min
             | Function::Len
+            | Function::FuzzyMatch
     )
 }
 
@@ -284,6 +285,10 @@ fn to_builtin_value_function_id(
         Function::Len => {
             check_builtin_arg_count(token, args.len(), 1, typeql_id.span())?;
             Ok(BuiltinValueFunctionID::Len)
+        }
+        Function::FuzzyMatch => {
+            check_builtin_arg_count(token, args.len(), 2, typeql_id.span())?;
+            Ok(BuiltinValueFunctionID::FuzzyMatch)
         }
         _ => Err(Box::new(RepresentationError::InternalNotAValueBuiltin { token, source_span: typeql_id.span() })),
     }

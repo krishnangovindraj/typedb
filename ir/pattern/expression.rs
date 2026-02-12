@@ -290,6 +290,7 @@ pub enum BuiltinValueFunctionID {
     Max,
     Min,
     Len,
+    FuzzyMatch,
 }
 
 impl StructuralEquality for BuiltinValueFunctionID {
@@ -312,6 +313,7 @@ impl fmt::Display for BuiltinValueFunctionID {
             BuiltinValueFunctionID::Max => fmt::Display::fmt(&typeql::token::Function::Max, f),
             BuiltinValueFunctionID::Min => fmt::Display::fmt(&typeql::token::Function::Min, f),
             BuiltinValueFunctionID::Len => fmt::Display::fmt(&typeql::token::Function::Len, f),
+            BuiltinValueFunctionID::FuzzyMatch => write!(f, "fuzzy_match"),
         }
     }
 }

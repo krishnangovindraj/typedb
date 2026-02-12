@@ -3,7 +3,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-use std::{cmp, marker::PhantomData, ops::Rem};
+use std::{borrow::Cow, cmp, marker::PhantomData, ops::Rem};
 
 use encoding::value::{decimal_value::Decimal, value::NativeValueConvertible, value_type::ValueTypeCategory};
 
@@ -105,4 +105,64 @@ binary_instruction! { 'a
     MathMaxIntegerInteger = MathMaxIntegerIntegerImpl(a1: i64, a2: i64) -> i64 { Ok(cmp::max(a1, a2)) }
     MathMaxDoubleDouble = MathMaxDoubleDoubleImpl(a1: f64, a2: f64) -> f64 { Ok(f64::max(a1, a2)) }
     MathMaxDecimalDecimal = MathMaxDecimalDecimalImpl(a1: Decimal, a2: Decimal) -> Decimal { Ok(cmp::max(a1, a2)) }
+
+    FuzzyMatchStringString = FuzzyMatchStringStringImpl(a1: Cow<'a, str>, a2: Cow<'a, str>) -> f64 {
+        Ok(jaro_similarity(&a1, &a2))
+    }
+}
+
+fn jaro_similarity(s1: &str, s2: &str) -> f64 {
+    if s1.is_empty() && s2.is_empty() {
+        return 1.0;
+    } else if s1.is_empty() || s2.is_empty() {
+        return 0.0;
+    }
+
+    let s1_chars: Vec<char> = s1.chars().collect();
+    let s2_chars: Vec<char> = s2.chars().collect();
+    let s1_len = s1_chars.len();
+    let s2_len = s2_chars.len();
+
+    let match_distance = (cmp::max(s1_len, s2_len) / 2).saturating_sub(1);
+
+    let mut s1_matches = vec![false; s1_len];
+    let mut s2_matches = vec![false; s2_len];
+
+    let mut matches = 0usize;
+    let mut transpositions = 0usize;
+
+    for i in 0..s1_len {
+        let start = i.saturating_sub(match_distance);
+        let end = cmp::min(i + match_distance + 1, s2_len);
+        for j in start..end {
+            if s2_matches[j] || s1_chars[i] != s2_chars[j] {
+                continue;
+            }
+            s1_matches[i] = true;
+            s2_matches[j] = true;
+            matches += 1;
+            break;
+        }
+    }
+
+    if matches == 0 {
+        return 0.0;
+    }
+
+    let mut k = 0;
+    for i in 0..s1_len {
+        if !s1_matches[i] {
+            continue;
+        }
+        while !s2_matches[k] {
+            k += 1;
+        }
+        if s1_chars[i] != s2_chars[k] {
+            transpositions += 1;
+        }
+        k += 1;
+    }
+
+    let m = matches as f64;
+    (m / s1_len as f64 + m / s2_len as f64 + (m - transpositions as f64 / 2.0) / m) / 3.0
 }

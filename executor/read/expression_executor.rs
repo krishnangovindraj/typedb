@@ -11,8 +11,9 @@ use compiler::annotation::expression::{
     compiled_expression::ExecutableExpression,
     instructions::{
         binary::{
-            Binary, BinaryExpression, MathMaxDecimalDecimal, MathMaxDoubleDouble, MathMaxIntegerInteger,
-            MathMinDecimalDecimal, MathMinDoubleDouble, MathMinIntegerInteger, MathRemainderInteger,
+            Binary, BinaryExpression, FuzzyMatchStringString, MathMaxDecimalDecimal, MathMaxDoubleDouble,
+            MathMaxIntegerInteger, MathMinDecimalDecimal, MathMinDoubleDouble, MathMinIntegerInteger,
+            MathRemainderInteger,
         },
         list_operations::{ListConstructor, ListIndex, ListIndexRange},
         load_cast::{
@@ -245,6 +246,8 @@ fn evaluate_instruction(
         ExpressionOpCode::MathMaxDecimalDecimal => MathMaxDecimalDecimal::evaluate(state),
 
         ExpressionOpCode::LenString => LenString::evaluate(state),
+
+        ExpressionOpCode::FuzzyMatchStringString => FuzzyMatchStringString::evaluate(state),
     }
 }
 

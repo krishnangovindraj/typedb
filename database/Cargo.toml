@@ -123,8 +123,8 @@ features = {}
 
 	[dependencies.typeql]
 		features = []
+		rev = "0d567ebfd7be73e0b43fdbb0992d049eb2bddb2d"
 		git = "https://github.com/typedb/typeql"
-		tag = "3.8.0"
 		default-features = false
 
 	[dependencies.compiler]

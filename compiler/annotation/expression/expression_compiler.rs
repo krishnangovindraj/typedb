@@ -27,8 +27,8 @@ use crate::annotation::expression::{
     compiled_expression::{ExecutableExpression, ExpressionValueType},
     instructions::{
         binary::{
-            MathMaxDecimalDecimal, MathMaxDoubleDouble, MathMaxIntegerInteger, MathMinDecimalDecimal,
-            MathMinDoubleDouble, MathMinIntegerInteger,
+            FuzzyMatchStringString, MathMaxDecimalDecimal, MathMaxDoubleDouble, MathMaxIntegerInteger,
+            MathMinDecimalDecimal, MathMinDoubleDouble, MathMinIntegerInteger,
         },
         list_operations,
         load_cast::{
@@ -643,6 +643,21 @@ impl<'this> ExpressionCompilationContext<'this> {
                         source_span: builtin.source_span(),
                     })?,
                 }
+            }
+            BuiltinValueFunctionID::FuzzyMatch => {
+                self.compile_recursive(self.expression_tree.get(builtin.argument_expression_ids()[0]))?;
+                let arg_1_category = self.peek_type_single()?.category();
+                self.compile_recursive(self.expression_tree.get(builtin.argument_expression_ids()[1]))?;
+                let arg_2_category = self.peek_type_single()?.category();
+                if arg_1_category != ValueTypeCategory::String || arg_2_category != ValueTypeCategory::String {
+                    return Err(Box::new(ExpressionCompileError::UnsupportedDifferentArgumentForBuiltin {
+                        function: builtin.function_id(),
+                        arg_1_category,
+                        arg_2_category,
+                        source_span: builtin.source_span(),
+                    }));
+                }
+                FuzzyMatchStringString::validate_and_append(self)?;
             }
         }
         Ok(())
