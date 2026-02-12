@@ -7,30 +7,29 @@
 use std::{collections::HashMap, hash::Hash, sync::Arc};
 
 use answer::{variable_value::VariableValue, Thing};
-use compiler::annotation::expression::{
-    compiled_expression::ExecutableExpression,
-    instructions::{
-        binary::{
-            Binary, BinaryExpression, MathMaxDecimalDecimal, MathMaxDoubleDouble, MathMaxIntegerInteger,
-            MathMinDecimalDecimal, MathMinDoubleDouble, MathMinIntegerInteger, MathRemainderInteger,
-        },
-        list_operations::{ListConstructor, ListIndex, ListIndexRange},
-        load_cast::{
-            CastBinaryLeft, CastBinaryRight, CastLeftDecimalToDouble, CastLeftIntegerToDecimal,
-            CastLeftIntegerToDouble, CastRightDecimalToDouble, CastRightIntegerToDecimal, CastRightIntegerToDouble,
-            CastUnary, CastUnaryDecimalToDouble, CastUnaryIntegerToDecimal, CastUnaryIntegerToDouble, ImplicitCast,
-            LoadConstant, LoadVariable,
-        },
-        op_codes::ExpressionOpCode,
-        operators,
-        unary::{
-            LenString, MathAbsDecimal, MathAbsDouble, MathAbsInteger, MathCeilDecimal, MathCeilDouble,
-            MathFloorDecimal, MathFloorDouble, MathRoundDecimal, MathRoundDouble, Unary, UnaryExpression,
-        },
-        ExpressionEvaluationError,
+use compiler::annotation::expression::{compiled_expression::ExecutableExpression, ExpressionCompileError, instructions::{
+    binary::{
+        Binary, BinaryExpression, MathMaxDecimalDecimal, MathMaxDoubleDouble, MathMaxIntegerInteger,
+        MathMinDecimalDecimal, MathMinDoubleDouble, MathMinIntegerInteger, MathRemainderInteger,
     },
-};
+    list_operations::{ListConstructor, ListIndex, ListIndexRange},
+    load_cast::{
+        CastBinaryLeft, CastBinaryRight, CastLeftDecimalToDouble, CastLeftIntegerToDecimal,
+        CastLeftIntegerToDouble, CastRightDecimalToDouble, CastRightIntegerToDecimal, CastRightIntegerToDouble,
+        CastUnary, CastUnaryDecimalToDouble, CastUnaryIntegerToDecimal, CastUnaryIntegerToDouble, ImplicitCast,
+        LoadConstant, LoadVariable,
+    },
+    op_codes::ExpressionOpCode,
+    operators,
+    unary::{
+        LenString, MathAbsDecimal, MathAbsDouble, MathAbsInteger, MathCeilDecimal, MathCeilDouble,
+        MathFloorDecimal, MathFloorDouble, MathRoundDecimal, MathRoundDouble, Unary, UnaryExpression,
+    },
+    ExpressionEvaluationError,
+}};
+use compiler::annotation::expression::expression_compiler::ExpressionCompilationContext;
 use encoding::value::value::{NativeValueConvertible, Value};
+use encoding::value::value_type::ValueTypeCategory;
 use ir::{pattern::ParameterID, pipeline::ParameterRegistry};
 use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
@@ -375,4 +374,10 @@ where
         state.push_value(F::evaluate(a1)?.to_db_value());
         Ok(())
     }
+}
+
+pub trait InjectedExpressionsLibrary {
+    fn resolve(name: &str, args: &[ValueTypeCategory]) -> Result<Option<u64>, String>;
+    fn validate_and_append(builder: &mut ExpressionCompilationContext<'_>) -> Result<(), String>;
+    fn evaluate(state: &mut ExpressionExecutorState<'_>) -> Result<(), String>;
 }
