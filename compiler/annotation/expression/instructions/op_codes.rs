@@ -91,6 +91,7 @@ pub enum ExpressionOpCode {
     LenString,
 
     FuzzyMatchStringString,
+    SimilarityStringString,
 }
 
 impl fmt::Display for ExpressionOpCode {
@@ -154,6 +155,7 @@ impl fmt::Display for ExpressionOpCode {
             ExpressionOpCode::MathMaxDecimalDecimal => write!(f, "max-decimal-decimal"),
             ExpressionOpCode::LenString => write!(f, "len-string"),
             ExpressionOpCode::FuzzyMatchStringString => write!(f, "fuzzy-match-string-string"),
+            ExpressionOpCode::SimilarityStringString => write!(f, "similarity-string-string"),
         }
     }
 }

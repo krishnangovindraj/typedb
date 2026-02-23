@@ -5,6 +5,8 @@
  */
 use std::{borrow::Cow, cmp, marker::PhantomData, ops::Rem};
 
+use base64::{engine::general_purpose::STANDARD, Engine};
+
 use encoding::value::{decimal_value::Decimal, value::NativeValueConvertible, value_type::ValueTypeCategory};
 
 use crate::annotation::expression::{
@@ -109,6 +111,9 @@ binary_instruction! { 'a
     FuzzyMatchStringString = FuzzyMatchStringStringImpl(a1: Cow<'a, str>, a2: Cow<'a, str>) -> f64 {
         Ok(jaro_similarity(&a1, &a2))
     }
+    SimilarityStringString = SimilarityStringStringImpl(a1: Cow<'a, str>, a2: Cow<'a, str>) -> f64 {
+        base64_vector_similarity(&a1, &a2)
+    }
 }
 
 fn jaro_similarity(s1: &str, s2: &str) -> f64 {
@@ -165,4 +170,38 @@ fn jaro_similarity(s1: &str, s2: &str) -> f64 {
 
     let m = matches as f64;
     (m / s1_len as f64 + m / s2_len as f64 + (m - transpositions as f64 / 2.0) / m) / 3.0
+}
+
+fn decode_base64_to_f32_vec(s: &str) -> Result<Vec<f32>, ExpressionEvaluationError> {
+    let bytes = STANDARD
+        .decode(s)
+        .map_err(|e| ExpressionEvaluationError::Base64DecodeFailed { description: e.to_string() })?;
+    if bytes.len() % 4 != 0 {
+        return Err(ExpressionEvaluationError::InvalidVectorEncoding { len: bytes.len() });
+    }
+    Ok(bytes.chunks_exact(4).map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])).collect())
+}
+
+fn base64_vector_similarity(s1: &str, s2: &str) -> Result<f64, ExpressionEvaluationError> {
+    let v1 = decode_base64_to_f32_vec(s1)?;
+    let v2 = decode_base64_to_f32_vec(s2)?;
+    if v1.len() != v2.len() {
+        return Err(ExpressionEvaluationError::VectorLengthMismatch { len1: v1.len(), len2: v2.len() });
+    }
+    let mut dot = 0.0f64;
+    let mut norm1 = 0.0f64;
+    let mut norm2 = 0.0f64;
+    for (a, b) in v1.iter().zip(v2.iter()) {
+        let a = *a as f64;
+        let b = *b as f64;
+        dot += a * b;
+        norm1 += a * a;
+        norm2 += b * b;
+    }
+    let denom = norm1.sqrt() * norm2.sqrt();
+    if denom == 0.0 {
+        Ok(0.0)
+    } else {
+        Ok(dot / denom)
+    }
 }

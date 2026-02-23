@@ -45,6 +45,7 @@ use crate::annotation::expression::{
     },
     ExpressionCompileError,
 };
+use crate::annotation::expression::instructions::binary::SimilarityStringString;
 
 pub struct ExpressionCompilationContext<'this> {
     expression_tree: &'this ExpressionTree<Variable>,
@@ -658,6 +659,21 @@ impl<'this> ExpressionCompilationContext<'this> {
                     }));
                 }
                 FuzzyMatchStringString::validate_and_append(self)?;
+            }
+            BuiltinValueFunctionID::Similarity => {
+                self.compile_recursive(self.expression_tree.get(builtin.argument_expression_ids()[0]))?;
+                let arg_1_category = self.peek_type_single()?.category();
+                self.compile_recursive(self.expression_tree.get(builtin.argument_expression_ids()[1]))?;
+                let arg_2_category = self.peek_type_single()?.category();
+                if arg_1_category != ValueTypeCategory::String || arg_2_category != ValueTypeCategory::String {
+                    return Err(Box::new(ExpressionCompileError::UnsupportedDifferentArgumentForBuiltin {
+                        function: builtin.function_id(),
+                        arg_1_category,
+                        arg_2_category,
+                        source_span: builtin.source_span(),
+                    }));
+                }
+                SimilarityStringString::validate_and_append(self)?;
             }
         }
         Ok(())

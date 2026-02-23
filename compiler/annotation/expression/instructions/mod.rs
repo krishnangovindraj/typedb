@@ -50,5 +50,8 @@ typedb_error! {
         ListRangeOutOfRange(7, "List range out of range {from_index}..{to_index}, list length: {length}", from_index: i64, to_index: i64, length: usize),
         OverlongString(8, "Found string with length {len} which is too long to fit in a 64-bit signed integer", len: usize),
         NegativeDatetimeSub(9, "Attempting to subtract later datetime from earlier: {lhs} - {rhs}", lhs: String, rhs: String),
+        Base64DecodeFailed(10, "Failed to decode base64 string: {description}", description: String),
+        VectorLengthMismatch(11, "Cannot compute similarity of vectors with different lengths: {len1} vs {len2}", len1: usize, len2: usize),
+        InvalidVectorEncoding(12, "Base64-decoded bytes length {len} is not a multiple of 4 (required for f32 encoding)", len: usize),
     }
 }

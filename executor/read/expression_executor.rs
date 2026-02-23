@@ -31,6 +31,7 @@ use compiler::annotation::expression::{
         ExpressionEvaluationError,
     },
 };
+use compiler::annotation::expression::instructions::binary::SimilarityStringString;
 use encoding::value::value::{NativeValueConvertible, Value};
 use ir::{pattern::ParameterID, pipeline::ParameterRegistry};
 use resource::profile::StorageCounters;
@@ -248,6 +249,7 @@ fn evaluate_instruction(
         ExpressionOpCode::LenString => LenString::evaluate(state),
 
         ExpressionOpCode::FuzzyMatchStringString => FuzzyMatchStringString::evaluate(state),
+        ExpressionOpCode::SimilarityStringString => SimilarityStringString::evaluate(state),
     }
 }
 

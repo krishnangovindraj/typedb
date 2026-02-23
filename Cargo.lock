@@ -898,6 +898,7 @@ name = "compiler"
 version = "0.0.0"
 dependencies = [
  "answer",
+ "base64 0.22.1",
  "chrono",
  "concept",
  "durability",
@@ -5449,7 +5450,7 @@ checksum = "1dccffe3ce07af9386bfd29e80c0ab1a8205a2fc34e4bcd40364df902cfa8f3f"
 [[package]]
 name = "typeql"
 version = "0.0.0"
-source = "git+https://github.com/typedb/typeql?rev=0d567ebfd7be73e0b43fdbb0992d049eb2bddb2d#0d567ebfd7be73e0b43fdbb0992d049eb2bddb2d"
+source = "git+https://github.com/typedb/typeql?rev=1b4f779f2f5e3b313328b19e5e4e96a67158d494#1b4f779f2f5e3b313328b19e5e4e96a67158d494"
 dependencies = [
  "chrono",
  "itertools 0.10.5",
