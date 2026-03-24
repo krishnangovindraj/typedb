@@ -178,7 +178,8 @@ typedb_error!(
         ),
         DetectedUnsatisfiablePattern(
             6,
-            "Type-inference derived an empty-set for some variable"
+            "Type-inference derived an empty-set for the variable '{variable}'",
+            variable: String,
         ),
         InternalValueTypeOfNonAttributeType(
             7,

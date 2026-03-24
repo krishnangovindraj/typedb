@@ -313,8 +313,9 @@ pub(crate) fn compute_type_inference_graph<'graph>(
         construct_error_message_for_unsatisfiable_edge(snapshot, type_manager, variable_registry, graph, edge)
     })?;
 
-    prune_types(&mut graph);
+    prune_types(&mut graph, variable_registry)?;
     // TODO: Throw error when any set becomes empty happens, rather than waiting for the it to propagate
+    debug_assert!(graph.check_thing_constraints_satisfiable(variable_registry).is_ok());
     graph.check_thing_constraints_satisfiable(variable_registry)?;
     Ok(graph)
 }
@@ -369,10 +370,15 @@ fn pre_check_edges_for_trivial_unsatisfiability<'a>(
     Ok(())
 }
 
-pub(crate) fn prune_types(graph: &mut TypeInferenceGraph<'_>) {
+pub(crate) fn prune_types(
+    graph: &mut TypeInferenceGraph<'_>,
+    variable_registry: &VariableRegistry,
+) -> Result<(), TypeInferenceError> {
     while graph.prune_vertices_from_constraints() {
+        graph.check_thing_constraints_satisfiable(variable_registry)?;
         graph.prune_constraints_from_vertices();
     }
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -454,9 +460,17 @@ impl TypeInferenceGraph<'_> {
             .filter_map(|(var, _)| var.as_variable())
             .any(|var| variable_registry.get_variable_category(var).unwrap().is_category_thing());
 
-        let any_vertex_empty = self.vertices.annotations.iter().any(|(_, types)| types.is_empty());
-        if any_vertex_empty && thing_variable_present {
-            return Err(TypeInferenceError::DetectedUnsatisfiablePattern {});
+        if thing_variable_present {
+            let found_empty_variable = self
+                .vertices
+                .annotations
+                .iter()
+                .find(|(var, types)| var.is_variable() && types.is_empty())
+                .and_then(|(v, _)| v.as_variable());
+            if let Some(var) = found_empty_variable {
+                let variable = variable_registry.get_variable_name_or_unnamed(var).to_owned();
+                return Err(TypeInferenceError::DetectedUnsatisfiablePattern { variable });
+            }
         }
         self.nested_disjunctions
             .iter()
