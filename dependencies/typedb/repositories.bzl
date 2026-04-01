@@ -33,8 +33,9 @@ def typedb_protocol():
     )
 
 def typedb_behaviour():
+    # https://github.com/krishnangovindraj/typedb-behaviour/tree/variable-binding-behaviour-tests--with-relaxations
     git_repository(
         name = "typedb_behaviour",
         remote = "https://github.com/krishnangovindraj/typedb-behaviour",
-        commit = "91346eb77a817a2efdaae13526a9f5d81654309d",  # sync-marker: do not remove this comment, this is used for sync-dependencies by @typedb_behaviour
+        commit = "f835b798e4a2c21183f8d98852d4231679af2de8",  # sync-marker: do not remove this comment, this is used for sync-dependencies by @typedb_behaviour
     )
