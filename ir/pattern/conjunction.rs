@@ -24,7 +24,7 @@ use crate::{
         optional::Optional,
         BindingMode, Pattern, Scope, ScopeId,
     },
-    pipeline::block::{BlockBuilderContext, BlockContext, ScopeType},
+    pipeline::block::{BlockBuilderContext, BlockContext},
     RepresentationError,
 };
 
@@ -163,7 +163,7 @@ impl<'cx, 'reg> ConjunctionBuilder<'cx, 'reg> {
     }
 
     pub fn add_disjunction(&mut self) -> DisjunctionBuilder<'_, 'reg> {
-        let nested_scope_id = self.context.create_child_scope(self.conjunction.scope_id, ScopeType::Disjunction);
+        let nested_scope_id = self.context.next_scope_id();
         self.conjunction.nested_patterns.push(NestedPattern::Disjunction(Disjunction::new(nested_scope_id)));
         let disjunction =
             self.conjunction.nested_patterns.last_mut().and_then(NestedPattern::as_disjunction_mut).unwrap();
@@ -171,7 +171,7 @@ impl<'cx, 'reg> ConjunctionBuilder<'cx, 'reg> {
     }
 
     pub fn add_negation(&mut self) -> ConjunctionBuilder<'_, 'reg> {
-        let nested_scope_id = self.context.create_child_scope(self.conjunction.scope_id, ScopeType::Negation);
+        let nested_scope_id = self.context.next_scope_id();
         let negation = Negation::new(nested_scope_id);
         self.conjunction.nested_patterns.push(NestedPattern::Negation(negation));
         let Some(NestedPattern::Negation(negation)) = self.conjunction.nested_patterns.last_mut() else {
@@ -184,31 +184,13 @@ impl<'cx, 'reg> ConjunctionBuilder<'cx, 'reg> {
         &mut self,
         source_span: Option<Span>,
     ) -> Result<ConjunctionBuilder<'_, 'reg>, RepresentationError> {
-        let nested_scope_id = self.context.create_child_scope(self.conjunction.scope_id, ScopeType::Optional);
+        let nested_scope_id = self.context.next_scope_id();
         let optional = Optional::new(nested_scope_id, self.context.next_branch_id());
-        self.validate_optional_not_in_negation(&optional, source_span)?;
         self.conjunction.nested_patterns.push(NestedPattern::Optional(optional));
         let Some(NestedPattern::Optional(optional)) = self.conjunction.nested_patterns.last_mut() else {
             unreachable!()
         };
         Ok(Optional::new_builder(self.context, optional))
-    }
-
-    fn validate_optional_not_in_negation(
-        &self,
-        optional: &Optional,
-        source_span: Option<Span>,
-    ) -> Result<(), RepresentationError> {
-        let mut scope = optional.scope_id();
-        while let Some(parent_scope) = self.context.get_parent_scope(scope) {
-            let parent_scope_type = self.context.get_scope_type(parent_scope);
-            if parent_scope_type == ScopeType::Negation {
-                return Err(RepresentationError::OptionalInNegation { source_span });
-            } else {
-                scope = parent_scope;
-            }
-        }
-        Ok(())
     }
 
     pub(crate) fn compute_and_set_variable_binding_modes(&mut self) {

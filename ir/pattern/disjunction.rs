@@ -140,7 +140,7 @@ impl<'cx, 'reg> DisjunctionBuilder<'cx, 'reg> {
     }
 
     pub fn add_conjunction(&mut self) -> ConjunctionBuilder<'_, 'reg> {
-        let conj_scope_id = self.context.create_child_scope(self.scope_id, ScopeType::Conjunction);
+        let conj_scope_id = self.context.next_scope_id();
         self.disjunction.conjunctions.push(Conjunction::new(conj_scope_id));
         self.disjunction.branch_ids.push(self.context.next_branch_id());
         ConjunctionBuilder::new(self.context, self.disjunction.conjunctions.last_mut().unwrap())
