@@ -200,11 +200,6 @@ typedb_error! {
             variable: String,
             source_span: Option<Span>,
         ),
-        NonInitialInputs(
-            29,
-            "Inputs clauses must be the first clause in a query pipeline.",
-            source_span: Option<Span>,
-        ),
         LabelWithLabel(
             30,
             "Specifying a label constraint on a label is not allowed.",
@@ -306,6 +301,11 @@ typedb_error! {
             53,
             "Optionals are not allowed in negations as this can never return a meaningful result.",
             // source_span: Option<Span>,
+        ),
+        NonInitialInputs(
+            54,
+            "Inputs clauses must be the first clause in a query pipeline.",
+            source_span: Option<Span>,
         ),
         InternalNotAValueBuiltin(
             100,

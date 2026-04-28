@@ -10,10 +10,8 @@ use answer::variable::Variable;
 use compiler::{
     executable::{
         fetch::executable::ExecutableFetch, function::ExecutableFunctionRegistry, pipeline::ExecutableStage,
-        InputsExecutable,
     },
     VariablePosition,
-    executable::{fetch::executable::ExecutableFetch, function::ExecutableFunctionRegistry, pipeline::ExecutableStage},
     query_structure::{ParametrisedPipelineStructure, PipelineStructure},
 };
 use concept::thing::thing_manager::ThingManager;
@@ -21,7 +19,6 @@ use error::typedb_error;
 use ir::pipeline::ParameterRegistry;
 use resource::profile::QueryProfile;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
-use tracing::{event, Level};
 
 use crate::{
     ExecutionInterrupt,
@@ -111,13 +108,10 @@ impl<Snapshot: ReadableSnapshot + 'static> Pipeline<Snapshot, ReadPipelineStage<
         let output_variable_positions = executable_stages.last().unwrap().output_row_mapping();
         let context = ExecutionContext::new_with_profile(snapshot, thing_manager, parameters.clone(), query_profile);
 
-        let initial_iterator =
-            input.map(|row| InitialStage::new_with(row)).unwrap_or_else(|| InitialStage::new_empty());
+        let initial_iterator = InitialStage::new(inputs);
         let initial_iterator = ReadStageIterator::Initial(Box::new(initial_iterator.into_iterator()));
 
         let mut stages: Vec<ReadPipelineStage<Snapshot>> = Vec::with_capacity(executable_stages.len());
-
-        let mut last_stage = ReadPipelineStage::Initial(Box::new(InitialStage::new(context.clone(), inputs)));
         for executable_stage in executable_stages {
             match executable_stage {
                 ExecutableStage::Match(conjunction_executable) => {
@@ -252,10 +246,9 @@ impl<Snapshot: WritableSnapshot + 'static> Pipeline<Snapshot, WritePipelineStage
             ExecutionContext::new_with_profile(Arc::new(snapshot), thing_manager, parameters.clone(), query_profile);
 
         let initial_iterator =
-            WriteStageIterator::Initial(Box::new(InitialIterator::new(crate::batch::FixedBatch::SINGLE_EMPTY_ROW)));
+            WriteStageIterator::Initial(Box::new(InitialIterator::new(inputs)));
 
         let mut stages = Vec::with_capacity(executable_stages.len());
-        let mut last_stage = WritePipelineStage::Initial(Box::new(InitialStage::new(context, inputs)));
         for executable_stage in executable_stages {
             match executable_stage {
                 ExecutableStage::Match(conjunction_executable) => {

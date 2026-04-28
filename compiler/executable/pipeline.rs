@@ -39,7 +39,7 @@ use crate::{
         put::PutExecutable,
         reduce::{ReduceExecutable, ReduceRowsExecutable},
         update::executable::UpdateExecutable,
-        ExecutableCompilationError, InputsExecutable,
+        InputsExecutable,
     },
     query_structure::ParametrisedPipelineStructure,
 };

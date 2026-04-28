@@ -45,10 +45,8 @@ use crate::{
         fetch::{AnnotatedFetch, annotate_fetch},
         function::{
             AnnotatedFunctionSignatures, AnnotatedFunctionSignaturesImpl, AnnotatedPreambleFunctions,
-            AnnotatedSchemaFunctions, FunctionParameterAnnotation, annotate_preamble_functions,
-            annotate_preamble_functions, get_annotations_from_labels, AnnotatedFunctionSignatures,
-            AnnotatedFunctionSignaturesImpl, AnnotatedPreambleFunctions, AnnotatedSchemaFunctions,
-            FunctionParameterAnnotation,
+            AnnotatedSchemaFunctions, FunctionParameterAnnotation,
+            annotate_preamble_functions, get_annotations_from_labels,
         },
         match_inference::infer_types,
         type_annotations::{BlockAnnotations, ConstraintTypeAnnotations, TypeAnnotations},

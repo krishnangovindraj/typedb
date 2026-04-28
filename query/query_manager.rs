@@ -6,23 +6,23 @@
 
 use std::{collections::HashSet, sync::Arc};
 
-use answer::{variable_value::VariableValue, Concept};
+use answer::{Concept, variable_value::VariableValue};
 use compiler::{
+    VariablePosition,
     annotation::{
         expression::compiled_expression::ExpressionValueType,
         function::FunctionParameterAnnotation,
-        pipeline::{annotate_preamble_and_pipeline, AnnotatedPipeline},
+        pipeline::{AnnotatedPipeline, annotate_preamble_and_pipeline},
     },
     executable::{
-        pipeline::{compile_pipeline_and_functions, ExecutablePipeline, ExecutableStage},
         InputsExecutable,
+        pipeline::{ExecutablePipeline, ExecutableStage, compile_pipeline_and_functions},
     },
     query_structure::{extract_pipeline_structure_from, extract_query_structure_from},
     transformation::transform::apply_transformations,
-    VariablePosition,
 };
 use concept::{thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
-use encoding::value::{value::Value, ValueEncodable};
+use encoding::value::{ValueEncodable, value::Value};
 use executor::{
     batch::Batch,
     pipeline::{
@@ -32,6 +32,7 @@ use executor::{
 };
 use function::function_manager::{FunctionManager, ReadThroughFunctionSignatureIndex, validate_no_cycles};
 use ir::{
+    LiteralParseError, RepresentationError,
     pattern::Vertex,
     pipeline::{
         ParameterRegistry, VariableRegistry,
@@ -40,10 +41,9 @@ use ir::{
         function_signature::{FunctionID, HashMapFunctionSignatureIndex},
     },
     translation::{
-        literal::{translate_literal, FromTypeQLLiteral},
+        literal::{FromTypeQLLiteral, translate_literal},
         pipeline::{TranslatedInputs, TranslatedPipeline, TranslatedStage},
     },
-    LiteralParseError, RepresentationError,
 };
 use resource::{
     constants::query::MAX_PIPELINE_STAGES,
@@ -52,7 +52,7 @@ use resource::{
 };
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 use tracing::{Level, event};
-use typeql::{query::SchemaQuery, Literal};
+use typeql::{Literal, query::SchemaQuery};
 
 use crate::{
     analyse::{
@@ -478,11 +478,7 @@ fn translate_and_validate_inputs(
                 .map_or(false, |allowed_types| allowed_types.contains(&thing.type_())),
             _ => false,
         });
-        if types_good {
-            Ok(())
-        } else {
-            Err(Box::new(QueryError::BadInput {}))
-        }
+        if types_good { Ok(()) } else { Err(Box::new(QueryError::BadInput {})) }
     })?;
     Ok(batch)
 }

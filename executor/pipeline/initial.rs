@@ -16,15 +16,14 @@ use crate::{
     ExecutionInterrupt, Provenance,
 };
 
-pub struct InitialStage<Snapshot> {
+pub struct InitialStage {
     initial_batch: Batch,
 }
 
-impl<Snapshot> InitialStage<Snapshot> {
+impl InitialStage {
     pub fn new(initial_batch: Batch) -> Self {
-        Self { context, initial_batch }
+        Self { initial_batch }
     }
-}
 
     pub(crate) fn into_iterator(self) -> InitialIterator {
         InitialIterator::new(self.initial_batch)
@@ -37,7 +36,7 @@ pub struct InitialIterator {
 }
 
 impl InitialIterator {
-    fn new(batch: Batch) -> Self {
+    pub(crate) fn new(batch: Batch) -> Self {
         Self { iterator: Box::new(batch.into_iterator()), index: 0 }
     }
 }

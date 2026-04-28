@@ -20,9 +20,9 @@ use typeql::{
 };
 
 use crate::{
-    pattern::variable_category::VariableCategory,
     RepresentationError,
     pattern::Pattern,
+    pattern::variable_category::VariableCategory,
     pipeline::{
         ParameterRegistry, VariableRegistry,
         block::{Block, BlockBuilder},
