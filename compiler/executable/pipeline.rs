@@ -16,13 +16,14 @@ use ir::{
     pattern::{Pattern, Vertex, conjunction::Conjunction, nested_pattern::NestedPattern},
     pipeline::{VariableRegistry, function_signature::FunctionID, reduce::AssignedReduction},
 };
+use itertools::Itertools;
 
 use crate::{
     VariablePosition,
     annotation::{
         fetch::{AnnotatedFetch, AnnotatedFetchObject, AnnotatedFetchSome},
-        function::{AnnotatedPreambleFunctions, AnnotatedSchemaFunctions},
-        pipeline::AnnotatedStage,
+        function::{AnnotatedPreambleFunctions, AnnotatedSchemaFunctions, FunctionParameterAnnotation},
+        pipeline::{AnnotatedInputs, AnnotatedStage},
     },
     executable::{
         ExecutableCompilationError,
@@ -34,9 +35,11 @@ use crate::{
         modifiers::{
             DistinctExecutable, LimitExecutable, OffsetExecutable, RequireExecutable, SelectExecutable, SortExecutable,
         },
+        next_executable_id,
         put::PutExecutable,
         reduce::{ReduceExecutable, ReduceRowsExecutable},
         update::executable::UpdateExecutable,
+        ExecutableCompilationError, InputsExecutable,
     },
     query_structure::ParametrisedPipelineStructure,
 };
@@ -76,6 +79,7 @@ impl<'a> IntoIterator for &'a TypePopulations {
 #[derive(Debug, Clone)]
 pub struct ExecutablePipeline {
     pub executable_functions: ExecutableFunctionRegistry,
+    pub executable_inputs: InputsExecutable,
     pub executable_stages: Vec<ExecutableStage>,
     pub executable_fetch: Option<Arc<ExecutableFetch>>,
     pub pipeline_structure: Arc<ParametrisedPipelineStructure>,
@@ -144,9 +148,9 @@ pub fn compile_pipeline_and_functions(
     variable_registry: &VariableRegistry,
     annotated_schema_functions: &AnnotatedSchemaFunctions,
     annotated_preamble: AnnotatedPreambleFunctions,
+    annotated_inputs: AnnotatedInputs,
     annotated_stages: Vec<AnnotatedStage>,
     annotated_fetch: Option<AnnotatedFetch>,
-    input_variables: &HashSet<Variable>,
     pipeline_structure: Arc<ParametrisedPipelineStructure>,
 ) -> Result<ExecutablePipeline, ExecutableCompilationError> {
     // TODO: we could cache compiled schema functions so we dont have to re-compile with every query here
@@ -176,18 +180,29 @@ pub fn compile_pipeline_and_functions(
 
     let schema_and_preamble_functions: ExecutableFunctionRegistry =
         ExecutableFunctionRegistry::new(arced_executable_schema_functions, executable_preamble_functions);
+    let executable_inputs = InputsExecutable {
+        executable_id: next_executable_id(),
+        variables: annotated_inputs.variables,
+        annotations: annotated_inputs.annotations,
+    };
     let (_input_positions, executable_stages, executable_fetch, type_populations) = compile_stages_and_fetch(
         statistics,
         variable_registry,
         &schema_and_preamble_functions,
         &annotated_stages,
         annotated_fetch,
-        input_variables,
+        executable_inputs.variables.as_slice(),
     )?;
+    debug_assert!(executable_inputs
+        .variables
+        .iter()
+        .enumerate()
+        .all(|(i, v)| { _input_positions.get(v) == Some(&VariablePosition::new(i as u32)) }));
     debug_assert!(!executable_stages.is_empty());
     Ok(ExecutablePipeline {
         pipeline_structure,
         executable_functions: schema_and_preamble_functions,
+        executable_inputs,
         executable_stages,
         executable_fetch,
         type_populations,
@@ -200,7 +215,7 @@ pub fn compile_stages_and_fetch(
     available_functions: &ExecutableFunctionRegistry,
     annotated_stages: &[AnnotatedStage],
     annotated_fetch: Option<AnnotatedFetch>,
-    input_variables: &HashSet<Variable>,
+    input_variables: &[Variable],
 ) -> Result<
     (HashMap<Variable, VariablePosition>, Vec<ExecutableStage>, Option<Arc<ExecutableFetch>>, TypePopulations),
     ExecutableCompilationError,

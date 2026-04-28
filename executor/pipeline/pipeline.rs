@@ -8,6 +8,10 @@ use std::{collections::HashMap, sync::Arc};
 
 use answer::variable::Variable;
 use compiler::{
+    executable::{
+        fetch::executable::ExecutableFetch, function::ExecutableFunctionRegistry, pipeline::ExecutableStage,
+        InputsExecutable,
+    },
     VariablePosition,
     executable::{fetch::executable::ExecutableFetch, function::ExecutableFunctionRegistry, pipeline::ExecutableStage},
     query_structure::{ParametrisedPipelineStructure, PipelineStructure},
@@ -17,9 +21,11 @@ use error::typedb_error;
 use ir::pipeline::ParameterRegistry;
 use resource::profile::QueryProfile;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
+use tracing::{event, Level};
 
 use crate::{
     ExecutionInterrupt,
+    batch::Batch,
     document::ConceptDocument,
     pipeline::{
         PipelineExecutionError,
@@ -99,7 +105,7 @@ impl<Snapshot: ReadableSnapshot + 'static> Pipeline<Snapshot, ReadPipelineStage<
         executable_stages: &[ExecutableStage],
         executable_fetch: Option<Arc<ExecutableFetch>>,
         parameters: Arc<ParameterRegistry>,
-        input: Option<MaybeOwnedRow<'_>>,
+        inputs: Batch,
         query_profile: Arc<QueryProfile>,
     ) -> Result<Self, Box<PipelineError>> {
         let output_variable_positions = executable_stages.last().unwrap().output_row_mapping();
@@ -111,6 +117,7 @@ impl<Snapshot: ReadableSnapshot + 'static> Pipeline<Snapshot, ReadPipelineStage<
 
         let mut stages: Vec<ReadPipelineStage<Snapshot>> = Vec::with_capacity(executable_stages.len());
 
+        let mut last_stage = ReadPipelineStage::Initial(Box::new(InitialStage::new(context.clone(), inputs)));
         for executable_stage in executable_stages {
             match executable_stage {
                 ExecutableStage::Match(conjunction_executable) => {
@@ -237,6 +244,7 @@ impl<Snapshot: WritableSnapshot + 'static> Pipeline<Snapshot, WritePipelineStage
         executable_stages: Vec<ExecutableStage>,
         executable_fetch: Option<Arc<ExecutableFetch>>,
         parameters: Arc<ParameterRegistry>,
+        inputs: Batch,
         query_profile: Arc<QueryProfile>,
     ) -> Self {
         let output_variable_positions = executable_stages.last().unwrap().output_row_mapping();
@@ -247,6 +255,7 @@ impl<Snapshot: WritableSnapshot + 'static> Pipeline<Snapshot, WritePipelineStage
             WriteStageIterator::Initial(Box::new(InitialIterator::new(crate::batch::FixedBatch::SINGLE_EMPTY_ROW)));
 
         let mut stages = Vec::with_capacity(executable_stages.len());
+        let mut last_stage = WritePipelineStage::Initial(Box::new(InitialStage::new(context, inputs)));
         for executable_stage in executable_stages {
             match executable_stage {
                 ExecutableStage::Match(conjunction_executable) => {
