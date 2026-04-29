@@ -178,10 +178,8 @@ pub fn compile_pipeline_and_functions(
 
     let schema_and_preamble_functions: ExecutableFunctionRegistry =
         ExecutableFunctionRegistry::new(arced_executable_schema_functions, executable_preamble_functions);
-    let executable_inputs = PipelineInputs {
-        variables: annotated_inputs.variables,
-        expected_types: annotated_inputs.expected_types,
-    };
+    let executable_inputs =
+        PipelineInputs { variables: annotated_inputs.variables, expected_types: annotated_inputs.expected_types };
     let (_input_positions, executable_stages, executable_fetch, type_populations) = compile_stages_and_fetch(
         statistics,
         variable_registry,
