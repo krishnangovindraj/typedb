@@ -129,7 +129,7 @@ pub mod query_util {
         },
     };
     use function::function_manager::FunctionManager;
-    use query::query_manager::{PipelinePayload, QueryManager};
+    use query::query_manager::{QueryInputs, QueryManager};
     use storage::{durability_client::WALClient, snapshot::WriteSnapshot};
     use typeql::query::Pipeline;
 
@@ -137,7 +137,8 @@ pub mod query_util {
 
     pub fn execute_read_pipeline(
         tx: TransactionRead<WALClient>,
-        pipeline: PipelinePayload,
+        pipeline: &Pipeline,
+        inputs: Option<QueryInputs>,
         source_query: &str,
     ) -> (TransactionRead<WALClient>, Result<Vec<HashMap<String, VariableValue<'static>>>, Box<PipelineExecutionError>>)
     {
@@ -149,6 +150,7 @@ pub mod query_util {
                 tx.thing_manager.clone(),
                 &tx.function_manager,
                 pipeline,
+                inputs,
                 source_query,
             )
             .unwrap();
@@ -174,14 +176,23 @@ pub mod query_util {
         thing_manager: Arc<ThingManager>,
         function_manager: &FunctionManager,
         query_manager: &QueryManager,
-        pipeline: PipelinePayload,
+        pipeline: &Pipeline,
+        inputs: Option<QueryInputs>,
         source_query: &str,
     ) -> (
         Result<Vec<HashMap<String, VariableValue<'static>>>, Box<PipelineExecutionError>>,
         Arc<WriteSnapshot<WALClient>>,
     ) {
         let prepared_pipeline = query_manager
-            .prepare_write_pipeline(snapshot, type_manager, thing_manager, function_manager, pipeline, source_query)
+            .prepare_write_pipeline(
+                snapshot,
+                type_manager,
+                thing_manager,
+                function_manager,
+                pipeline,
+                inputs,
+                source_query,
+            )
             .unwrap();
 
         let named_outputs = prepared_pipeline.rows_positions().unwrap().clone();

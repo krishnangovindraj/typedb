@@ -14,56 +14,6 @@ use std::{
     time::Duration,
 };
 
-use answer::{variable_value::VariableValue, Concept, Thing};
-use compiler::query_structure::PipelineStructure;
-use concept::{thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
-use database::{
-    database_manager::DatabaseManager,
-    query::{
-        StreamQueryOutputDescriptor, WriteQueryAnswer, WriteQueryResult, execute_schema_query,
-        execute_write_query_in_schema, execute_write_query_in_write,
-    },
-    transaction::{TransactionRead, TransactionSchema, TransactionWrite},
-};
-use diagnostics::{
-    diagnostics_manager::DiagnosticsManager,
-    metrics::{ActionKind, ClientEndpoint, LoadKind},
-};
-use executor::{
-    ExecutionInterrupt, InterruptType,
-    batch::Batch,
-    document::ConceptDocument,
-    pipeline::{PipelineExecutionError, pipeline::Pipeline, stage::ReadPipelineStage},
-};
-use ir::pipeline::ParameterRegistry;
-use itertools::{Either, Itertools};
-use lending_iterator::LendingIterator;
-use options::QueryOptions;
-use query::{error::QueryError, query_manager::PipelinePayload};
-use resource::profile::{EncodingProfile, QueryProfile, StorageCounters};
-use storage::snapshot::ReadableSnapshot;
-use tokio::{
-    sync::{
-        broadcast,
-        mpsc::{Receiver, Sender, channel},
-        watch,
-    },
-    task::{JoinHandle, spawn_blocking},
-    time::{Instant, timeout},
-};
-use tokio_stream::StreamExt;
-use tonic::{Status, Streaming};
-use tracing::{Level, event};
-use typedb_protocol::{
-    query::{
-        req::query_input_entry::Entry,
-        Type::{Read, Write},
-    },
-    transaction::{Server as ProtocolServer, stream_signal::Req},
-};
-use typeql::{parse_query, query::SchemaQuery};
-use uuid::Uuid;
-
 use crate::service::{
     IncludeInvolvedBlocks,
     grpc::{
@@ -89,6 +39,58 @@ use crate::service::{
         Transaction, TransactionServiceError, init_transaction_timeout, is_write_pipeline, with_readable_transaction,
     },
 };
+use answer::{Concept, Thing, variable_value::VariableValue};
+use compiler::VariablePosition;
+use compiler::query_structure::PipelineStructure;
+use concept::{thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
+use database::{
+    database_manager::DatabaseManager,
+    query::{
+        StreamQueryOutputDescriptor, WriteQueryAnswer, WriteQueryResult, execute_schema_query,
+        execute_write_query_in_schema, execute_write_query_in_write,
+    },
+    transaction::{TransactionRead, TransactionSchema, TransactionWrite},
+};
+use diagnostics::{
+    diagnostics_manager::DiagnosticsManager,
+    metrics::{ActionKind, ClientEndpoint, LoadKind},
+};
+use error::todo_must_implement;
+use executor::{
+    ExecutionInterrupt, InterruptType,
+    batch::Batch,
+    document::ConceptDocument,
+    pipeline::{PipelineExecutionError, pipeline::Pipeline, stage::ReadPipelineStage},
+};
+use ir::pipeline::ParameterRegistry;
+use itertools::{Either, Itertools};
+use lending_iterator::LendingIterator;
+use options::QueryOptions;
+use query::error::QueryError;
+use query::query_manager::QueryInputs;
+use resource::profile::{EncodingProfile, QueryProfile, StorageCounters};
+use storage::snapshot::ReadableSnapshot;
+use tokio::{
+    sync::{
+        broadcast,
+        mpsc::{Receiver, Sender, channel},
+        watch,
+    },
+    task::{JoinHandle, spawn_blocking},
+    time::{Instant, timeout},
+};
+use tokio_stream::StreamExt;
+use tonic::{Status, Streaming};
+use tracing::{Level, event};
+use typedb_protocol::{
+    query::{
+        Type::{Read, Write},
+        req::query_input_entry::Entry,
+    },
+    transaction::{Server as ProtocolServer, stream_signal::Req},
+};
+use typeql::{parse_query, query::SchemaQuery};
+use uuid::Uuid;
 
 macro_rules! unwrap_or_execute_and_return {
     ($match_: expr, |$err:pat_param| $err_mapper: block) => {{
@@ -119,7 +121,7 @@ pub(crate) struct TransactionService {
 
     is_open: bool,
     transaction: Option<Transaction>,
-    query_queue: VecDeque<(Uuid, QueueOptions, PipelinePayload, String)>,
+    query_queue: VecDeque<(Uuid, QueueOptions, typeql::query::Pipeline, Option<QueryInputs>, String)>,
     query_responders: HashMap<Uuid, (JoinHandle<()>, QueryStreamTransmitter)>,
     running_write_query: Option<(Uuid, JoinHandle<(Transaction, WriteQueryResult)>)>,
 }
@@ -727,9 +729,10 @@ impl TransactionService {
 
     async fn cancel_queued_read_queries(&mut self, interrupt: InterruptType) -> ControlFlow<(), ()> {
         let mut write_queries = VecDeque::with_capacity(self.query_queue.len());
-        for (req_id, query_options, pipeline, source_query) in self.query_queue.drain(0..self.query_queue.len()) {
-            if query_options.is_query() && is_write_pipeline(&pipeline.parsed) {
-                write_queries.push_back((req_id, query_options, pipeline, source_query));
+        for (req_id, query_options, pipeline, inputs, source_query) in self.query_queue.drain(0..self.query_queue.len())
+        {
+            if query_options.is_query() && is_write_pipeline(&pipeline) {
+                write_queries.push_back((req_id, query_options, pipeline, inputs, source_query));
             } else {
                 Self::respond_query_response(
                     &self.response_sender,
@@ -788,8 +791,8 @@ impl TransactionService {
 
     async fn cancel_queued_write_queries(&mut self, interrupt: InterruptType) -> ControlFlow<(), ()> {
         let mut read_queries = VecDeque::with_capacity(self.query_queue.len());
-        for (req_id, options, pipeline, source_query) in self.query_queue.drain(0..self.query_queue.len()) {
-            if options.is_query() && is_write_pipeline(&pipeline.parsed) {
+        for (req_id, options, pipeline, inputs, source_query) in self.query_queue.drain(0..self.query_queue.len()) {
+            if options.is_query() && is_write_pipeline(&pipeline) {
                 Self::respond_query_response(
                     &self.response_sender,
                     req_id,
@@ -799,7 +802,7 @@ impl TransactionService {
                 )
                 .await?;
             } else {
-                read_queries.push_back((req_id, options, pipeline, source_query));
+                read_queries.push_back((req_id, options, pipeline, inputs, source_query));
             }
         }
         self.query_queue = read_queries;
@@ -809,14 +812,14 @@ impl TransactionService {
     async fn finish_queued_write_queries(&mut self, interrupt: InterruptType) -> Result<(), Status> {
         self.finish_running_write_query_no_transmit(interrupt).await?;
         let requests: Vec<_> = self.query_queue.drain(0..self.query_queue.len()).collect();
-        for (req_id, query_queue_options, pipeline, source_query) in requests.into_iter() {
-            match (query_queue_options, is_write_pipeline(&pipeline.parsed)) {
+        for (req_id, query_queue_options, pipeline, inputs, source_query) in requests.into_iter() {
+            match (query_queue_options, is_write_pipeline(&pipeline)) {
                 (QueueOptions::Query(query_options), true) => {
-                    self.run_write_query(req_id, query_options, pipeline, source_query).await;
+                    self.run_write_query(req_id, query_options, pipeline, inputs, source_query).await;
                     self.finish_running_write_query_no_transmit(interrupt).await?;
                 }
                 (queue_options, _) => {
-                    self.query_queue.push_back((req_id, queue_options, pipeline, source_query));
+                    self.query_queue.push_back((req_id, queue_options, pipeline, inputs, source_query));
                 }
             }
         }
@@ -826,17 +829,18 @@ impl TransactionService {
     async fn may_accept_from_queue(&mut self) {
         debug_assert!(self.running_write_query.is_none());
         // unblock requests until the first write request, which we begin executing if it exists
-        while let Some((req_id, queue_options, query_pipeline, source_query)) = self.query_queue.pop_front() {
-            match (queue_options, is_write_pipeline(&query_pipeline.parsed)) {
+        while let Some((req_id, queue_options, query_pipeline, inputs, source_query)) = self.query_queue.pop_front() {
+            match (queue_options, is_write_pipeline(&query_pipeline)) {
                 (QueueOptions::Analyze, _) => {
-                    self.run_analyse_query(req_id, query_pipeline.parsed, source_query).await;
+                    debug_assert!(inputs.is_none());
+                    self.run_analyse_query(req_id, query_pipeline, source_query).await;
                 }
                 (QueueOptions::Query(query_options), true) => {
-                    self.run_write_query(req_id, query_options, query_pipeline, source_query).await;
+                    self.run_write_query(req_id, query_options, query_pipeline, inputs, source_query).await;
                     return;
                 }
                 (QueueOptions::Query(query_options), false) => {
-                    self.run_and_activate_read_transmitter(req_id, query_options, query_pipeline, source_query);
+                    self.run_and_activate_read_transmitter(req_id, query_options, query_pipeline, inputs, source_query);
                 }
             }
         }
@@ -863,8 +867,7 @@ impl TransactionService {
             return Ok(Self::respond_analyze_response(&self.response_sender, req_id, response).await);
         };
         if !self.query_queue.is_empty() || self.running_write_query.is_some() {
-            let payload = PipelinePayload { parsed: pipeline, inputs: None };
-            self.query_queue.push_back((req_id, QueueOptions::Analyze, payload, query));
+            self.query_queue.push_back((req_id, QueueOptions::Analyze, pipeline, None, query));
             // queued queries are not handled yet so there will be no query response yet
             Ok(Continue(()))
         } else {
@@ -904,24 +907,36 @@ impl TransactionService {
                 Ok(Self::respond_query_response(&self.response_sender, req_id, response).await)
             }
             typeql::query::QueryStructure::Pipeline(pipeline) => {
-                let payload = PipelinePayload { parsed: pipeline, inputs: query_inputs_from_proto(query_req.input) };
+                let inputs = query_inputs_from_proto(query_req.input);
                 #[allow(clippy::collapsible_else_if)]
-                if is_write_pipeline(&payload.parsed) {
+                if is_write_pipeline(&pipeline) {
                     if !self.query_queue.is_empty() || self.running_write_query.is_some() {
-                        self.query_queue.push_back((req_id, QueueOptions::Query(query_options), payload, query));
+                        self.query_queue.push_back((
+                            req_id,
+                            QueueOptions::Query(query_options),
+                            pipeline,
+                            inputs,
+                            query,
+                        ));
                         // queued queries are not handled yet so there will be no query response yet
                         Ok(Continue(()))
                     } else {
-                        self.run_write_query(req_id, query_options, payload, query).await;
+                        self.run_write_query(req_id, query_options, pipeline, inputs, query).await;
                         Ok(Continue(()))
                     }
                 } else {
                     if !self.query_queue.is_empty() || self.running_write_query.is_some() {
-                        self.query_queue.push_back((req_id, QueueOptions::Query(query_options), payload, query));
+                        self.query_queue.push_back((
+                            req_id,
+                            QueueOptions::Query(query_options),
+                            pipeline,
+                            inputs,
+                            query,
+                        ));
                         // queued queries are not handled yet so there will be no query response yet
                         Ok(Continue(()))
                     } else {
-                        self.run_and_activate_read_transmitter(req_id, query_options, payload, query);
+                        self.run_and_activate_read_transmitter(req_id, query_options, pipeline, inputs, query);
                         // running read queries have no response on the main loop and will respond asynchronously
                         Ok(Continue(()))
                     }
@@ -999,12 +1014,13 @@ impl TransactionService {
         &mut self,
         req_id: Uuid,
         query_options: QueryOptions,
-        pipeline: PipelinePayload,
+        pipeline: typeql::query::Pipeline,
+        inputs: Option<QueryInputs>,
         source_query: String,
     ) {
         debug_assert!(self.running_write_query.is_none());
         self.interrupt_and_close_responders(InterruptType::WriteQueryExecution).await;
-        let handle = match self.spawn_blocking_execute_write_query(query_options, pipeline, source_query) {
+        let handle = match self.spawn_blocking_execute_write_query(query_options, pipeline, inputs, source_query) {
             Ok(handle) => {
                 // running write queries have no valid response yet (until they finish) and will respond asynchronously
                 handle
@@ -1041,12 +1057,13 @@ impl TransactionService {
         &mut self,
         req_id: Uuid,
         query_options: QueryOptions,
-        pipeline: PipelinePayload,
+        pipeline: typeql::query::Pipeline,
+        inputs: Option<QueryInputs>,
         source_query: String,
     ) {
         let prefetch_size = query_options.prefetch_size;
         let (sender, receiver) = channel(prefetch_size);
-        let worker_handle = self.blocking_read_query_worker(sender, query_options, pipeline, source_query);
+        let worker_handle = self.blocking_read_query_worker(sender, query_options, pipeline, inputs, source_query);
         let stream_transmitter = QueryStreamTransmitter::start_new(
             self.response_sender.clone(),
             receiver,
@@ -1060,7 +1077,8 @@ impl TransactionService {
     fn spawn_blocking_execute_write_query(
         &mut self,
         query_options: QueryOptions,
-        pipeline: PipelinePayload,
+        pipeline: typeql::query::Pipeline,
+        inputs: Option<QueryInputs>,
         source_query: String,
     ) -> Result<JoinHandle<(Transaction, WriteQueryResult)>, TransactionServiceError> {
         debug_assert!(self.running_write_query.is_none());
@@ -1068,13 +1086,25 @@ impl TransactionService {
         let interrupt = self.query_interrupt_receiver.clone();
         match self.transaction.take() {
             Some(Transaction::Schema(schema_transaction)) => Ok(spawn_blocking(move || {
-                let (transaction, result) =
-                    execute_write_query_in_schema(schema_transaction, query_options, pipeline, source_query, interrupt);
+                let (transaction, result) = execute_write_query_in_schema(
+                    schema_transaction,
+                    query_options,
+                    pipeline,
+                    None,
+                    source_query,
+                    interrupt,
+                );
                 (Transaction::Schema(transaction), result)
             })),
             Some(Transaction::Write(write_transaction)) => Ok(spawn_blocking(move || {
-                let (transaction, result) =
-                    execute_write_query_in_write(write_transaction, query_options, pipeline, source_query, interrupt);
+                let (transaction, result) = execute_write_query_in_write(
+                    write_transaction,
+                    query_options,
+                    pipeline,
+                    None,
+                    source_query,
+                    interrupt,
+                );
                 (Transaction::Write(transaction), result)
             })),
             Some(Transaction::Read(transaction)) => {
@@ -1269,7 +1299,9 @@ impl TransactionService {
         &self,
         sender: Sender<StreamQueryResponse>,
         query_options: QueryOptions,
-        pipeline: PipelinePayload,
+        pipeline: typeql::query::Pipeline,
+        inputs: Option<QueryInputs>,
+
         source_query: String,
     ) -> JoinHandle<()> {
         debug_assert!(self.query_queue.is_empty() && self.running_write_query.is_none() && self.transaction.is_some());
@@ -1288,7 +1320,8 @@ impl TransactionService {
                     &type_manager,
                     thing_manager.clone(),
                     &function_manager,
-                    pipeline,
+                    &pipeline,
+                    None,
                     &source_query,
                 );
                 let pipeline = unwrap_or_execute_and_return!(pipeline, |err| {
@@ -1509,25 +1542,21 @@ impl TransactionService {
     }
 }
 
-fn query_inputs_from_proto(
-    inputs: Option<typedb_protocol::query::req::QueryInput>,
-) -> Option<Vec<Vec<Option<String>>>> {
-    inputs.map(|i| {
-        i.rows
-            .into_iter()
-            .map(|row| {
-                row.entry
-                    .into_iter()
-                    .map(|entry| {
-                        entry.entry.and_then(|entry| match entry {
-                            Entry::Empty(_) => None,
-                            Entry::UnparsedValue(str) => Some(str),
-                        })
-                    })
-                    .collect()
+fn query_inputs_from_proto(inputs: Option<typedb_protocol::query::req::QueryInput>) -> Option<Batch> {
+    let rows = inputs?.rows;
+    let len = rows.len();
+    let width = rows.first().map(|row| row.entry.len() as u32).unwrap_or(0);
+    let mut batch = Batch::new(width, len);
+    rows.into_iter().for_each(|row| {
+        batch.append(|mut write_to| {
+            let entries = row.entry;
+            entries.into_iter().enumerate().for_each(|(column, entry)| {
+                let value: VariableValue<'static> = todo_must_implement!("To variableValue");
+                write_to.set(VariablePosition::new(column as u32), value)
             })
-            .collect()
-    })
+        });
+    });
+    Some(batch)
 }
 
 #[derive(Debug)]

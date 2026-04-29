@@ -35,11 +35,9 @@ use crate::{
         modifiers::{
             DistinctExecutable, LimitExecutable, OffsetExecutable, RequireExecutable, SelectExecutable, SortExecutable,
         },
-        next_executable_id,
         put::PutExecutable,
         reduce::{ReduceExecutable, ReduceRowsExecutable},
         update::executable::UpdateExecutable,
-        InputsExecutable,
     },
     query_structure::ParametrisedPipelineStructure,
 };
@@ -79,7 +77,7 @@ impl<'a> IntoIterator for &'a TypePopulations {
 #[derive(Debug, Clone)]
 pub struct ExecutablePipeline {
     pub executable_functions: ExecutableFunctionRegistry,
-    pub executable_inputs: InputsExecutable,
+    pub expected_inputs: ExecutablePipelineInputs,
     pub executable_stages: Vec<ExecutableStage>,
     pub executable_fetch: Option<Arc<ExecutableFetch>>,
     pub pipeline_structure: Arc<ParametrisedPipelineStructure>,
@@ -180,10 +178,9 @@ pub fn compile_pipeline_and_functions(
 
     let schema_and_preamble_functions: ExecutableFunctionRegistry =
         ExecutableFunctionRegistry::new(arced_executable_schema_functions, executable_preamble_functions);
-    let executable_inputs = InputsExecutable {
-        executable_id: next_executable_id(),
+    let executable_inputs = ExecutablePipelineInputs {
         variables: annotated_inputs.variables,
-        annotations: annotated_inputs.annotations,
+        expected_types: annotated_inputs.expected_types,
     };
     let (_input_positions, executable_stages, executable_fetch, type_populations) = compile_stages_and_fetch(
         statistics,
@@ -193,16 +190,18 @@ pub fn compile_pipeline_and_functions(
         annotated_fetch,
         executable_inputs.variables.as_slice(),
     )?;
-    debug_assert!(executable_inputs
-        .variables
-        .iter()
-        .enumerate()
-        .all(|(i, v)| { _input_positions.get(v) == Some(&VariablePosition::new(i as u32)) }));
+    debug_assert!(
+        executable_inputs
+            .variables
+            .iter()
+            .enumerate()
+            .all(|(i, v)| { _input_positions.get(v) == Some(&VariablePosition::new(i as u32)) })
+    );
     debug_assert!(!executable_stages.is_empty());
     Ok(ExecutablePipeline {
         pipeline_structure,
         executable_functions: schema_and_preamble_functions,
-        executable_inputs,
+        expected_inputs: executable_inputs,
         executable_stages,
         executable_fetch,
         type_populations,
@@ -596,5 +595,21 @@ fn find_referenced_functions_in_fetch(
                 }
             }
         })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ExecutablePipelineInputs {
+    pub variables: Vec<Variable>,
+    pub expected_types: Vec<FunctionParameterAnnotation>,
+}
+
+impl ExecutablePipelineInputs {
+    pub(crate) fn new(variables: Vec<Variable>, expected_types: Vec<FunctionParameterAnnotation>) -> Self {
+        Self { variables, expected_types }
+    }
+
+    fn row_mapping(&self) -> HashMap<Variable, VariablePosition> {
+        self.variables.iter().cloned().enumerate().map(|(i, v)| (v, VariablePosition::new(i as u32))).collect()
     }
 }

@@ -4,22 +4,14 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::{
-    collections::HashMap,
-    sync::atomic::{AtomicU64, Ordering},
-};
+use std::sync::atomic::{AtomicU64, Ordering};
 
-use answer::variable::Variable;
 use error::typedb_error;
 use ir::pattern::constraint::Comparator;
 use typeql::common::Span;
 
-use crate::{
-    annotation::{function::FunctionParameterAnnotation, type_annotations::TypeAnnotations},
-    executable::{
-        fetch::executable::FetchCompilationError, insert::TypeSource, match_::planner::ConjunctionCompilationError,
-    },
-    VariablePosition,
+use crate::executable::{
+    fetch::executable::FetchCompilationError, insert::TypeSource, match_::planner::ConjunctionCompilationError,
 };
 
 pub mod delete;
@@ -133,22 +125,5 @@ typedb_error! {
             variable: String,
             source_span: Option<Span>,
         ),
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct InputsExecutable {
-    pub executable_id: u64,
-    pub variables: Vec<Variable>,
-    pub annotations: TypeAnnotations,
-}
-
-impl InputsExecutable {
-    pub(crate) fn new(variables: Vec<Variable>, types: TypeAnnotations) -> Self {
-        Self { executable_id: next_executable_id(), annotations: types, variables }
-    }
-
-    fn output_row_mapping(&self) -> HashMap<Variable, VariablePosition> {
-        self.variables.iter().cloned().enumerate().map(|(i, v)| (v, VariablePosition::new(i as u32))).collect()
     }
 }

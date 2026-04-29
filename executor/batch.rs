@@ -208,6 +208,10 @@ impl Batch {
         this
     }
 
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
     pub fn len(&self) -> usize {
         debug_assert!(self.multiplicities.len() * self.width as usize == self.data.len());
         self.multiplicities.len()

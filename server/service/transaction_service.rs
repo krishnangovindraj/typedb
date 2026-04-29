@@ -12,7 +12,7 @@ use database::transaction::{
 use diagnostics::metrics::LoadKind;
 use error::typedb_error;
 use executor::{InterruptType, pipeline::PipelineExecutionError};
-use query::{error::QueryError, query_manager::PipelinePayload};
+use query::error::QueryError;
 use resource::constants::server::DEFAULT_TRANSACTION_TIMEOUT_MILLIS;
 use storage::durability_client::WALClient;
 use tokio::time::Instant;
@@ -38,7 +38,6 @@ macro_rules! with_readable_transaction {
     }}
 }
 pub(crate) use with_readable_transaction;
-
 impl Transaction {
     pub fn load_kind(&self) -> LoadKind {
         match self {
