@@ -56,17 +56,12 @@ use ir::{
 use storage::snapshot::ReadableSnapshot;
 use typeql::common::Span;
 
+pub type AnnotatedInputs = crate::executable::pipeline::PipelineInputs;
 pub struct AnnotatedPipeline {
     pub annotated_preamble: AnnotatedPreambleFunctions,
     pub annotated_inputs: AnnotatedInputs,
     pub annotated_stages: Vec<AnnotatedStage>,
     pub annotated_fetch: Option<AnnotatedFetch>,
-}
-
-#[derive(Debug, Clone)]
-pub struct AnnotatedInputs {
-    pub variables: Vec<Variable>,
-    pub expected_types: Vec<FunctionParameterAnnotation>,
 }
 
 #[derive(Debug, Clone)]

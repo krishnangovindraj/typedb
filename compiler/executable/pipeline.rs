@@ -77,7 +77,7 @@ impl<'a> IntoIterator for &'a TypePopulations {
 #[derive(Debug, Clone)]
 pub struct ExecutablePipeline {
     pub executable_functions: ExecutableFunctionRegistry,
-    pub expected_inputs: ExecutablePipelineInputs,
+    pub executable_inputs: PipelineInputs,
     pub executable_stages: Vec<ExecutableStage>,
     pub executable_fetch: Option<Arc<ExecutableFetch>>,
     pub pipeline_structure: Arc<ParametrisedPipelineStructure>,
@@ -178,7 +178,7 @@ pub fn compile_pipeline_and_functions(
 
     let schema_and_preamble_functions: ExecutableFunctionRegistry =
         ExecutableFunctionRegistry::new(arced_executable_schema_functions, executable_preamble_functions);
-    let executable_inputs = ExecutablePipelineInputs {
+    let executable_inputs = PipelineInputs {
         variables: annotated_inputs.variables,
         expected_types: annotated_inputs.expected_types,
     };
@@ -201,7 +201,7 @@ pub fn compile_pipeline_and_functions(
     Ok(ExecutablePipeline {
         pipeline_structure,
         executable_functions: schema_and_preamble_functions,
-        expected_inputs: executable_inputs,
+        executable_inputs: executable_inputs,
         executable_stages,
         executable_fetch,
         type_populations,
@@ -599,12 +599,12 @@ fn find_referenced_functions_in_fetch(
 }
 
 #[derive(Debug, Clone)]
-pub struct ExecutablePipelineInputs {
+pub struct PipelineInputs {
     pub variables: Vec<Variable>,
     pub expected_types: Vec<FunctionParameterAnnotation>,
 }
 
-impl ExecutablePipelineInputs {
+impl PipelineInputs {
     pub(crate) fn new(variables: Vec<Variable>, expected_types: Vec<FunctionParameterAnnotation>) -> Self {
         Self { variables, expected_types }
     }

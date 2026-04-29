@@ -16,7 +16,7 @@ use crate::{
     redefine, undefine,
 };
 use answer::{Concept, variable_value::VariableValue};
-use compiler::executable::pipeline::ExecutablePipelineInputs;
+use compiler::executable::pipeline::PipelineInputs;
 use compiler::{
     VariablePosition,
     annotation::{
@@ -62,6 +62,8 @@ use resource::{
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 use tracing::{Level, event};
 use typeql::{Literal, query::SchemaQuery};
+use answer::variable::Variable;
+
 pub type QueryInputs = Batch;
 
 #[derive(Debug, Clone)]
@@ -191,13 +193,13 @@ impl QueryManager {
 
         let ExecutablePipeline {
             executable_functions,
-            expected_inputs: executable_inputs,
+            executable_inputs,
             executable_stages,
             executable_fetch,
             pipeline_structure,
             ..
         } = executable_pipeline;
-        let inputs = translate_and_validate_inputs(executable_inputs, inputs)?;
+        let inputs = validate_inputs(&executable_inputs, inputs)?;
 
         // 4: Executor
         Pipeline::build_read_pipeline(
@@ -296,13 +298,13 @@ impl QueryManager {
 
         let ExecutablePipeline {
             executable_functions,
-            expected_inputs: executable_inputs,
+            executable_inputs,
             executable_stages,
             executable_fetch,
             pipeline_structure,
             ..
         } = executable_pipeline;
-        let inputs = match translate_and_validate_inputs(executable_inputs, inputs) {
+        let inputs = match validate_inputs(&executable_inputs, inputs) {
             Ok(inputs) => inputs,
             Err(err) => return Err((snapshot, err)),
         };
@@ -535,8 +537,8 @@ fn annotate_and_compile_query(
     Ok(executable_pipeline)
 }
 
-fn translate_and_validate_inputs(
-    inputs_executable: ExecutablePipelineInputs,
+fn validate_inputs(
+    inputs_executable: &PipelineInputs,
     inputs_opt: Option<Batch>,
 ) -> Result<Batch, Box<QueryError>> {
     let batch = match (inputs_executable.variables.len(), inputs_opt) {
@@ -550,15 +552,16 @@ fn translate_and_validate_inputs(
             }
         }
     }?;
-    batch
-        .iter()
-        .try_for_each(|row| validate_row(row, &inputs_executable.expected_types))
-        .map_err(|_| QueryError::BadInput {})?;
+    batch.iter().enumerate().try_for_each(|(index, row)| {
+        validate_row(inputs_executable, row).map_err(|var| (index, var))
+    }).map_err(|(_row_index, _variable)| QueryError::BadInput {})?;
     Ok(batch)
 }
 
-fn validate_row(row: MaybeOwnedRow<'_>, expected_types: &[FunctionParameterAnnotation]) -> Result<(), usize> {
-    row.iter().zip(expected_types.iter()).enumerate().try_for_each(|(col, (entry, expected))| {
+fn validate_row(inputs_executable: &PipelineInputs, row: MaybeOwnedRow<'_>) -> Result<(), Variable> {
+    inputs_executable.variables.iter().zip(
+        row.iter().zip(inputs_executable.expected_types.iter())
+    ).try_for_each(|(variable, (entry, expected))| {
         let entry_ok = match (entry, expected) {
             (VariableValue::Value(value), FunctionParameterAnnotation::Value(value_type)) => {
                 *value_type == value.value_type()
@@ -574,6 +577,6 @@ fn validate_row(row: MaybeOwnedRow<'_>, expected_types: &[FunctionParameterAnnot
             | (VariableValue::ThingList(_), _)
             | (VariableValue::Type(_), _) => false,
         };
-        if entry_ok { Ok(()) } else { Err(col) }
+        if entry_ok { Ok(()) } else { Err(*variable) }
     })
 }
