@@ -26,6 +26,7 @@ use ir::{
 use storage::snapshot::ReadableSnapshot;
 use typeql::common::Span;
 
+use crate::annotation::pipeline::RunningVariableAnnotations;
 use crate::annotation::{
     AnnotationError,
     expression::compiled_expression::ExpressionValueType,
@@ -73,8 +74,7 @@ pub(crate) fn annotate_fetch(
     variable_registry: &VariableRegistry,
     parameters: &ParameterRegistry,
     annotated_function_signatures: &dyn AnnotatedFunctionSignatures,
-    input_type_annotations: &BTreeMap<Variable, Arc<BTreeSet<Type>>>,
-    input_value_type_annotations: &BTreeMap<Variable, ExpressionValueType>,
+    input_annotations: &RunningVariableAnnotations,
 ) -> Result<AnnotatedFetch, AnnotationError> {
     let object = annotate_object(
         fetch,
@@ -83,8 +83,7 @@ pub(crate) fn annotate_fetch(
         variable_registry,
         parameters,
         annotated_function_signatures,
-        input_type_annotations,
-        input_value_type_annotations,
+        input_annotations,
     )?;
     Ok(AnnotatedFetch { object })
 }
@@ -96,8 +95,7 @@ fn annotate_object(
     variable_registry: &VariableRegistry,
     parameters: &ParameterRegistry,
     annotated_function_signatures: &dyn AnnotatedFunctionSignatures,
-    input_type_annotations: &BTreeMap<Variable, Arc<BTreeSet<Type>>>,
-    input_value_type_annotations: &BTreeMap<Variable, ExpressionValueType>,
+    input_annotations: &RunningVariableAnnotations,
 ) -> Result<AnnotatedFetchObject, AnnotationError> {
     match object {
         FetchObject::Entries(entries, source_spans) => {
@@ -109,8 +107,7 @@ fn annotate_object(
                 variable_registry,
                 parameters,
                 annotated_function_signatures,
-                input_type_annotations,
-                input_value_type_annotations,
+                input_annotations,
             )?;
             Ok(AnnotatedFetchObject::Entries(annotated_entries))
         }
@@ -126,8 +123,7 @@ fn annotated_object_entries(
     variable_registry: &VariableRegistry,
     parameters: &ParameterRegistry,
     annotated_function_signatures: &dyn AnnotatedFunctionSignatures,
-    input_type_annotations: &BTreeMap<Variable, Arc<BTreeSet<Type>>>,
-    input_value_type_annotations: &BTreeMap<Variable, ExpressionValueType>,
+    input_annotations: &RunningVariableAnnotations,
 ) -> Result<HashMap<ParameterID, AnnotatedFetchSome>, AnnotationError> {
     let mut annotated_entries = HashMap::new();
     for (key, value) in entries.into_iter() {
@@ -139,8 +135,7 @@ fn annotated_object_entries(
             variable_registry,
             parameters,
             annotated_function_signatures,
-            input_type_annotations,
-            input_value_type_annotations,
+            input_annotations,
             source_span,
         )
         .map_err(|err| AnnotationError::FetchEntry {
@@ -159,8 +154,7 @@ fn annotate_some(
     variable_registry: &VariableRegistry,
     parameters: &ParameterRegistry,
     annotated_function_signatures: &dyn AnnotatedFunctionSignatures,
-    input_type_annotations: &BTreeMap<Variable, Arc<BTreeSet<Type>>>,
-    input_value_type_annotations: &BTreeMap<Variable, ExpressionValueType>,
+    input_annotations: &RunningVariableAnnotations,
     source_span: Option<Span>,
 ) -> Result<AnnotatedFetchSome, AnnotationError> {
     match some {
@@ -177,7 +171,7 @@ fn annotate_some(
                     source_span,
                     attribute,
                 })?;
-            let owner_types = input_type_annotations.get(&variable).unwrap();
+            let owner_types = input_annotations.concepts.get(&variable).unwrap();
             validate_attribute_owned_and_scalar(
                 snapshot,
                 type_manager,
@@ -194,8 +188,7 @@ fn annotate_some(
                 snapshot,
                 type_manager,
                 annotated_function_signatures,
-                input_type_annotations,
-                input_value_type_annotations,
+                input_annotations,
                 source_span,
             )
             .map_err(|err| AnnotationError::FetchBlockFunctionInferenceError { typedb_source: err })?;
@@ -209,8 +202,7 @@ fn annotate_some(
                 variable_registry,
                 parameters,
                 annotated_function_signatures,
-                input_type_annotations,
-                input_value_type_annotations,
+                input_annotations,
             )?;
             Ok(AnnotatedFetchSome::Object(Box::new(object)))
         }
@@ -220,8 +212,7 @@ fn annotate_some(
                 snapshot,
                 type_manager,
                 annotated_function_signatures,
-                input_type_annotations,
-                input_value_type_annotations,
+                input_annotations,
                 source_span,
             )
             .map_err(|err| AnnotationError::FetchBlockFunctionInferenceError { typedb_source: err })?;
@@ -234,8 +225,7 @@ fn annotate_some(
                 annotated_function_signatures,
                 parameters,
                 sub_fetch,
-                input_type_annotations,
-                input_value_type_annotations,
+                input_annotations,
             );
             Ok(AnnotatedFetchSome::ListSubFetch(annotated_sub_fetch?))
         }
@@ -251,7 +241,7 @@ fn annotate_some(
                     source_span,
                     attribute,
                 })?;
-            for owner_type in input_type_annotations.get(&variable).unwrap().iter() {
+            for owner_type in input_annotations.concepts.get(&variable).unwrap().iter() {
                 validate_attribute_owned_and_streamable(
                     snapshot,
                     type_manager,
@@ -355,8 +345,7 @@ fn annotate_sub_fetch(
     annotated_function_signatures: &dyn AnnotatedFunctionSignatures,
     parameters: &ParameterRegistry,
     sub_fetch: FetchListSubFetch,
-    input_type_annotations: &BTreeMap<Variable, Arc<BTreeSet<Type>>>,
-    input_value_type_annotations: &BTreeMap<Variable, ExpressionValueType>,
+    input_annotations: &RunningVariableAnnotations,
 ) -> Result<AnnotatedFetchListSubFetch, AnnotationError> {
     let FetchListSubFetch { context, input_variables, stages, fetch } = sub_fetch;
     let PipelineTranslationContext { mut variable_registry, .. } = context;
@@ -368,8 +357,7 @@ fn annotate_sub_fetch(
         parameters,
         stages,
         Some(fetch),
-        input_type_annotations.clone(),
-        input_value_type_annotations.clone(),
+        input_annotations.clone(),
     )?;
     Ok(AnnotatedFetchListSubFetch {
         variable_registry,

@@ -32,7 +32,7 @@ pub mod user_repository {
         let unexpected_error_msg = "An unexpected error occurred when acquiring the list of users";
         let query_str = "match (user: $u, credentials: $c) isa user-credentials; $u has name $n;";
         let query = parse_query(query_str).expect(unexpected_error_msg);
-        let (tx, result) = execute_read_pipeline(tx, &query.into_structure().into_pipeline(), query_str);
+        let (tx, result) = execute_read_pipeline(tx, &query.into_structure().into_pipeline(), None, query_str);
         let rows = result.expect(unexpected_error_msg);
         let users = rows.iter().map(|row| User::new(get_string(&tx, row, "n"))).collect();
         users
@@ -50,7 +50,7 @@ pub mod user_repository {
                 $p has hash $h;"
         );
         let query = parse_query(&query_str).expect(unexpected_error_msg);
-        let (tx, result) = execute_read_pipeline(tx, &query.into_structure().into_pipeline(), &query_str);
+        let (tx, result) = execute_read_pipeline(tx, &query.into_structure().into_pipeline(), None, &query_str);
         let mut rows: Vec<HashMap<String, VariableValue>> = result.expect(unexpected_error_msg);
         if !rows.is_empty() {
             let row = rows.pop().expect(unexpected_error_msg);
@@ -100,6 +100,7 @@ pub mod user_repository {
             function_manager,
             query_manager,
             &query.into_structure().into_pipeline(),
+            None,
             &query_string,
         );
         (Ok(()), snapshot)
@@ -132,6 +133,7 @@ pub mod user_repository {
                     function_manager,
                     query_manager,
                     &query.into_structure().into_pipeline(),
+                    None,
                     &query_string,
                 );
                 (Ok(()), snapshot)
@@ -166,6 +168,7 @@ pub mod user_repository {
             function_manager,
             query_manager,
             &query.into_structure().into_pipeline(),
+            None,
             &query_string,
         );
         (Ok(()), snapshot)

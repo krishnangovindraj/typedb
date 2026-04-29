@@ -6,6 +6,7 @@
 
 use std::time::Duration;
 
+use concept::error::ConceptDecodeError;
 use database::transaction::{
     DataCommitError, SchemaCommitError, TransactionError, TransactionRead, TransactionSchema, TransactionWrite,
 };
@@ -38,7 +39,6 @@ macro_rules! with_readable_transaction {
     }}
 }
 pub(crate) use with_readable_transaction;
-
 impl Transaction {
     pub fn load_kind(&self) -> LoadKind {
         match self {
@@ -57,7 +57,7 @@ pub(crate) fn is_write_pipeline(pipeline: &typeql::query::Pipeline) -> bool {
     for stage in &pipeline.stages {
         match stage {
             Stage::Insert(_) | Stage::Put(_) | Stage::Delete(_) | Stage::Update(_) => return true,
-            Stage::Fetch(_) | Stage::Operator(_) | Stage::Match(_) => {}
+            Stage::Inputs(_) | Stage::Fetch(_) | Stage::Operator(_) | Stage::Match(_) => {}
         }
     }
     false
@@ -96,5 +96,6 @@ typedb_error! {
         InvalidPrefetchSize(18, "Invalid query option: prefetch size should be >= 1, got {value} instead.", value: usize),
         AnalyseQueryExpectsPipeline(19, "Query analyse received a schema query.Only query pipeline can be analysed."),
         AnalyseQueryFailed(20, "Analysing the query failed.", typedb_source: QueryError),
+        DecodingInputsFailed(21, "Decoding the input failed", typedb_source: ConceptDecodeError),
     }
 }

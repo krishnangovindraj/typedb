@@ -302,6 +302,11 @@ typedb_error! {
             "Optionals are not allowed in negations as this can never return a meaningful result.",
             // source_span: Option<Span>,
         ),
+        NonInitialInputs(
+            54,
+            "Inputs clauses must be the first clause in a query pipeline.",
+            source_span: Option<Span>,
+        ),
         InternalNotAValueBuiltin(
             100,
             "Attempted to translate function '{token}' as a builtin value function.",

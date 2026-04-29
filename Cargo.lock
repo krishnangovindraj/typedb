@@ -4540,6 +4540,7 @@ version = "1.0.149"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "83fc039473c5595ace860d8c4fafa220ff474b3fc6bfdb4293327f1a37e94d86"
 dependencies = [
+ "indexmap 2.14.0",
  "itoa",
  "memchr",
  "serde",
@@ -5309,6 +5310,7 @@ dependencies = [
  "bytes 1.11.1",
  "libc",
  "mio",
+ "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
  "socket2 0.6.3",
@@ -5621,7 +5623,7 @@ dependencies = [
 [[package]]
 name = "typedb-protocol"
 version = "0.0.0"
-source = "git+https://github.com/typedb/typedb-protocol?rev=da3e316cb0022cb284083996f0659ad22db13aca#da3e316cb0022cb284083996f0659ad22db13aca"
+source = "git+https://github.com/typedb/typedb-protocol?rev=2ee049743e882d022d8dee3ba8e58b094c14844b#2ee049743e882d022d8dee3ba8e58b094c14844b"
 dependencies = [
  "prost",
  "tonic",
@@ -5666,7 +5668,7 @@ checksum = "40ce102ab67701b8526c123c1bab5cbe42d7040ccfd0f64af1a385808d2f43de"
 [[package]]
 name = "typeql"
 version = "0.0.0"
-source = "git+https://github.com/typedb/typeql?rev=7029e9f036540ad75d9bdc3afb1207409741d42a#7029e9f036540ad75d9bdc3afb1207409741d42a"
+source = "git+https://github.com/typedb/typeql?rev=e6ba114d4129c749cf26d24d16a784fe1dabe134#e6ba114d4129c749cf26d24d16a784fe1dabe134"
 dependencies = [
  "chrono",
  "itertools 0.14.0",

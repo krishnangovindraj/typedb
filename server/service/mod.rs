@@ -6,6 +6,7 @@
 use compiler::query_structure::{PipelineStructure, QueryStructureConjunctionID};
 use concept::error::ConceptReadError;
 use options::QueryOptions;
+use query::query_manager::QueryInputs;
 use serde::{Deserialize, Serialize};
 
 pub(crate) mod export_service;
