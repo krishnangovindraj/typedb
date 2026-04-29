@@ -6,6 +6,7 @@
 
 use std::time::Duration;
 
+use concept::error::ConceptDecodeError;
 use database::transaction::{
     DataCommitError, SchemaCommitError, TransactionError, TransactionRead, TransactionSchema, TransactionWrite,
 };
@@ -95,5 +96,6 @@ typedb_error! {
         InvalidPrefetchSize(18, "Invalid query option: prefetch size should be >= 1, got {value} instead.", value: usize),
         AnalyseQueryExpectsPipeline(19, "Query analyse received a schema query.Only query pipeline can be analysed."),
         AnalyseQueryFailed(20, "Analysing the query failed.", typedb_source: QueryError),
+        DecodingInputsFailed(21, "Decoding the input failed", typedb_source: ConceptDecodeError),
     }
 }

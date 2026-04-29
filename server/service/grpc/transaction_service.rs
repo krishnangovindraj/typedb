@@ -14,6 +14,7 @@ use std::{
     time::Duration,
 };
 
+use crate::service::grpc::concept::decode_value;
 use crate::service::{
     IncludeInvolvedBlocks,
     grpc::{
@@ -42,6 +43,7 @@ use crate::service::{
 use answer::{Concept, Thing, variable_value::VariableValue};
 use compiler::VariablePosition;
 use compiler::query_structure::PipelineStructure;
+use concept::error::ConceptDecodeError;
 use concept::{thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
 use database::{
     database_manager::DatabaseManager,
@@ -907,7 +909,16 @@ impl TransactionService {
                 Ok(Self::respond_query_response(&self.response_sender, req_id, response).await)
             }
             typeql::query::QueryStructure::Pipeline(pipeline) => {
-                let inputs = query_inputs_from_proto(query_req.input);
+                let inputs = match query_inputs_from_proto(query_req.input) {
+                    Ok(inputs) => inputs,
+                    Err(err) => {
+                        let response =
+                            ImmediateQueryResponse::non_fatal_err(TransactionServiceError::DecodingInputsFailed {
+                                typedb_source: err,
+                            });
+                        return Ok(Self::respond_query_response(&self.response_sender, req_id, response).await);
+                    }
+                };
                 #[allow(clippy::collapsible_else_if)]
                 if is_write_pipeline(&pipeline) {
                     if !self.query_queue.is_empty() || self.running_write_query.is_some() {
@@ -1090,7 +1101,7 @@ impl TransactionService {
                     schema_transaction,
                     query_options,
                     pipeline,
-                    None,
+                    inputs,
                     source_query,
                     interrupt,
                 );
@@ -1101,7 +1112,7 @@ impl TransactionService {
                     write_transaction,
                     query_options,
                     pipeline,
-                    None,
+                    inputs,
                     source_query,
                     interrupt,
                 );
@@ -1321,7 +1332,7 @@ impl TransactionService {
                     thing_manager.clone(),
                     &function_manager,
                     &pipeline,
-                    None,
+                    inputs,
                     &source_query,
                 );
                 let pipeline = unwrap_or_execute_and_return!(pipeline, |err| {
@@ -1542,21 +1553,30 @@ impl TransactionService {
     }
 }
 
-fn query_inputs_from_proto(inputs: Option<typedb_protocol::query::req::QueryInput>) -> Option<Batch> {
-    let rows = inputs?.rows;
+fn query_inputs_from_proto(
+    inputs: Option<typedb_protocol::query::req::QueryInput>,
+) -> Result<Option<Batch>, ConceptDecodeError> {
+    use typedb_protocol::query::req::query_input_entry::Entry as EntryProto;
+    let Some(inputs) = inputs else { return Ok(None) };
+    let rows = inputs.rows;
     let len = rows.len();
-    let width = rows.first().map(|row| row.entry.len() as u32).unwrap_or(0);
+    let width = rows.first().map(|row| row.entries.len() as u32).unwrap_or(0);
     let mut batch = Batch::new(width, len);
     rows.into_iter().for_each(|row| {
         batch.append(|mut write_to| {
-            let entries = row.entry;
-            entries.into_iter().enumerate().for_each(|(column, entry)| {
-                let value: VariableValue<'static> = todo_must_implement!("To variableValue");
+            row.entries.into_iter().enumerate().for_each(|(column, entry)| {
+                let entry = entry.entry.expect("Missing proto file");
+                let value: VariableValue<'static> = match entry {
+                    EntryProto::Empty(_) => todo_must_implement!("Optional inputs"),
+                    EntryProto::Value(value) => {
+                        VariableValue::Value(decode_value(value.value.expect("Missing proto field")).unwrap())
+                    }
+                };
                 write_to.set(VariablePosition::new(column as u32), value)
             })
         });
     });
-    Some(batch)
+    Ok(Some(batch))
 }
 
 #[derive(Debug)]

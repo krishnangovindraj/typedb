@@ -107,7 +107,7 @@ workspace_refs(
     name = "typedb_workspace_refs",
     workspace_commit_dict = {
         "typeql+": "e6ba114d4129c749cf26d24d16a784fe1dabe134",
-        "typedb_protocol+": "17ba41fd3ca721bf1f096df1b5b39d181f916bab",
+        "typedb_protocol+": "2ee049743e882d022d8dee3ba8e58b094c14844b",
     },
     workspace_tag_dict = {
     },
@@ -159,7 +159,7 @@ bazel_dep(name = "typedb_protocol", version = "0.0.0")
 git_override(
     module_name = "typedb_protocol",
     remote = "https://github.com/krishnangovindraj/typedb-protocol",
-    commit = "17ba41fd3ca721bf1f096df1b5b39d181f916bab",
+    commit = "2ee049743e882d022d8dee3ba8e58b094c14844b",
 )
 
 bazel_dep(name = "typedb_behaviour", version = "0.0.0")
