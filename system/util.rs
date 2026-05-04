@@ -132,7 +132,10 @@ pub mod query_util {
         pipeline::stage::{ExecutionContext, StageIterator},
     };
     use function::function_manager::FunctionManager;
-    use query::{error::QueryError, query_manager::QueryManager};
+    use query::{
+        error::QueryError,
+        query_manager::{QueryInputs, QueryManager},
+    };
     use storage::{durability_client::WALClient, snapshot::WriteSnapshot};
     use typeql::query::Pipeline;
 
@@ -141,6 +144,7 @@ pub mod query_util {
     pub fn execute_read_pipeline(
         tx: TransactionRead<WALClient>,
         pipeline: &Pipeline,
+        inputs: Option<QueryInputs>,
         source_query: &str,
     ) -> (TransactionRead<WALClient>, Result<Vec<HashMap<String, VariableValue<'static>>>, Box<QueryError>>) {
         let prepared_pipeline = match tx.query_manager.prepare_read_pipeline(
@@ -149,6 +153,7 @@ pub mod query_util {
             tx.thing_manager.clone(),
             &tx.function_manager,
             pipeline,
+            inputs,
             source_query,
         ) {
             Ok(pipeline) => pipeline,
@@ -189,6 +194,7 @@ pub mod query_util {
         function_manager: &FunctionManager,
         query_manager: &QueryManager,
         pipeline: &Pipeline,
+        inputs: Option<QueryInputs>,
         source_query: &str,
     ) -> (Result<Vec<HashMap<String, VariableValue<'static>>>, Box<QueryError>>, Arc<WriteSnapshot<WALClient>>) {
         let prepared_pipeline = match query_manager.prepare_write_pipeline(
@@ -197,6 +203,7 @@ pub mod query_util {
             thing_manager,
             function_manager,
             pipeline,
+            inputs,
             source_query,
         ) {
             Ok(pipeline) => pipeline,

@@ -106,8 +106,8 @@ workspace_refs = use_repo_rule("@typedb_bazel_distribution//common/workspace_ref
 workspace_refs(
     name = "typedb_workspace_refs",
     workspace_commit_dict = {
-        "typeql+": "a1fae91ebd68ed2d7b2eb5035c1287c3bc66789b",
-        "typedb_protocol+": "25ab3fb02715062bd036f8b83908de92b106a202",
+        "typeql+": "e6ba114d4129c749cf26d24d16a784fe1dabe134",
+        "typedb_protocol+": "2ee049743e882d022d8dee3ba8e58b094c14844b",
     },
     workspace_tag_dict = {
     },
@@ -151,15 +151,15 @@ git_override(
 bazel_dep(name = "typeql", version = "0.0.0")
 git_override(
     module_name = "typeql",
-    remote = "https://github.com/typedb/typeql",
-    commit = "a1fae91ebd68ed2d7b2eb5035c1287c3bc66789b",
+    remote = "https://github.com/krishnangovindraj/typeql",
+    commit = "e6ba114d4129c749cf26d24d16a784fe1dabe134",
 )
 
 bazel_dep(name = "typedb_protocol", version = "0.0.0")
 git_override(
     module_name = "typedb_protocol",
-    remote = "https://github.com/typedb/typedb-protocol",
-    commit = "25ab3fb02715062bd036f8b83908de92b106a202",
+    remote = "https://github.com/krishnangovindraj/typedb-protocol",
+    commit = "7bc1bacfe793068692f03f4f0dd71ac99c4659aa",
 )
 
 bazel_dep(name = "typedb_behaviour", version = "0.0.0")

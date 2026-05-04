@@ -8,6 +8,7 @@ use compiler::query_structure::{PipelineStructure, QueryStructureConjunctionID};
 use concept::error::ConceptReadError;
 pub use grpc::{IntoGrpcStatus, IntoProtocolErrorMessage, migration::import_service::DatabaseImportService};
 use options::QueryOptions;
+use query::query_manager::QueryInputs;
 use serde::{Deserialize, Serialize};
 
 pub mod admin;

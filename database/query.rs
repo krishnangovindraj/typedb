@@ -17,7 +17,10 @@ use function::function_manager::FunctionManager;
 use ir::pipeline::ParameterRegistry;
 use itertools::{Either, Itertools};
 use options::QueryOptions;
-use query::{error::QueryError, query_manager::QueryManager};
+use query::{
+    error::QueryError,
+    query_manager::{QueryInputs, QueryManager},
+};
 use storage::{durability_client::WALClient, snapshot::WritableSnapshot};
 use tracing::{Level, event};
 use typeql::query::SchemaQuery;
@@ -73,6 +76,7 @@ pub fn execute_write_query_in_schema(
     transaction: TransactionSchema<WALClient>,
     query_options: QueryOptions,
     pipeline: typeql::query::Pipeline,
+    inputs: Option<QueryInputs>,
     source_query: String,
     interrupt: ExecutionInterrupt,
 ) -> (TransactionSchema<WALClient>, WriteQueryResult) {
@@ -95,6 +99,7 @@ pub fn execute_write_query_in_schema(
         &query_manager,
         query_options,
         &pipeline,
+        inputs,
         &source_query,
         interrupt,
     );
@@ -117,6 +122,7 @@ pub fn execute_write_query_in_write(
     transaction: TransactionWrite<WALClient>,
     query_options: QueryOptions,
     pipeline: typeql::query::Pipeline,
+    inputs: Option<QueryInputs>,
     source_query: String,
     interrupt: ExecutionInterrupt,
 ) -> (TransactionWrite<WALClient>, WriteQueryResult) {
@@ -139,6 +145,7 @@ pub fn execute_write_query_in_write(
         &query_manager,
         query_options,
         &pipeline,
+        inputs,
         &source_query,
         interrupt,
     );
@@ -165,6 +172,7 @@ pub(crate) fn execute_write_query_in<Snapshot: WritableSnapshot + 'static>(
     query_manager: &QueryManager,
     query_options: QueryOptions,
     pipeline: &typeql::query::Pipeline,
+    inputs: Option<QueryInputs>,
     source_query: &str,
     interrupt: ExecutionInterrupt,
 ) -> (Snapshot, WriteQueryResult) {
@@ -175,6 +183,7 @@ pub(crate) fn execute_write_query_in<Snapshot: WritableSnapshot + 'static>(
         thing_manager,
         function_manager,
         pipeline,
+        inputs,
         source_query,
     );
     let pipeline = match result {

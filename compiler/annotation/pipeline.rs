@@ -30,7 +30,7 @@ use ir::{
         modifier::{Distinct, Limit, Offset, Require, Select, Sort},
         reduce::{AssignedReduction, Reduce, Reducer},
     },
-    translation::pipeline::TranslatedStage,
+    translation::pipeline::{TranslatedInputs, TranslatedStage},
 };
 use storage::snapshot::ReadableSnapshot;
 use typeql::common::Span;
@@ -45,8 +45,9 @@ use crate::{
         },
         fetch::{AnnotatedFetch, annotate_fetch},
         function::{
-            AnnotatedFunctionSignaturesImpl, AnnotatedPreambleFunctions, AnnotatedSchemaFunctions,
-            FunctionParameterAnnotation, annotate_preamble_functions,
+            AnnotatedFunctionSignatures, AnnotatedFunctionSignaturesImpl, AnnotatedPreambleFunctions,
+            AnnotatedSchemaFunctions, FunctionParameterAnnotation, annotate_preamble_functions,
+            get_annotations_from_labels_vec,
         },
         match_inference::infer_types_for_block,
         type_annotations::{BlockAnnotations, ConstraintTypeAnnotations, TypeAnnotations},
@@ -56,8 +57,10 @@ use crate::{
     executable::{reduce::ReduceInstruction, update},
 };
 
+pub type AnnotatedInputs = crate::executable::pipeline::PipelineInputs;
 pub struct AnnotatedPipeline {
     pub annotated_preamble: AnnotatedPreambleFunctions,
+    pub annotated_inputs: AnnotatedInputs,
     pub annotated_stages: Vec<AnnotatedStage>,
     pub annotated_fetch: Option<AnnotatedFetch>,
 }
@@ -110,6 +113,7 @@ pub fn annotate_preamble_and_pipeline(
     variable_registry: &mut VariableRegistry,
     parameters: &ParameterRegistry,
     translated_preamble: Vec<Function>,
+    translated_inputs: Option<TranslatedInputs>,
     translated_stages: Vec<TranslatedStage>,
     translated_fetch: Option<FetchObject>,
 ) -> Result<AnnotatedPipeline, AnnotationError> {
@@ -125,12 +129,32 @@ pub fn annotate_preamble_and_pipeline(
         variable_registry,
         parameters,
     );
-    let input_annotations = RunningVariableAnnotations::empty();
+    let annotated_inputs = annotate_inputs(&mut ctx, translated_inputs)?;
+    let input_annotations = RunningVariableAnnotations::from_iterator(
+        annotated_inputs.variables.iter().copied().zip(annotated_inputs.expected_types.iter().cloned()),
+    );
     let (annotated_stages, output_annotations) =
         annotate_pipeline_stages(&mut ctx, translated_stages, input_annotations, None)?;
     let annotated_fetch =
         translated_fetch.map(|fetch| annotate_fetch(&mut ctx, fetch, &output_annotations)).transpose()?;
-    Ok(AnnotatedPipeline { annotated_stages, annotated_fetch, annotated_preamble })
+    Ok(AnnotatedPipeline { annotated_inputs, annotated_stages, annotated_fetch, annotated_preamble })
+}
+
+fn annotate_inputs(
+    ctx: &mut PipelineAnnotationContext<'_, impl ReadableSnapshot>,
+    translated_inputs: Option<TranslatedInputs>,
+) -> Result<AnnotatedInputs, AnnotationError> {
+    let Some(TranslatedInputs { variables, labels, .. }) = translated_inputs else {
+        return Ok(AnnotatedInputs { variables: Vec::new(), expected_types: Vec::new() });
+    };
+    let expected_types = get_annotations_from_labels_vec(&ctx.to_parts_mut().0, &labels).map_err(
+        |(index, source_span, typedb_source)| AnnotationError::CouldNotResolveInputType {
+            index,
+            source_span,
+            typedb_source,
+        },
+    )?;
+    Ok(AnnotatedInputs { variables, expected_types })
 }
 
 pub(crate) fn annotate_pipeline_stages(

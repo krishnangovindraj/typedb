@@ -807,13 +807,25 @@ impl TransactionService {
         let interrupt = self.query_interrupt_receiver.clone();
         match self.transaction.take() {
             Some(Transaction::Schema(schema_transaction)) => Ok(spawn_blocking(move || {
-                let (transaction, result) =
-                    execute_write_query_in_schema(schema_transaction, query_options, pipeline, source_query, interrupt);
+                let (transaction, result) = execute_write_query_in_schema(
+                    schema_transaction,
+                    query_options,
+                    pipeline,
+                    None,
+                    source_query,
+                    interrupt,
+                );
                 (Transaction::Schema(transaction), result)
             })),
             Some(Transaction::Write(write_transaction)) => Ok(spawn_blocking(move || {
-                let (transaction, result) =
-                    execute_write_query_in_write(write_transaction, query_options, pipeline, source_query, interrupt);
+                let (transaction, result) = execute_write_query_in_write(
+                    write_transaction,
+                    query_options,
+                    pipeline,
+                    None,
+                    source_query,
+                    interrupt,
+                );
                 (Transaction::Write(transaction), result)
             })),
             Some(Transaction::Read(transaction)) => {
@@ -968,6 +980,7 @@ impl TransactionService {
                     thing_manager.clone(),
                     &function_manager,
                     &pipeline,
+                    None,
                     &source_query,
                 );
                 let pipeline = match pipeline_result {
@@ -1190,7 +1203,7 @@ impl TransactionService {
                     &type_manager,
                     thing_manager.clone(),
                     &function_manager,
-                    &pipeline,
+                    pipeline,
                     &source_query,
                 );
                 let analysed = unwrap_or_execute_else_respond_error_and_return_break!(
