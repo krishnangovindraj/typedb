@@ -17,11 +17,18 @@ use std::{
 use answer::variable_value::VariableValue;
 use compiler::{VariablePosition, query_structure::PipelineStructure};
 use concept::{error::ConceptDecodeError, thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
-use database::query::{
-    StreamQueryOutputDescriptor, WriteQueryAnswer, WriteQueryResult, execute_schema_query,
-    execute_write_query_in_schema, execute_write_query_in_write,
+use database::{
+    database_manager::DatabaseManager,
+    query::{
+        StreamQueryOutputDescriptor, WriteQueryAnswer, WriteQueryResult, execute_schema_query,
+        execute_write_query_in_schema, execute_write_query_in_write,
+    },
+    transaction::{TransactionRead, TransactionSchema, TransactionWrite},
 };
-use diagnostics::metrics::{ActionKind, ClientEndpoint, LoadKind};
+use diagnostics::{
+    diagnostics_manager::DiagnosticsManager,
+    metrics::{ActionKind, ClientEndpoint, LoadKind},
+};
 use error::todo_must_implement;
 use executor::{
     ExecutionInterrupt, InterruptType,
@@ -1223,7 +1230,7 @@ impl TransactionService {
                     &type_manager,
                     thing_manager.clone(),
                     &function_manager,
-                    &pipeline,
+                    pipeline,
                     inputs,
                     &source_query,
                 );

@@ -10,11 +10,16 @@ use answer::{Thing, variable_value::VariableValue};
 use compiler::VariablePosition;
 use concept::{
     error::ConceptReadError,
-    thing::{attribute::Attribute, object::ObjectAPI},
+    thing::{ThingAPI, attribute::Attribute, entity::Entity, object::ObjectAPI, relation::Relation},
     type_::TypeAPI,
 };
 use cucumber::gherkin::Step;
-use encoding::value::{ValueEncodable, label::Label, value_type::ValueType};
+use encoding::{
+    Prefixed,
+    graph::thing::{ThingVertex, vertex_attribute::AttributeVertex, vertex_object::ObjectVertex},
+    layout::prefix::Prefix,
+    value::{ValueEncodable, label::Label, value_type::ValueType},
+};
 use executor::{
     ExecutionInterrupt,
     batch::Batch,
@@ -23,7 +28,7 @@ use executor::{
 use itertools::{Either, Itertools};
 use lending_iterator::LendingIterator;
 use macro_rules_attribute::apply;
-use query::{analyse::AnalysedQuery, error::QueryError};
+use query::{analyse::AnalysedQuery, error::QueryError, query_manager::QueryInputs};
 use resource::profile::StorageCounters;
 use server::service::http::message::analyze::{
     annotations::bdd::{
@@ -70,6 +75,7 @@ fn row_answers_to_string(rows: &[HashMap<String, VariableValue<'static>>]) -> St
 fn execute_read_query(
     context: &Context,
     query: typeql::Query,
+    inputs: Option<QueryInputs>,
     source_query: &str,
 ) -> Result<QueryAnswer, Box<QueryError>> {
     with_read_tx!(context, |tx| {
@@ -78,7 +84,8 @@ fn execute_read_query(
             &tx.type_manager,
             tx.thing_manager.clone(),
             &tx.function_manager,
-            &query.into_structure().into_pipeline(),
+            query.into_structure().into_pipeline(),
+            inputs,
             source_query,
         )?;
         if pipeline.has_fetch() {
@@ -120,6 +127,7 @@ fn execute_read_query(
 fn execute_write_query(
     context: &mut Context,
     query: typeql::Query,
+    inputs: Option<QueryInputs>,
     source_query: &str,
 ) -> Result<QueryAnswer, BehaviourTestExecutionError> {
     if matches!(context.active_transaction.as_ref().unwrap(), Read(_)) {
@@ -138,7 +146,8 @@ fn execute_write_query(
             &type_manager,
             thing_manager.clone(),
             &function_manager,
-            &query.into_structure().into_pipeline(),
+            query.into_structure().into_pipeline(),
+            inputs,
             source_query,
         );
 
@@ -212,11 +221,33 @@ fn execute_analyze(
                 &tx.type_manager,
                 tx.thing_manager.clone(),
                 &tx.function_manager,
-                &query.into_structure().into_pipeline(),
+                query.into_structure().into_pipeline(),
                 source_query,
             )
             .map_err(|source| BehaviourTestExecutionError::Query(*source))
     })
+}
+
+fn may_take_inputs(context: &mut Context, with_inputs: params::WithInputs) -> Option<QueryInputs> {
+    (with_inputs == params::WithInputs::True).then(|| context.take_inputs().expect("Expected inputs available"))
+}
+
+#[cucumber::given("query inputs")]
+#[cucumber::when("query inputs")]
+async fn query_inputs(context: &mut Context, step: &Step) {
+    let table = step.table.as_ref().expect("Expected table for inputs");
+    let length = table.rows.len();
+    let width = table.rows.first().unwrap().len() as u32;
+    let mut inputs = QueryInputs::new(width, length);
+    table.rows.iter().for_each(|row| {
+        inputs.append(|mut into_row| {
+            row.iter().map(parse_query_inputs_row_entry).enumerate().for_each(|(i, value)| {
+                into_row.set(VariablePosition::new(i as u32), value);
+            });
+        });
+    });
+
+    context.inputs = Some(inputs)
 }
 
 #[apply(generic_step)]
@@ -252,55 +283,68 @@ async fn typeql_schema_query(context: &mut Context, may_error: params::TypeQLMay
 }
 
 #[apply(generic_step)]
-#[step(expr = "typeql write query{typeql_may_error}")]
-async fn typeql_write_query(context: &mut Context, may_error: params::TypeQLMayError, step: &Step) {
+#[step(expr = "typeql write query{with_inputs}{typeql_may_error}")]
+async fn typeql_write_query(
+    context: &mut Context,
+    with_inputs: params::WithInputs,
+    may_error: params::TypeQLMayError,
+    step: &Step,
+) {
     let query_str = step.docstring.as_ref().unwrap().as_str();
     let parse_result = typeql::parse_query(query_str);
     if let Either::Right(_) = may_error.check_parsing(parse_result.as_ref()) {
         return;
     }
     let query = parse_result.unwrap();
-
-    let result = execute_write_query(context, query, query_str);
+    let inputs = may_take_inputs(context, with_inputs);
+    let result = execute_write_query(context, query, inputs, query_str);
     if let Either::Right(_) = may_error.check_logic(result) {
         context.close_active_transaction();
     }
 }
 
 #[apply(generic_step)]
-#[step(expr = "get answers of typeql write query")]
-async fn get_answers_of_typeql_write_query(context: &mut Context, step: &Step) {
+#[step(expr = "get answers of typeql write query{with_inputs}")]
+async fn get_answers_of_typeql_write_query(context: &mut Context, with_inputs: params::WithInputs, step: &Step) {
     let query_str = step.docstring.as_ref().unwrap().as_str();
     let query = typeql::parse_query(query_str).unwrap();
-    let result = execute_write_query(context, query, query_str);
+    let inputs = may_take_inputs(context, with_inputs);
+    let result = execute_write_query(context, query, inputs, query_str);
     context.query_answer = Some(result.unwrap());
 }
 
 #[apply(generic_step)]
-#[step(expr = "typeql read query{typeql_may_error}")]
-async fn typeql_read_query(context: &mut Context, may_error: params::TypeQLMayError, step: &Step) {
+#[step(expr = "typeql read query{with_inputs}{typeql_may_error}")]
+async fn typeql_read_query(
+    context: &mut Context,
+    with_inputs: params::WithInputs,
+    may_error: params::TypeQLMayError,
+    step: &Step,
+) {
     let query_str = step.docstring.as_ref().unwrap().as_str();
     let parse_result = typeql::parse_query(query_str);
     if let Either::Right(_) = may_error.check_parsing(parse_result.as_ref()) {
         return;
     }
     let query = parse_result.unwrap();
-    let result = execute_read_query(context, query, query_str);
+    let inputs = may_take_inputs(context, with_inputs);
+    let result = execute_read_query(context, query, inputs, query_str);
     may_error.check_logic(result); // we don't close read transactions with logical errors
 }
 
-fn record_answers_of_typeql_read_query(context: &mut Context, query_str: &str) {
+fn record_answers_of_typeql_read_query(context: &mut Context, query_str: &str, inputs: Option<QueryInputs>) {
     let query = typeql::parse_query(query_str).unwrap();
-    context.query_answer = match execute_read_query(context, query, query_str) {
+    context.query_answer = match execute_read_query(context, query, inputs, query_str) {
         Ok(answers) => Some(answers),
         Err(error) => panic!("Unexpected get answers error: {:?}", error),
     }
 }
 
 #[apply(generic_step)]
-#[step("get answers of typeql read query")]
-async fn get_answers_of_typeql_read_query(context: &mut Context, step: &Step) {
-    record_answers_of_typeql_read_query(context, step.docstring.as_ref().unwrap().as_str());
+#[step(expr = "get answers of typeql read query{with_inputs}")]
+async fn get_answers_of_typeql_read_query(context: &mut Context, with_inputs: params::WithInputs, step: &Step) {
+    let inputs = may_take_inputs(context, with_inputs);
+    record_answers_of_typeql_read_query(context, step.docstring.as_ref().unwrap().as_str(), inputs);
 }
 
 #[cucumber::when("get answers of templated typeql read query")]
@@ -309,7 +353,7 @@ async fn get_answers_of_templated_typeql_read_query(context: &mut Context, step:
     let rows = context.query_answer.as_ref().unwrap().as_rows();
     let [answer] = rows else { panic!("Expected single answer, found {}", rows.len()) };
     let templated_query = step.docstring.as_ref().unwrap().as_str();
-    record_answers_of_typeql_read_query(context, &apply_query_template(templated_query, answer));
+    record_answers_of_typeql_read_query(context, &apply_query_template(templated_query, answer), None);
 }
 
 #[apply(generic_step)]
@@ -444,12 +488,8 @@ fn does_attribute_match(id: &str, var_value: &VariableValue<'_>, context: &Conte
     })
 }
 
-fn does_value_match(id: &str, var_value: &VariableValue<'_>, _context: &Context) -> bool {
-    let VariableValue::Value(value) = var_value else {
-        return false;
-    };
-    let (id_type, id_value) = id.split_once(":").unwrap();
-    let expected_value_type = match id_type {
+fn parse_value_type(value_type_string: &str) -> ValueType {
+    match value_type_string {
         "boolean" => ValueType::Boolean,
         "integer" => ValueType::Integer,
         "double" => ValueType::Double,
@@ -460,7 +500,15 @@ fn does_value_match(id: &str, var_value: &VariableValue<'_>, _context: &Context)
         "duration" => ValueType::Duration,
         "string" => ValueType::String,
         _ => todo!("TypeQL test value type is not covered"),
+    }
+}
+
+fn does_value_match(id: &str, var_value: &VariableValue<'_>, _context: &Context) -> bool {
+    let VariableValue::Value(value) = var_value else {
+        return false;
     };
+    let (id_type, id_value) = id.split_once(":").unwrap();
+    let expected_value_type = parse_value_type(id_type);
     let expected = params::Value::from_str(id_value).unwrap().into_typedb(expected_value_type);
     if expected.value_type() == ValueType::Double {
         let precision = id_value.split_once(".").map(|(_, decimal)| decimal.len()).unwrap_or(5) as i32;
@@ -539,7 +587,7 @@ async fn each_answer_satisfies(context: &mut Context, step: &Step) {
     for answer in context.query_answer.as_ref().unwrap().as_rows() {
         let query_string = apply_query_template(templated_query, answer);
         let query = typeql::parse_query(&query_string).unwrap();
-        let answer_size = match execute_read_query(context, query, &query_string) {
+        let answer_size = match execute_read_query(context, query, None, &query_string) {
             Ok(answers) => answers.len(),
             Err(error) => panic!("Unexpected get answers error: {:?}", error),
         };
@@ -578,7 +626,7 @@ async fn verify_answer_set(context: &mut Context, step: &Step) {
     }
     let query_str = step.docstring.as_ref().unwrap().as_str();
     let query = typeql::parse_query(query_str).unwrap();
-    let verify_answers = execute_read_query(context, query, query_str).unwrap();
+    let verify_answers = execute_read_query(context, query, None, query_str).unwrap();
     match (&context.query_answer.as_ref().unwrap(), verify_answers) {
         (QueryAnswer::ConceptRows(actual), QueryAnswer::ConceptRows(expected)) => {
             assert_eq!(
@@ -698,4 +746,42 @@ fn normalize_functor_for_compare(functor: &str) -> String {
     let mut normalized = functor.to_lowercase();
     normalized.retain(|c| !c.is_whitespace());
     normalized
+}
+
+fn parse_query_inputs_row(row: &[String]) -> Vec<VariableValue<'static>> {
+    row.iter().map(parse_query_inputs_row_entry).collect()
+}
+
+fn parse_query_inputs_row_entry(entry: &String) -> VariableValue<'static> {
+    let mut parts = entry.split(":");
+    match parts.next().unwrap() {
+        "none" => VariableValue::None,
+        "value" => {
+            let value_type_str = parts.next().expect("value:<value-type>:<value>");
+            let value_str = parts.next().expect("value:<value-type>:<value>");
+            let expected_value_type = parse_value_type(value_type_str);
+            let value = params::Value::from_str(value_str).unwrap().into_typedb(expected_value_type);
+            VariableValue::Value(value)
+        }
+        "iid" => {
+            let hex = parts.next().expect("Expected the iid:<hex>");
+            let bytes: Vec<u8> = (0..hex.len())
+                .step_by(2)
+                .map(|i| u8::from_str_radix(&hex[i..i + 2], 16))
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap();
+            if let Some(vertex) = ObjectVertex::try_decode(&bytes) {
+                VariableValue::Thing(if vertex.prefix() == Prefix::VertexEntity {
+                    Entity::new(vertex).into()
+                } else {
+                    Relation::new(vertex).into()
+                })
+            } else if let Some(vertex) = AttributeVertex::try_decode(&bytes) {
+                VariableValue::Thing(Attribute::new(vertex).into())
+            } else {
+                panic!("Invalid hex for iid: {hex}");
+            }
+        }
+        other => panic!("Invalid entry type: {other}"),
+    }
 }

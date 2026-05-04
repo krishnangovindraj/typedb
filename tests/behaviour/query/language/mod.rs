@@ -11,6 +11,7 @@ mod delete;
 mod disjunction;
 mod expressions;
 mod fetch;
+mod inputs;
 mod insert;
 mod r#match;
 mod modifiers;

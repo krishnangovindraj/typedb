@@ -63,7 +63,8 @@ fn pipeline_at_limit_is_accepted() {
         &type_manager,
         thing_manager.clone(),
         &function_manager,
-        &pipeline,
+        pipeline,
+        None,
         &query_str,
     );
 
@@ -86,6 +87,7 @@ fn pipeline_over_limit_is_rejected() {
         thing_manager.clone(),
         &function_manager,
         &pipeline,
+        None,
         &query_str,
     );
     let err = match result {

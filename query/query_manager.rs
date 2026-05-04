@@ -137,7 +137,7 @@ impl QueryManager {
         type_manager: &TypeManager,
         thing_manager: Arc<ThingManager>,
         function_manager: &FunctionManager,
-        query: &typeql::query::Pipeline,
+        query: typeql::query::Pipeline,
         inputs: Option<QueryInputs>,
         source_query: &str,
     ) -> Result<Pipeline<Snapshot, ReadPipelineStage<Snapshot>>, Box<QueryError>> {
@@ -206,7 +206,7 @@ impl QueryManager {
             pipeline_structure,
             ..
         } = executable_pipeline;
-        let inputs = validate_inputs(&executable_inputs, inputs)?;
+        let inputs = validate_inputs(&variable_registry, &executable_inputs, inputs)?;
 
         // 4: Executor
         Pipeline::build_read_pipeline(
@@ -233,7 +233,7 @@ impl QueryManager {
         type_manager: &TypeManager,
         thing_manager: Arc<ThingManager>,
         function_manager: &FunctionManager,
-        query: &typeql::query::Pipeline,
+        query: typeql::query::Pipeline,
         inputs: Option<QueryInputs>,
         source_query: &str,
     ) -> Result<Pipeline<Snapshot, WritePipelineStage<Snapshot>>, (Snapshot, Box<QueryError>)> {
@@ -312,7 +312,7 @@ impl QueryManager {
             pipeline_structure,
             ..
         } = executable_pipeline;
-        let inputs = match validate_inputs(&executable_inputs, inputs) {
+        let inputs = match validate_inputs(&variable_registry, &executable_inputs, inputs) {
             Ok(inputs) => inputs,
             Err(err) => return Err((snapshot, err)),
         };
@@ -545,7 +545,11 @@ fn annotate_and_compile_query(
     Ok(executable_pipeline)
 }
 
-fn validate_inputs(inputs_executable: &PipelineInputs, inputs_opt: Option<Batch>) -> Result<Batch, Box<QueryError>> {
+fn validate_inputs(
+    variable_registry: &VariableRegistry,
+    inputs_executable: &PipelineInputs,
+    inputs_opt: Option<Batch>,
+) -> Result<Batch, Box<QueryError>> {
     let batch = match (inputs_executable.variables.len(), inputs_opt) {
         (0, None) => Ok(Batch::new_single_empty_row()),
         (_, None) => Err(Box::new(QueryError::BadInput {})),
@@ -560,12 +564,18 @@ fn validate_inputs(inputs_executable: &PipelineInputs, inputs_opt: Option<Batch>
     batch
         .iter()
         .enumerate()
-        .try_for_each(|(index, row)| validate_row(inputs_executable, row).map_err(|var| (index, var)))
+        .try_for_each(|(index, row)| {
+            validate_row(variable_registry, inputs_executable, row).map_err(|var| (index, var))
+        })
         .map_err(|(_row_index, _variable)| QueryError::BadInput {})?;
     Ok(batch)
 }
 
-fn validate_row(inputs_executable: &PipelineInputs, row: MaybeOwnedRow<'_>) -> Result<(), Variable> {
+fn validate_row(
+    variable_registry: &VariableRegistry,
+    inputs_executable: &PipelineInputs,
+    row: MaybeOwnedRow<'_>,
+) -> Result<(), Variable> {
     inputs_executable.variables.iter().zip(row.iter().zip(inputs_executable.expected_types.iter())).try_for_each(
         |(variable, (entry, expected))| {
             let entry_ok = match (entry, expected) {
@@ -575,7 +585,7 @@ fn validate_row(inputs_executable: &PipelineInputs, row: MaybeOwnedRow<'_>) -> R
                 (VariableValue::Thing(thing), FunctionParameterAnnotation::Concept(types)) => {
                     types.contains(&thing.type_())
                 }
-                (VariableValue::None, _) => todo_must_implement!("Optional inputs"),
+                (VariableValue::None, _) => variable_registry.is_variable_optional(*variable),
                 (_, FunctionParameterAnnotation::AnyConcept) => unreachable!("Unexpected"),
                 (VariableValue::Value(_), _)
                 | (VariableValue::Thing(_), _)

@@ -885,3 +885,21 @@ impl FromStr for Optional {
         })
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Parameter)]
+#[param(name = "with_inputs", regex = "(| with inputs)")]
+pub enum WithInputs {
+    False,
+    True,
+}
+
+impl FromStr for WithInputs {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "with inputs" => Self::True,
+            "" => Self::False,
+            invalid => return Err(format!("Invalid `WithInputs`: {invalid}")),
+        })
+    }
+}

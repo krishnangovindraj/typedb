@@ -143,7 +143,7 @@ pub mod query_util {
 
     pub fn execute_read_pipeline(
         tx: TransactionRead<WALClient>,
-        pipeline: &Pipeline,
+        pipeline: Pipeline,
         inputs: Option<QueryInputs>,
         source_query: &str,
     ) -> (TransactionRead<WALClient>, Result<Vec<HashMap<String, VariableValue<'static>>>, Box<QueryError>>) {
@@ -193,7 +193,7 @@ pub mod query_util {
         thing_manager: Arc<ThingManager>,
         function_manager: &FunctionManager,
         query_manager: &QueryManager,
-        pipeline: &Pipeline,
+        pipeline: Pipeline,
         inputs: Option<QueryInputs>,
         source_query: &str,
     ) -> (Result<Vec<HashMap<String, VariableValue<'static>>>, Box<QueryError>>, Arc<WriteSnapshot<WALClient>>) {

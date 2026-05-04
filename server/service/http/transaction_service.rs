@@ -979,7 +979,7 @@ impl TransactionService {
                     &type_manager,
                     thing_manager.clone(),
                     &function_manager,
-                    &pipeline,
+                    pipeline,
                     None,
                     &source_query,
                 );
