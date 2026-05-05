@@ -897,7 +897,7 @@ impl FromStr for WithInputs {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
-            "with inputs" => Self::True,
+            " with inputs" => Self::True,
             "" => Self::False,
             invalid => return Err(format!("Invalid `WithInputs`: {invalid}")),
         })

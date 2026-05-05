@@ -16,7 +16,14 @@ use concept::{
 use cucumber::gherkin::Step;
 use encoding::{
     Prefixed,
-    graph::thing::{ThingVertex, vertex_attribute::AttributeVertex, vertex_object::ObjectVertex},
+    graph::{
+        thing::{
+            ThingVertex,
+            vertex_attribute::{AttributeID, AttributeVertex},
+            vertex_object::{ObjectID, ObjectVertex},
+        },
+        type_::vertex::TypeID,
+    },
     layout::prefix::Prefix,
     value::{ValueEncodable, label::Label, value_type::ValueType},
 };
@@ -25,6 +32,7 @@ use executor::{
     batch::Batch,
     pipeline::stage::{ExecutionContext, StageIterator},
 };
+use futures::StreamExt;
 use itertools::{Either, Itertools};
 use lending_iterator::LendingIterator;
 use macro_rules_attribute::apply;
@@ -239,7 +247,8 @@ async fn query_inputs(context: &mut Context, step: &Step) {
     let length = table.rows.len();
     let width = table.rows.first().unwrap().len() as u32;
     let mut inputs = QueryInputs::new(width, length);
-    table.rows.iter().for_each(|row| {
+    // Ignore the first row as a documentational header
+    table.rows[1..].iter().for_each(|row| {
         inputs.append(|mut into_row| {
             row.iter().map(parse_query_inputs_row_entry).enumerate().for_each(|(i, value)| {
                 into_row.set(VariablePosition::new(i as u32), value);
@@ -753,6 +762,10 @@ fn parse_query_inputs_row(row: &[String]) -> Vec<VariableValue<'static>> {
 }
 
 fn parse_query_inputs_row_entry(entry: &String) -> VariableValue<'static> {
+    fn hex_to_u64(hex: &str) -> u64 {
+        u64::from_str_radix(hex, 16).expect("Bad hex in iid: {hex}")
+    }
+
     let mut parts = entry.split(":");
     match parts.next().unwrap() {
         "none" => VariableValue::None,
@@ -764,23 +777,33 @@ fn parse_query_inputs_row_entry(entry: &String) -> VariableValue<'static> {
             VariableValue::Value(value)
         }
         "iid" => {
-            let hex = parts.next().expect("Expected the iid:<hex>");
-            let bytes: Vec<u8> = (0..hex.len())
-                .step_by(2)
-                .map(|i| u8::from_str_radix(&hex[i..i + 2], 16))
-                .collect::<Result<Vec<_>, _>>()
-                .unwrap();
-            if let Some(vertex) = ObjectVertex::try_decode(&bytes) {
-                VariableValue::Thing(if vertex.prefix() == Prefix::VertexEntity {
-                    Entity::new(vertex).into()
-                } else {
-                    Relation::new(vertex).into()
-                })
-            } else if let Some(vertex) = AttributeVertex::try_decode(&bytes) {
-                VariableValue::Thing(Attribute::new(vertex).into())
-            } else {
-                panic!("Invalid hex for iid: {hex}");
-            }
+            let expected = "Expected iid:<kind>:<typeid-hex>:<instanceid-hex>";
+            let kind = parts.next().unwrap();
+            let type_id = TypeID::new(hex_to_u64(parts.next().expect(expected)) as u16);
+
+            let thing = match kind {
+                "entity" => {
+                    let instance_id = hex_to_u64(parts.next().expect(expected));
+                    Entity::new(ObjectVertex::build_entity(type_id, ObjectID::new(instance_id))).into()
+                }
+                "relation" => {
+                    let instance_id = hex_to_u64(parts.next().expect(expected));
+                    Relation::new(ObjectVertex::build_entity(type_id, ObjectID::new(instance_id))).into()
+                }
+                "attr" => {
+                    debug_assert!(false, "Untested code. Remove this assert and try your luck");
+                    let hex = parts.next().expect(expected);
+                    let hex = hex.replace("_", "");
+                    let bytes = (0..hex.len())
+                        .step_by(2)
+                        .map(|i| u8::from_str_radix(&hex[i..i + 2], 16))
+                        .collect::<Result<Vec<_>, _>>()
+                        .unwrap();
+                    Attribute::new(AttributeVertex::new(type_id, AttributeID::new(&bytes))).into()
+                }
+                other => panic!("Invalid kind: {other}"),
+            };
+            VariableValue::Thing(thing)
         }
         other => panic!("Invalid entry type: {other}"),
     }
