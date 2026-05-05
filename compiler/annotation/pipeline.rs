@@ -20,7 +20,7 @@ use ir::{
         conjunction::Conjunction,
         constraint::{Constraint, ExpressionBinding},
         nested_pattern::NestedPattern,
-        variable_category::VariableCategory,
+        variable_category::{VariableCategory, VariableOptionality},
     },
     pipeline::{
         ParameterRegistry, VariableRegistry,
@@ -57,10 +57,15 @@ use crate::{
     executable::{reduce::ReduceInstruction, update},
 };
 
-pub type AnnotatedInputs = crate::executable::pipeline::PipelineInputs;
+pub struct AnnotatedInputs {
+    pub variables: Vec<Variable>,
+    pub expected_types: Vec<FunctionParameterAnnotation>,
+    pub optionality: Vec<VariableOptionality>,
+}
+
 pub struct AnnotatedPipeline {
     pub annotated_preamble: AnnotatedPreambleFunctions,
-    pub annotated_inputs: AnnotatedInputs,
+    pub annotated_inputs: Option<AnnotatedInputs>,
     pub annotated_stages: Vec<AnnotatedStage>,
     pub annotated_fetch: Option<AnnotatedFetch>,
 }
@@ -130,9 +135,13 @@ pub fn annotate_preamble_and_pipeline(
         parameters,
     );
     let annotated_inputs = annotate_inputs(&mut ctx, translated_inputs)?;
-    let input_annotations = RunningVariableAnnotations::from_iterator(
-        annotated_inputs.variables.iter().copied().zip(annotated_inputs.expected_types.iter().cloned()),
-    );
+    let input_annotations = if let Some(inputs) = &annotated_inputs {
+        RunningVariableAnnotations::from_iterator(
+            inputs.variables.iter().copied().zip(inputs.expected_types.iter().cloned()),
+        )
+    } else {
+        RunningVariableAnnotations::empty()
+    };
     let (annotated_stages, output_annotations) =
         annotate_pipeline_stages(&mut ctx, translated_stages, input_annotations, None)?;
     let annotated_fetch =
@@ -143,9 +152,9 @@ pub fn annotate_preamble_and_pipeline(
 fn annotate_inputs(
     ctx: &mut PipelineAnnotationContext<'_, impl ReadableSnapshot>,
     translated_inputs: Option<TranslatedInputs>,
-) -> Result<AnnotatedInputs, AnnotationError> {
+) -> Result<Option<AnnotatedInputs>, AnnotationError> {
     let Some(TranslatedInputs { variables, labels, .. }) = translated_inputs else {
-        return Ok(AnnotatedInputs { variables: Vec::new(), expected_types: Vec::new() });
+        return Ok(None);
     };
     let expected_types = get_annotations_from_labels_vec(&ctx.to_parts_mut().0, &labels).map_err(
         |(index, source_span, typedb_source)| AnnotationError::CouldNotResolveInputType {
@@ -154,7 +163,17 @@ fn annotate_inputs(
             typedb_source,
         },
     )?;
-    Ok(AnnotatedInputs { variables, expected_types })
+    let optionality = variables
+        .iter()
+        .map(|&variable| {
+            if ctx.variable_registry.is_variable_optional(variable) {
+                VariableOptionality::Optional
+            } else {
+                VariableOptionality::Required
+            }
+        })
+        .collect();
+    Ok(Some(AnnotatedInputs { variables, expected_types, optionality }))
 }
 
 pub(crate) fn annotate_pipeline_stages(

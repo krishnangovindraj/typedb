@@ -9,7 +9,11 @@ use std::{collections::HashMap, sync::Arc};
 use answer::variable::Variable;
 use compiler::{
     VariablePosition,
-    executable::{fetch::executable::ExecutableFetch, function::ExecutableFunctionRegistry, pipeline::ExecutableStage},
+    executable::{
+        fetch::executable::ExecutableFetch,
+        function::ExecutableFunctionRegistry,
+        pipeline::{ExecutableStage, InputsExecutable},
+    },
     query_structure::{ParametrisedPipelineStructure, PipelineStructure},
 };
 use concept::thing::thing_manager::ThingManager;
@@ -97,12 +101,14 @@ impl<Snapshot: ReadableSnapshot + 'static> Pipeline<Snapshot, ReadPipelineStage<
         variable_names: &HashMap<Variable, String>,
         pipeline_structure: Option<Arc<ParametrisedPipelineStructure>>,
         executable_functions: Arc<ExecutableFunctionRegistry>,
+        executable_inputs: Option<InputsExecutable>,
         executable_stages: &[ExecutableStage],
         executable_fetch: Option<Arc<ExecutableFetch>>,
         parameters: Arc<ParameterRegistry>,
         inputs: Batch,
         query_profile: Arc<QueryProfile>,
     ) -> Result<Self, Box<PipelineError>> {
+        compile_error!("Use executable_inputs as a first stage");
         let output_variable_positions = executable_stages.last().unwrap().output_row_mapping();
         let context = ExecutionContext::new_with_profile(snapshot, thing_manager, parameters.clone(), query_profile);
 
@@ -233,12 +239,14 @@ impl<Snapshot: WritableSnapshot + 'static> Pipeline<Snapshot, WritePipelineStage
         pipeline_structure: Option<Arc<ParametrisedPipelineStructure>>,
         thing_manager: Arc<ThingManager>,
         executable_functions: Arc<ExecutableFunctionRegistry>,
+        executable_inputs: Option<InputsExecutable>,
         executable_stages: Vec<ExecutableStage>,
         executable_fetch: Option<Arc<ExecutableFetch>>,
         parameters: Arc<ParameterRegistry>,
         inputs: Batch,
         query_profile: Arc<QueryProfile>,
     ) -> Self {
+        compile_error!("Use executable_inputs as a first stage");
         let output_variable_positions = executable_stages.last().unwrap().output_row_mapping();
         let context =
             ExecutionContext::new_with_profile(Arc::new(snapshot), thing_manager, parameters.clone(), query_profile);

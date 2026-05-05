@@ -20,6 +20,7 @@ use crate::{
 pub mod delete;
 pub mod fetch;
 pub mod initial;
+mod inputs;
 pub mod insert;
 pub mod match_;
 pub mod modifiers;
@@ -77,5 +78,17 @@ typedb_error! {
         WriteError(6, "Error executing write operation.", typedb_source: Box<WriteError>),
         ReadPatternExecution(7, "Error executing a read pattern.", typedb_source: ReadExecutionError),
         FetchError(8, "Error executing fetch operation.", typedb_source: FetchExecutionError),
+        InputDidNotSatisfyDeclaredType(
+            9,
+            "The value for the input at row '{row_index}' and column '{column_index}' did not not satisfy the declared type",
+            row_index: usize,
+            column_index: usize,
+        ),
+        InputConceptDoesNotExist(
+            10,
+            "The input instance at row '{row_index}' and column '{column_index}' was not found in the database",
+            row_index: usize,
+            column_index: usize,
+        ),
     }
 }

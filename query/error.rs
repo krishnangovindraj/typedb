@@ -36,6 +36,19 @@ typedb_error! {
         QueryExecutionClosedEarly(16, "Query execution was closed before it finished, possibly due to transaction close, rollback, commit, or a server-side error (these should be visible in the server logs)."),
         QueryAnalysisFailed(17, "Error while analysing the query.", source_query: String, typedb_source: Box<ConceptReadError>),
         PipelineStagesLimitExceeded(18, "Query pipeline has {actual} stages, which exceeds the maximum allowed {max}.", source_query: String, actual: usize, max: usize),
-        BadInput(19, "Bad input encountered. TODO: Better message"),
+        NoInputsProvided(21, "The query contains an inputs stage, but no inputs were given."),
+        UnexpectedInputsProvided(22, "The query contains no inputs stage, but inputs were provided."),
+        InputWidthDoesNotMatchDeclared(
+            23,
+            "The width of the inputs provided does not match that declared in the query.",
+            declared_width: u32,
+            actual_width: u32,
+        ),
+        ConceptReadErrorWhileValidatingInputs(
+            24,
+            "An error occured while validating whether input concepts exist",
+            typedb_source: Box<ConceptReadError>,
+        ),
+        UnimplementedLanguageFeature(255, "Unimplemented '{feature}'.", feature: error::UnimplementedFeature),
     }
 }

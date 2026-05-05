@@ -14,13 +14,16 @@ use compiler::{
         function::FunctionParameterAnnotation,
         pipeline::{AnnotatedPipeline, annotate_preamble_and_pipeline},
     },
-    executable::pipeline::{ExecutablePipeline, ExecutableStage, PipelineInputs, compile_pipeline_and_functions},
+    executable::pipeline::{ExecutablePipeline, ExecutableStage, InputsExecutable, compile_pipeline_and_functions},
     query_structure::{extract_pipeline_structure_from, extract_query_structure_from},
     transformation::transform::apply_transformations,
 };
-use concept::{thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
+use concept::{
+    thing::{ThingAPI, thing_manager::ThingManager},
+    type_::type_manager::TypeManager,
+};
 use encoding::value::{ValueEncodable, value::Value};
-use error::todo_must_implement;
+use error::{UnimplementedFeature, todo_must_implement};
 use executor::{
     batch::Batch,
     pipeline::{
@@ -47,7 +50,7 @@ use ir::{
 use resource::{
     constants::query::MAX_PIPELINE_STAGES,
     perf_counters::{QUERY_CACHE_HITS, QUERY_CACHE_MISSES},
-    profile::{CompileProfile, QueryProfile},
+    profile::{CompileProfile, QueryProfile, StorageCounters},
 };
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 use tracing::{Level, event};
@@ -206,7 +209,7 @@ impl QueryManager {
             pipeline_structure,
             ..
         } = executable_pipeline;
-        let inputs = validate_inputs(&variable_registry, &executable_inputs, inputs)?;
+        let inputs = validate_inputs(executable_inputs.as_ref(), inputs)?;
 
         // 4: Executor
         Pipeline::build_read_pipeline(
@@ -215,8 +218,7 @@ impl QueryManager {
             variable_registry.variable_names(),
             (variable_registry.branch_ids_allocated() < 64).then_some(pipeline_structure),
             Arc::new(executable_functions),
-            // executable_inputs
-            &executable_stages,
+            executable_inputs & executable_stages,
             executable_fetch,
             arced_parameters,
             inputs,
@@ -312,7 +314,7 @@ impl QueryManager {
             pipeline_structure,
             ..
         } = executable_pipeline;
-        let inputs = match validate_inputs(&variable_registry, &executable_inputs, inputs) {
+        let inputs = match validate_inputs(executable_inputs.as_ref(), inputs) {
             Ok(inputs) => inputs,
             Err(err) => return Err((snapshot, err)),
         };
@@ -324,7 +326,7 @@ impl QueryManager {
             (variable_registry.branch_ids_allocated() < 64).then_some(pipeline_structure),
             thing_manager,
             Arc::new(executable_functions),
-            // executable_inputs,
+            executable_inputs,
             executable_stages,
             executable_fetch,
             arced_parameters.clone(),
@@ -546,54 +548,23 @@ fn annotate_and_compile_query(
 }
 
 fn validate_inputs(
-    variable_registry: &VariableRegistry,
-    inputs_executable: &PipelineInputs,
+    inputs_executable: Option<&InputsExecutable>,
     inputs_opt: Option<Batch>,
 ) -> Result<Batch, Box<QueryError>> {
-    let batch = match (inputs_executable.variables.len(), inputs_opt) {
-        (0, None) => Ok(Batch::new_single_empty_row()),
-        (_, None) => Err(Box::new(QueryError::BadInput {})),
-        (width, Some(batch)) => {
-            if width != batch.width() as usize {
-                Err(Box::new(QueryError::BadInput {}))
+    let expected_width = inputs_executable.map(|executable| executable.variables().len() as u32);
+    match (expected_width, inputs_opt) {
+        (None, Some(_)) => Err(Box::new(QueryError::UnexpectedInputsProvided {})),
+        (Some(_), None) => Err(Box::new(QueryError::NoInputsProvided {})),
+        (None, None) => Ok(Batch::new_single_empty_row()),
+        (Some(width), Some(batch)) => {
+            if width != batch.width() {
+                Err(Box::new(QueryError::InputWidthDoesNotMatchDeclared {
+                    declared_width: width,
+                    actual_width: batch.width(),
+                }))
             } else {
                 Ok(batch)
             }
         }
-    }?;
-    batch
-        .iter()
-        .enumerate()
-        .try_for_each(|(index, row)| {
-            validate_row(variable_registry, inputs_executable, row).map_err(|var| (index, var))
-        })
-        .map_err(|(_row_index, _variable)| QueryError::BadInput {})?;
-    Ok(batch)
-}
-
-fn validate_row(
-    variable_registry: &VariableRegistry,
-    inputs_executable: &PipelineInputs,
-    row: MaybeOwnedRow<'_>,
-) -> Result<(), Variable> {
-    inputs_executable.variables.iter().zip(row.iter().zip(inputs_executable.expected_types.iter())).try_for_each(
-        |(variable, (entry, expected))| {
-            let entry_ok = match (entry, expected) {
-                (VariableValue::Value(value), FunctionParameterAnnotation::Value(value_type)) => {
-                    *value_type == value.value_type()
-                }
-                (VariableValue::Thing(thing), FunctionParameterAnnotation::Concept(types)) => {
-                    types.contains(&thing.type_())
-                }
-                (VariableValue::None, _) => variable_registry.is_variable_optional(*variable),
-                (_, FunctionParameterAnnotation::AnyConcept) => unreachable!("Unexpected"),
-                (VariableValue::Value(_), _)
-                | (VariableValue::Thing(_), _)
-                | (VariableValue::ValueList(_), _)
-                | (VariableValue::ThingList(_), _)
-                | (VariableValue::Type(_), _) => false,
-            };
-            if entry_ok { Ok(()) } else { Err(*variable) }
-        },
-    )
+    }
 }

@@ -13,13 +13,16 @@ use std::{
 use answer::{Type, variable::Variable};
 use concept::thing::statistics::Statistics;
 use ir::{
-    pattern::{Pattern, Vertex, conjunction::Conjunction, nested_pattern::NestedPattern},
+    pattern::{
+        Pattern, Vertex, conjunction::Conjunction, nested_pattern::NestedPattern,
+        variable_category::VariableOptionality,
+    },
     pipeline::{VariableRegistry, function_signature::FunctionID, reduce::AssignedReduction},
 };
 use itertools::Itertools;
 
 use crate::{
-    VariablePosition,
+    ExecutorVariable, VariablePosition,
     annotation::{
         fetch::{AnnotatedFetch, AnnotatedFetchObject, AnnotatedFetchSome},
         function::{AnnotatedPreambleFunctions, AnnotatedSchemaFunctions, FunctionParameterAnnotation},
@@ -31,10 +34,11 @@ use crate::{
         fetch::executable::{ExecutableFetch, compile_fetch},
         function::{ExecutableFunctionRegistry, FunctionCallCostProvider, executable::compile_functions},
         insert::{self, executable::InsertExecutable},
-        match_::planner::conjunction_executable::ConjunctionExecutable,
+        match_::{instructions::CheckInstruction, planner::conjunction_executable::ConjunctionExecutable},
         modifiers::{
             DistinctExecutable, LimitExecutable, OffsetExecutable, RequireExecutable, SelectExecutable, SortExecutable,
         },
+        next_executable_id,
         put::PutExecutable,
         reduce::{ReduceExecutable, ReduceRowsExecutable},
         update::executable::UpdateExecutable,
@@ -77,7 +81,7 @@ impl<'a> IntoIterator for &'a TypePopulations {
 #[derive(Debug, Clone)]
 pub struct ExecutablePipeline {
     pub executable_functions: ExecutableFunctionRegistry,
-    pub executable_inputs: PipelineInputs,
+    pub executable_inputs: Option<InputsExecutable>,
     pub executable_stages: Vec<ExecutableStage>,
     pub executable_fetch: Option<Arc<ExecutableFetch>>,
     pub pipeline_structure: Arc<ParametrisedPipelineStructure>,
@@ -146,7 +150,7 @@ pub fn compile_pipeline_and_functions(
     variable_registry: &VariableRegistry,
     annotated_schema_functions: &AnnotatedSchemaFunctions,
     annotated_preamble: AnnotatedPreambleFunctions,
-    annotated_inputs: AnnotatedInputs,
+    annotated_inputs: Option<AnnotatedInputs>,
     annotated_stages: Vec<AnnotatedStage>,
     annotated_fetch: Option<AnnotatedFetch>,
     pipeline_structure: Arc<ParametrisedPipelineStructure>,
@@ -178,19 +182,21 @@ pub fn compile_pipeline_and_functions(
 
     let schema_and_preamble_functions: ExecutableFunctionRegistry =
         ExecutableFunctionRegistry::new(arced_executable_schema_functions, executable_preamble_functions);
-    let executable_inputs =
-        PipelineInputs { variables: annotated_inputs.variables, expected_types: annotated_inputs.expected_types };
+    let executable_inputs = annotated_inputs.map(|inputs| {
+        InputsExecutable::new(next_executable_id(), inputs.variables, inputs.expected_types, inputs.optionality)
+    });
     let (_input_positions, executable_stages, executable_fetch, type_populations) = compile_stages_and_fetch(
         statistics,
         variable_registry,
         &schema_and_preamble_functions,
         &annotated_stages,
         annotated_fetch,
-        executable_inputs.variables.as_slice(),
+        executable_inputs.as_ref().map_or(&[], |inputs| inputs.variables()),
     )?;
     debug_assert!(
         executable_inputs
-            .variables
+            .as_ref()
+            .map_or(&Vec::new(), |inputs| &inputs.variables)
             .iter()
             .enumerate()
             .all(|(i, v)| { _input_positions.get(v) == Some(&VariablePosition::new(i as u32)) })
@@ -199,7 +205,7 @@ pub fn compile_pipeline_and_functions(
     Ok(ExecutablePipeline {
         pipeline_structure,
         executable_functions: schema_and_preamble_functions,
-        executable_inputs: executable_inputs,
+        executable_inputs,
         executable_stages,
         executable_fetch,
         type_populations,
@@ -597,17 +603,41 @@ fn find_referenced_functions_in_fetch(
 }
 
 #[derive(Debug, Clone)]
-pub struct PipelineInputs {
-    pub variables: Vec<Variable>,
-    pub expected_types: Vec<FunctionParameterAnnotation>,
+pub struct InputsExecutable {
+    pub executable_id: u64,
+    variables: Vec<Variable>,
+    expected_types: Vec<FunctionParameterAnnotation>,
+    optionality: Vec<VariableOptionality>,
 }
 
-impl PipelineInputs {
-    pub(crate) fn new(variables: Vec<Variable>, expected_types: Vec<FunctionParameterAnnotation>) -> Self {
-        Self { variables, expected_types }
+impl InputsExecutable {
+    pub(crate) fn new(
+        executable_id: u64,
+        variables: Vec<Variable>,
+        expected_types: Vec<FunctionParameterAnnotation>,
+        optionality: Vec<VariableOptionality>,
+    ) -> Self {
+        debug_assert!(variables.len() == expected_types.len() && variables.len() == optionality.len());
+        Self { executable_id, variables, expected_types, optionality }
     }
 
-    fn row_mapping(&self) -> HashMap<Variable, VariablePosition> {
+    pub(crate) fn empty(executable_id: u64) -> Self {
+        Self::new(executable_id, Vec::new(), Vec::new(), Vec::new())
+    }
+
+    pub fn row_mapping(&self) -> HashMap<Variable, VariablePosition> {
         self.variables.iter().cloned().enumerate().map(|(i, v)| (v, VariablePosition::new(i as u32))).collect()
+    }
+
+    pub fn variables(&self) -> &[Variable] {
+        &self.variables
+    }
+
+    pub fn expected_types(&self) -> &[FunctionParameterAnnotation] {
+        &self.expected_types
+    }
+
+    pub fn optionality(&self) -> &[VariableOptionality] {
+        &self.optionality
     }
 }
