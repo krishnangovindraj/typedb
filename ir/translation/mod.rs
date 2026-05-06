@@ -49,8 +49,9 @@ impl PipelineTranslationContext {
     pub fn new_function_pipeline(
         input_variables: Vec<(String, Option<Span>, (VariableCategory, VariableOptionality))>,
     ) -> Result<(Self, Vec<Variable>), Box<RepresentationError>> {
-        let mut this = Self::new();
+        debug_assert!(input_variables.iter().all(|(_, _, (_, opt))| VariableOptionality::Required == *opt));
         let mut variables = Vec::with_capacity(input_variables.len());
+        let mut this = Self::new();
         for input_variable in input_variables {
             variables.push(this.register_input_variable(input_variable)?);
         }
@@ -61,8 +62,9 @@ impl PipelineTranslationContext {
         &mut self,
         input_variable: (String, Option<Span>, (VariableCategory, VariableOptionality)),
     ) -> Result<Variable, Box<RepresentationError>> {
-        let (name, source_span, (category, _optionality)) = input_variable;
-        let variable = self.variable_registry.register_function_argument(name.as_str(), category, source_span)?;
+        let (name, source_span, (category, optionality)) = input_variable;
+        let variable =
+            self.variable_registry.register_input_variable(name.as_str(), category, optionality, source_span)?;
         self.last_stage_visible_variables.insert(name.clone(), variable);
         Ok(variable)
     }

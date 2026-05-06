@@ -80,13 +80,19 @@ typedb_error! {
         FetchError(8, "Error executing fetch operation.", typedb_source: FetchExecutionError),
         InputDidNotSatisfyDeclaredType(
             9,
-            "The given value at row '{row_index}' and column '{column_index}' did not not satisfy the declared type",
+            "The given value at row '{row_index}' and column '{column_index}' does not not satisfy the declared type",
+            row_index: usize,
+            column_index: usize,
+        ),
+        InputDidNotSatisfyDeclaredOptionality(
+            10,
+            "The given value at row '{row_index}' and column '{column_index}' was None, but the variable was not declared optional.",
             row_index: usize,
             column_index: usize,
         ),
         InputConceptDoesNotExist(
-            10,
-            "The given instance at row '{row_index}' and column '{column_index}' was not found in the database",
+            11,
+            "The given instance at row '{row_index}' and column '{column_index}' does not exist in the database",
             row_index: usize,
             column_index: usize,
         ),

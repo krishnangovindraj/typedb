@@ -1809,7 +1809,7 @@ fn query_inputs_from_proto(
             row.entries.into_iter().enumerate().for_each(|(column, entry)| {
                 let entry = entry.entry.expect("Missing proto file");
                 let value: VariableValue<'static> = match entry {
-                    EntryProto::Empty(_) => todo_must_implement!("Optional inputs"),
+                    EntryProto::Empty(_) => VariableValue::None,
                     EntryProto::Value(value) => {
                         VariableValue::Value(decode_value(value.value.expect("Missing proto field")).unwrap())
                     }

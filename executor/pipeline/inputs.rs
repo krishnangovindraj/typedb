@@ -93,7 +93,12 @@ where
         Some(self.source_iterator.next()?.and_then(|row| {
             debug_assert!(row.row().len() == expected_types.len());
             row.iter().enumerate().try_for_each(|(column_index, entry)| {
-                if !row_entry_satisfies_types(&expected_types[column_index], optionality[column_index], entry) {
+                if !row_entry_satisfies_optionality(optionality[column_index], entry) {
+                    Err(Box::new(PipelineExecutionError::InputDidNotSatisfyDeclaredOptionality {
+                        row_index,
+                        column_index,
+                    }))
+                } else if !row_entry_satisfies_types(&expected_types[column_index], optionality[column_index], entry) {
                     Err(Box::new(PipelineExecutionError::InputDidNotSatisfyDeclaredType { row_index, column_index }))
                 } else if !row_entry_exists(&self.context, self.profile.storage_counters(), entry)? {
                     Err(Box::new(PipelineExecutionError::InputConceptDoesNotExist { row_index, column_index }))
@@ -113,6 +118,9 @@ where
 {
 }
 
+fn row_entry_satisfies_optionality(optionality: VariableOptionality, entry: &VariableValue<'_>) -> bool {
+    !(optionality == VariableOptionality::Required && entry == &VariableValue::None)
+}
 fn row_entry_satisfies_types(
     expected_type: &FunctionParameterAnnotation,
     optionality: VariableOptionality,
