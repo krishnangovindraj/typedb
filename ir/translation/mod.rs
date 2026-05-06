@@ -50,13 +50,10 @@ impl PipelineTranslationContext {
         input_variables: Vec<(String, Option<Span>, (VariableCategory, VariableOptionality))>,
     ) -> Result<(Self, Vec<Variable>), Box<RepresentationError>> {
         let mut this = Self::new();
-        let mut last_stage_visible_variables = HashMap::new();
-        let mut variable_registry = VariableRegistry::new();
         let mut variables = Vec::with_capacity(input_variables.len());
         for input_variable in input_variables {
             variables.push(this.register_input_variable(input_variable)?);
         }
-        let this = Self { variable_registry, last_stage_visible_variables };
         Ok((this, variables))
     }
 

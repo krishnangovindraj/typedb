@@ -80,6 +80,7 @@ pub fn translate_function_from(
     let body = translate_function_block(function_index, &mut context, &mut value_parameters, block)?;
 
     // Check for unused arguments
+    debug_assert!(arguments.iter().all(|&arg| context.variable_registry.get_variable_name(arg).is_some()));
     for (index, &arg) in arguments.iter().enumerate() {
         if !body.stages.iter().any(|stage| {
             if let TranslatedStage::Match { block, .. } = stage {
