@@ -26,22 +26,24 @@ use crate::{
     row::MaybeOwnedRow,
 };
 
-pub struct InputStageExecutor {
+pub struct InputStageExecutor<InputIterator> {
     executable: Arc<InputsExecutable>,
+    _input_iterator: PhantomData<InputIterator>,
 }
 
-impl InputStageExecutor {
+impl<InputIterator> InputStageExecutor<InputIterator> {
     pub fn new(executable: Arc<InputsExecutable>) -> Self {
-        Self { executable }
+        Self { executable, _input_iterator: PhantomData }
     }
 }
 
-impl<Snapshot> StageAPI<Snapshot> for InputStageExecutor
+impl<InputIterator, Snapshot> StageAPI<Snapshot> for InputStageExecutor<InputIterator>
 where
+    InputIterator: StageIterator,
     Snapshot: ReadableSnapshot + 'static,
 {
-    type InputIterator = InitialIterator;
-    type OutputIterator = InputStageIterator<Snapshot>;
+    type InputIterator = InputIterator;
+    type OutputIterator = InputStageIterator<Snapshot, InputIterator>;
 
     fn into_iterator(
         self,
@@ -56,19 +58,19 @@ where
     }
 }
 
-pub struct InputStageIterator<Snapshot: ReadableSnapshot + 'static> {
+pub struct InputStageIterator<Snapshot: ReadableSnapshot + 'static, InputIterator: StageIterator> {
     context: ExecutionContext<Snapshot>,
     executable: Arc<InputsExecutable>,
-    source_iterator: InitialIterator,
+    source_iterator: InputIterator,
     input_row_counter: usize,
     profile: Arc<StepProfile>,
 }
 
-impl<Snapshot: ReadableSnapshot + 'static> InputStageIterator<Snapshot> {
+impl<Snapshot: ReadableSnapshot + 'static, InputIterator: StageIterator> InputStageIterator<Snapshot, InputIterator> {
     pub(crate) fn new(
         context: ExecutionContext<Snapshot>,
         executable: Arc<InputsExecutable>,
-        source_iterator: InitialIterator,
+        source_iterator: InputIterator,
     ) -> Self {
         let stage_profile = context.profile.profile_stage(|| "Inputs stage".to_owned(), executable.executable_id);
         let profile = stage_profile.extend_or_get(0, || "Inputs validation".to_owned());
@@ -76,7 +78,11 @@ impl<Snapshot: ReadableSnapshot + 'static> InputStageIterator<Snapshot> {
     }
 }
 
-impl<Snapshot: ReadableSnapshot + 'static> LendingIterator for InputStageIterator<Snapshot> {
+impl<Snapshot, InputIterator> LendingIterator for InputStageIterator<Snapshot, InputIterator>
+where
+    Snapshot: ReadableSnapshot + 'static,
+    InputIterator: StageIterator,
+{
     type Item<'a> = Result<MaybeOwnedRow<'a>, Box<PipelineExecutionError>>;
 
     fn next(&mut self) -> Option<Self::Item<'_>> {
@@ -100,7 +106,11 @@ impl<Snapshot: ReadableSnapshot + 'static> LendingIterator for InputStageIterato
     }
 }
 
-impl<Snapshot: ReadableSnapshot> StageIterator for InputStageIterator<Snapshot> {}
+impl<Snapshot, InputIterator> StageIterator for InputStageIterator<Snapshot, InputIterator>
+where
+    Snapshot: ReadableSnapshot + 'static,
+    InputIterator: StageIterator,
+{}
 
 fn row_entry_satisfies_types(
     expected_type: &FunctionParameterAnnotation,

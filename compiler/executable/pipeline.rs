@@ -81,7 +81,7 @@ impl<'a> IntoIterator for &'a TypePopulations {
 #[derive(Debug, Clone)]
 pub struct ExecutablePipeline {
     pub executable_functions: ExecutableFunctionRegistry,
-    pub executable_inputs: Option<InputsExecutable>,
+    pub executable_inputs: Option<Arc<InputsExecutable>>,
     pub executable_stages: Vec<ExecutableStage>,
     pub executable_fetch: Option<Arc<ExecutableFetch>>,
     pub pipeline_structure: Arc<ParametrisedPipelineStructure>,
@@ -183,7 +183,9 @@ pub fn compile_pipeline_and_functions(
     let schema_and_preamble_functions: ExecutableFunctionRegistry =
         ExecutableFunctionRegistry::new(arced_executable_schema_functions, executable_preamble_functions);
     let executable_inputs = annotated_inputs.map(|inputs| {
-        InputsExecutable::new(next_executable_id(), inputs.variables, inputs.expected_types, inputs.optionality)
+        Arc::new(
+            InputsExecutable::new(next_executable_id(), inputs.variables, inputs.expected_types, inputs.optionality)
+        )
     });
     let (_input_positions, executable_stages, executable_fetch, type_populations) = compile_stages_and_fetch(
         statistics,

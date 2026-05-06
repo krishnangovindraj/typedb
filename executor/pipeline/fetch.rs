@@ -365,6 +365,7 @@ fn execute_list_subfetch(
         variable_registry.variable_names(),
         None,
         functions_registry,
+        None,
         stages,
         Some(fetch.clone()),
         parameters,

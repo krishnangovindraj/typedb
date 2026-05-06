@@ -209,7 +209,7 @@ impl QueryManager {
             pipeline_structure,
             ..
         } = executable_pipeline;
-        let inputs = validate_inputs(executable_inputs.as_ref(), inputs)?;
+        let inputs = validate_inputs(executable_inputs.clone(), inputs)?;
 
         // 4: Executor
         Pipeline::build_read_pipeline(
@@ -218,7 +218,8 @@ impl QueryManager {
             variable_registry.variable_names(),
             (variable_registry.branch_ids_allocated() < 64).then_some(pipeline_structure),
             Arc::new(executable_functions),
-            executable_inputs & executable_stages,
+            executable_inputs,
+            &executable_stages,
             executable_fetch,
             arced_parameters,
             inputs,
@@ -314,7 +315,7 @@ impl QueryManager {
             pipeline_structure,
             ..
         } = executable_pipeline;
-        let inputs = match validate_inputs(executable_inputs.as_ref(), inputs) {
+        let inputs = match validate_inputs(executable_inputs.clone(), inputs) {
             Ok(inputs) => inputs,
             Err(err) => return Err((snapshot, err)),
         };
@@ -548,7 +549,7 @@ fn annotate_and_compile_query(
 }
 
 fn validate_inputs(
-    inputs_executable: Option<&InputsExecutable>,
+    inputs_executable: Option<Arc<InputsExecutable>>,
     inputs_opt: Option<Batch>,
 ) -> Result<Batch, Box<QueryError>> {
     let expected_width = inputs_executable.map(|executable| executable.variables().len() as u32);
