@@ -31,6 +31,7 @@ use crate::{
         delete::DeleteStageExecutor,
         fetch::FetchStageExecutor,
         initial::{InitialIterator, InitialStage},
+        inputs::InputStageExecutor,
         insert::InsertStageExecutor,
         match_::MatchStageExecutor,
         modifiers::{
@@ -46,7 +47,6 @@ use crate::{
     },
     row::MaybeOwnedRow,
 };
-use crate::pipeline::inputs::InputStageExecutor;
 
 pub struct Pipeline<Snapshot: ReadableSnapshot, Nonterminals: StageAPI<Snapshot>> {
     initial_iterator: Nonterminals::InputIterator,

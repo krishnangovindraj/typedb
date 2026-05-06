@@ -18,6 +18,7 @@ use crate::{
         PipelineExecutionError, WrittenRowsIterator,
         delete::DeleteStageExecutor,
         initial::InitialIterator,
+        inputs::{InputStageExecutor, InputStageIterator},
         insert::InsertStageExecutor,
         match_::{MatchStageExecutor, MatchStageIterator},
         modifiers::{
@@ -31,7 +32,6 @@ use crate::{
     },
     row::MaybeOwnedRow,
 };
-use crate::pipeline::inputs::{InputStageExecutor, InputStageIterator};
 
 #[derive(Debug)]
 pub struct ExecutionContext<Snapshot> {

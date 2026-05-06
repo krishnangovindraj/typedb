@@ -110,7 +110,8 @@ impl<Snapshot, InputIterator> StageIterator for InputStageIterator<Snapshot, Inp
 where
     Snapshot: ReadableSnapshot + 'static,
     InputIterator: StageIterator,
-{}
+{
+}
 
 fn row_entry_satisfies_types(
     expected_type: &FunctionParameterAnnotation,
