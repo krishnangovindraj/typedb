@@ -184,7 +184,7 @@ pub mod diagnostics {
     pub const REPORT_INTERVAL_MIN_DELAY: Duration = Duration::from_secs(20 * SECONDS_IN_MINUTE);
     pub const REPORT_ONCE_DELAY: Duration = Duration::from_secs(1 * SECONDS_IN_HOUR);
 
-    pub const REPORT_INITIAL_RETRY_DELAY: Duration = Duration::from_millis(500);
+    pub const REPORT_INITIAL_RETRY_DELAY: Duration = Duration::from_millis(1000);
     pub const REPORT_RETRY_DELAY_EXPONENTIAL_MULTIPLIER: u32 = 2;
     pub const REPORT_MAX_RETRY_NUM: u32 = 3;
 
