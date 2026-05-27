@@ -6,27 +6,18 @@ load("@rules_rust//rust:defs.bzl", "rust_test", "rustfmt_test")
 load("@typedb_dependencies//tool/checkstyle:rules.bzl", "checkstyle_test")
 
 rust_test(
-    name = "test_http_database",
-    srcs = ["database.rs"],
+    name = "test_http_connection",
+    crate_root = "main.rs",
+    srcs = ["main.rs", "database.rs", "transaction.rs"],
     deps = [
         "//tests/behaviour/service/http/http_steps:http_steps",
 
         "@crates//:tokio",
     ],
-    data = ["@typedb_behaviour//connection:database.feature"],
-    crate_features = ["bazel"],
-    tags = ["manual"],
-)
-
-rust_test(
-    name = "test_http_transaction",
-    srcs = ["transaction.rs"],
-    deps = [
-        "//tests/behaviour/service/http/http_steps:http_steps",
-
-        "@crates//:tokio",
+    data = [
+        "@typedb_behaviour//connection:database.feature",
+        "@typedb_behaviour//connection:transaction.feature"
     ],
-    data = ["@typedb_behaviour//connection:transaction.feature"],
     crate_features = ["bazel"],
     tags = ["manual"],
 )
@@ -34,8 +25,7 @@ rust_test(
 rustfmt_test(
     name = "rustfmt_test",
     targets = [
-        ":test_http_database",
-        ":test_http_transaction",
+        ":test_http_connection",
     ],
     size = "small",
 )
