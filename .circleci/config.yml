@@ -64,7 +64,8 @@ commands:
           make altinstall
           echo "/usr/local/lib" >> /etc/ld.so.conf.d/python3.9.conf
           ldconfig
-          ln -s /usr/local/bin/python3.9 /usr/bin/python3
+          # ln -s /usr/local/bin/python3.9 /usr/bin/python3
+          export BAZEL_PYTHON=/usr/local/bin/python3.9
           
           curl -OL "https://github.com/bazelbuild/bazelisk/releases/download/v1.17.0/bazelisk-linux-<<parameters.bazel-arch>>"
           mv "bazelisk-linux-<<parameters.bazel-arch>>" /usr/local/bin/bazel
