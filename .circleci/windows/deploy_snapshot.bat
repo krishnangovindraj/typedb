@@ -18,4 +18,4 @@ SET DEPLOY_ARTIFACT_USERNAME=%REPO_TYPEDB_USERNAME%
 SET DEPLOY_ARTIFACT_PASSWORD=%REPO_TYPEDB_PASSWORD%
 git rev-parse HEAD > version_snapshot.txt
 set /p VER=<version_snapshot.txt
-bazel --output_base=C:\b --windows_enable_symlinks run --config=ci --define version=%VER% //:deploy-typedb-server -- snapshot
+bazel --output_base=C:\b --windows_enable_symlinks run --@rules_python//python/config_settings:bootstrap_impl=system_python --config=ci --define version=%VER% //:deploy-typedb-server -- snapshot
