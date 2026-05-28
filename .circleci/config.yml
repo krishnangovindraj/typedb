@@ -401,12 +401,12 @@ workflows:
       - test-deploy-snapshot-linux-x86_64:
           filters:
             branches:
-              only: [ master, one-off/python39-for-rules_pkg ]
+              only: [ master ]
 
       - test-deploy-snapshot-linux-arm64:
           filters:
             branches:
-              only: [ master, one-off/python39-for-rules_pkg ]
+              only: [ master ]
 
       - test-deploy-snapshot-mac-x86_64:
           filters:
@@ -426,17 +426,17 @@ workflows:
       - deploy-docker-snapshot-x86_64:
           filters:
             branches:
-              only: [ master, one-off/python39-for-rules_pkg ]
+              only: [ master ]
 
       - deploy-docker-snapshot-arm64:
           filters:
             branches:
-              only: [ master, one-off/python39-for-rules_pkg ]
+              only: [ master ]
 
       - deploy-docker-snapshot-multiarch:
           filters:
             branches:
-              only: [ master, one-off/python39-for-rules_pkg ]
+              only: [ master ]
           requires:
             - deploy-docker-snapshot-x86_64
             - deploy-docker-snapshot-arm64
@@ -444,7 +444,7 @@ workflows:
       - sync-to-typedb-benchmark:
           filters:
             branches:
-              only: [ master, one-off/python39-for-rules_pkg ]
+              only: [ master ]
           requires:
             - test-deploy-snapshot-linux-x86_64
   release:
