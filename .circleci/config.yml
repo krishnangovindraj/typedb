@@ -53,17 +53,9 @@ commands:
         type: string
     steps:
       - run: |
-          amazon-linux-extras install java-openjdk11 docker -y
-          yum install -y git tar gcc gcc-c++ file lsof which procps llvm-devel clang-devel wget make openssl-devel bzip2-devel libffi-devel zlib-devel
-          
-          cd /tmp
-          wget https://www.python.org/ftp/python/3.9.6/Python-3.9.6.tgz
-          tar -xvf Python-3.9.6.tgz
-          cd Python-3.9.6
-          ./configure --enable-optimizations --enable-shared
-          make altinstall
-          echo "/usr/local/lib" >> /etc/ld.so.conf.d/python3.9.conf
-          ldconfig
+          amazon-linux-extras install java-openjdk11 docker python3.8 -y
+          yum install -y git tar gcc gcc-c++ file lsof which procps llvm-devel clang-devel wget
+
           rm /usr/bin/python3
           ln -s /usr/local/bin/python3.9 /usr/bin/python3
           
@@ -419,12 +411,12 @@ workflows:
       - test-deploy-snapshot-mac-x86_64:
           filters:
             branches:
-              only: [ master, one-off/python39-for-rules_pkg ]
+              only: [ master ]
 
       - test-deploy-snapshot-mac-arm64:
           filters:
             branches:
-              only: [ master, one-off/python39-for-rules_pkg ]
+              only: [ master ]
 
       - test-deploy-snapshot-windows-x86_64:
           filters:
