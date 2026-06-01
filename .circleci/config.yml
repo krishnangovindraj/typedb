@@ -62,6 +62,8 @@ commands:
           curl -OL "https://github.com/bazelbuild/bazelisk/releases/download/v1.17.0/bazelisk-linux-<<parameters.bazel-arch>>"
           mv "bazelisk-linux-<<parameters.bazel-arch>>" /usr/local/bin/bazel
           chmod a+x /usr/local/bin/bazel
+          export CARGO_BAZEL_GENERATOR_URL="CARGO_BAZEL_URL_LINUX_<<parameters.bazel-arch>>"
+          export CARGO_BAZEL_GENERATOR_SHA256="CARGO_BAZEL_SHA256_LINUX_<<parameters.bazel-arch>>"
 
   install-deps-brew:
     parameters:
@@ -72,6 +74,8 @@ commands:
           curl -OL "https://github.com/bazelbuild/bazelisk/releases/download/v1.17.0/bazelisk-darwin-<<parameters.bazel-arch>>"
           sudo mv "bazelisk-darwin-<<parameters.bazel-arch>>" /usr/local/bin/bazel
           chmod a+x /usr/local/bin/bazel
+          export CARGO_BAZEL_GENERATOR_URL="CARGO_BAZEL_URL_MAC_<<parameters.bazel-arch>>"
+          export CARGO_BAZEL_GENERATOR_SHA256="CARGO_BAZEL_SHA256_MAC_<<parameters.bazel-arch>>"
 
   install-brew-rosetta:
     steps:
