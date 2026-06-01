@@ -64,6 +64,7 @@ commands:
           chmod a+x /usr/local/bin/bazel 
           export CARGO_BAZEL_GENERATOR_URL=$CARGO_BAZEL_GENERATOR_URL_linux_<<parameters.bazel-arch>>
           export CARGO_BAZEL_GENERATOR_SHA256=$CARGO_BAZEL_GENERATOR_SHA256_linux_<<parameters.bazel-arch>>
+          echo "GENERATOR_URL IS $CARGO_BAZEL_GENERATOR_URL" 
 
   install-deps-brew:
     parameters:
