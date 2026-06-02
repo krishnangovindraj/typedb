@@ -62,9 +62,7 @@ commands:
           curl -OL "https://github.com/bazelbuild/bazelisk/releases/download/v1.17.0/bazelisk-linux-<<parameters.bazel-arch>>"
           mv "bazelisk-linux-<<parameters.bazel-arch>>" /usr/local/bin/bazel
           chmod a+x /usr/local/bin/bazel 
-          export CARGO_BAZEL_GENERATOR_URL=https://repo.typedb.com/public/public-tools/raw/versions/0.0.0/cargo-bazel-linux-x86_64
-          export CARGO_BAZEL_GENERATOR_SHA256=5ae8c4d39ea3762535acd25e6d372365d1ae64d8faa6e9c2e0d06d35a7470bc1
-           
+          export CARGO_BAZEL_GENERATOR_URL=https://repo.typedb.com/public/public-tools/raw/versions/0.0.0/cargo-bazel-linux-x86_64 
 
   install-deps-brew:
     parameters:
