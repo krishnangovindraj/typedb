@@ -33,9 +33,9 @@ use compiler::annotation::expression::{
             OpIntegerSubtractInteger, OpStringAddString,
         },
         unary::{
-            LenString, MathAbsDecimal, MathAbsDouble, MathAbsInteger, MathCeilDecimal, MathCeilDouble,
-            MathFloorDecimal, MathFloorDouble, MathLog10Double, MathLog10Integer, MathRoundDecimal, MathRoundDouble,
-            Unary, UnaryExpression,
+            LenString, MathAbsDecimal, MathAbsDouble, MathAbsInteger, MathCeilDecimal, MathCeilDouble, MathExpDouble,
+            MathExpInteger, MathFloorDecimal, MathFloorDouble, MathLog10Double, MathLog10Integer, MathLogNatDouble,
+            MathLogNatInteger, MathRoundDecimal, MathRoundDouble, Unary, UnaryExpression,
         },
     },
 };

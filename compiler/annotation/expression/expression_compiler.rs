@@ -33,8 +33,9 @@ use crate::annotation::expression::{
         op_codes::ExpressionOpCode,
         operators,
         unary::{
-            LenString, MathAbsDecimal, MathAbsDouble, MathAbsInteger, MathCeilDecimal, MathCeilDouble,
-            MathFloorDecimal, MathFloorDouble, MathLog10Double, MathLog10Integer, MathRoundDecimal, MathRoundDouble,
+            LenString, MathAbsDecimal, MathAbsDouble, MathAbsInteger, MathCeilDecimal, MathCeilDouble, MathExpDouble,
+            MathExpInteger, MathFloorDecimal, MathFloorDouble, MathLog10Double, MathLog10Integer, MathLogNatDouble,
+            MathLogNatInteger, MathRoundDecimal, MathRoundDouble,
         },
     },
     operation_resolution,
@@ -225,6 +226,30 @@ impl<'this> ExpressionCompilationContext<'this> {
             }
             BuiltinValueFunctionID::Log10 => {
                 UnaryValueFunctionResolverImpl::<builtin_resolution::Log10>::resolve_validate_append(builtin, self)
+            }
+            BuiltinValueFunctionID::LogNat => {
+                self.compile_recursive(self.expression_tree.get(builtin.argument_expression_ids()[0]))?;
+                match self.peek_type_single()?.category() {
+                    ValueTypeCategory::Integer => MathLogNatInteger::validate_and_append(self)?,
+                    ValueTypeCategory::Double => MathLogNatDouble::validate_and_append(self)?,
+                    _ => Err(ExpressionCompileError::UnsupportedArgumentsForBuiltin {
+                        function: builtin.function_id(),
+                        category: self.peek_type_single()?.category(),
+                        source_span: builtin.source_span(),
+                    })?,
+                }
+            }
+            BuiltinValueFunctionID::Exp => {
+                self.compile_recursive(self.expression_tree.get(builtin.argument_expression_ids()[0]))?;
+                match self.peek_type_single()?.category() {
+                    ValueTypeCategory::Integer => MathExpInteger::validate_and_append(self)?,
+                    ValueTypeCategory::Double => MathExpDouble::validate_and_append(self)?,
+                    _ => Err(ExpressionCompileError::UnsupportedArgumentsForBuiltin {
+                        function: builtin.function_id(),
+                        category: self.peek_type_single()?.category(),
+                        source_span: builtin.source_span(),
+                    })?,
+                }
             }
         }
     }

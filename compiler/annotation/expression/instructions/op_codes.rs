@@ -82,8 +82,14 @@ macro_rules! for_each_opcode {
 
             MathRemainderInteger,
 
+            MathExpInteger,
+            MathExpDouble,
+
             MathLog10Integer,
             MathLog10Double,
+
+            MathLogNatInteger,
+            MathLogNatDouble,
 
             LenString,
         }
