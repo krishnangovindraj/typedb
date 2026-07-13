@@ -31,6 +31,11 @@ use crate::annotation::expression::{
         ExpressionInstruction, list_operations,
         load::{LoadConstant, LoadVariable},
         op_codes::ExpressionOpCode,
+        operators,
+        unary::{
+            LenString, MathAbsDecimal, MathAbsDouble, MathAbsInteger, MathCeilDecimal, MathCeilDouble,
+            MathFloorDecimal, MathFloorDouble, MathLog10Double, MathLog10Integer, MathRoundDecimal, MathRoundDouble,
+        },
     },
     operation_resolution,
 };
@@ -217,6 +222,9 @@ impl<'this> ExpressionCompilationContext<'this> {
             }
             BuiltinValueFunctionID::Len => {
                 UnaryValueFunctionResolverImpl::<builtin_resolution::Len>::resolve_validate_append(builtin, self)
+            }
+            BuiltinValueFunctionID::Log10 => {
+                UnaryValueFunctionResolverImpl::<builtin_resolution::Log10>::resolve_validate_append(builtin, self)
             }
         }
     }

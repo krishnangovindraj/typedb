@@ -318,7 +318,7 @@ function_id_enum! {
     Min = "min",
     Len = "len",
 
-    Log10 = "log10",
+    Log10 = "math::log10",
 }
 
 impl StructuralEquality for BuiltinValueFunctionID {
