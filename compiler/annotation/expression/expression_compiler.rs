@@ -228,28 +228,10 @@ impl<'this> ExpressionCompilationContext<'this> {
                 UnaryValueFunctionResolverImpl::<builtin_resolution::Log10>::resolve_validate_append(builtin, self)
             }
             BuiltinValueFunctionID::LogNat => {
-                self.compile_recursive(self.expression_tree.get(builtin.argument_expression_ids()[0]))?;
-                match self.peek_type_single()?.category() {
-                    ValueTypeCategory::Integer => MathLogNatInteger::validate_and_append(self)?,
-                    ValueTypeCategory::Double => MathLogNatDouble::validate_and_append(self)?,
-                    _ => Err(ExpressionCompileError::UnsupportedArgumentsForBuiltin {
-                        function: builtin.function_id(),
-                        category: self.peek_type_single()?.category(),
-                        source_span: builtin.source_span(),
-                    })?,
-                }
+                UnaryValueFunctionResolverImpl::<builtin_resolution::LogNat>::resolve_validate_append(builtin, self)
             }
             BuiltinValueFunctionID::Exp => {
-                self.compile_recursive(self.expression_tree.get(builtin.argument_expression_ids()[0]))?;
-                match self.peek_type_single()?.category() {
-                    ValueTypeCategory::Integer => MathExpInteger::validate_and_append(self)?,
-                    ValueTypeCategory::Double => MathExpDouble::validate_and_append(self)?,
-                    _ => Err(ExpressionCompileError::UnsupportedArgumentsForBuiltin {
-                        function: builtin.function_id(),
-                        category: self.peek_type_single()?.category(),
-                        source_span: builtin.source_span(),
-                    })?,
-                }
+                UnaryValueFunctionResolverImpl::<builtin_resolution::Exp>::resolve_validate_append(builtin, self)
             }
         }
     }
