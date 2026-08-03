@@ -18,11 +18,9 @@ use crate::annotation::expression::{
             MathMinDoubleDouble, MathMinIntegerInteger,
         },
         unary::{
-            LenString, MathAbsDecimal, MathAbsDouble, MathAbsInteger, MathCeilDecimal, MathCeilDouble,
-            MathExpDouble, MathExpInteger,
-            MathFloorDecimal, MathFloorDouble,
-            MathLog10Double, MathLog10Integer, MathLogNatDouble, MathLogNatInteger,
-            MathRoundDecimal, MathRoundDouble,
+            LenString, MathAbsDecimal, MathAbsDouble, MathAbsInteger, MathCeilDecimal, MathCeilDouble, MathExpDouble,
+            MathExpInteger, MathFloorDecimal, MathFloorDouble, MathLog10Double, MathLog10Integer, MathLogNatDouble,
+            MathLogNatInteger, MathRoundDecimal, MathRoundDouble,
         },
     },
 };
