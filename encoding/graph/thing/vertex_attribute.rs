@@ -111,12 +111,12 @@ impl AttributeVertex {
         self.attribute_id
     }
 
-    pub(crate) fn is_category_short_encoding(value_type_category: ValueTypeCategory) -> bool {
-        AttributeID::value_type_encoded_value_length(value_type_category).is_short()
+    pub(crate) fn category_encoding_length(value_type_category: ValueTypeCategory) -> ValueEncodingLength {
+        AttributeID::value_type_encoded_value_length(value_type_category)
     }
 
-    pub(crate) fn is_short_encoding(&self) -> bool {
-        Self::is_category_short_encoding(self.value_type_category())
+    pub(crate) fn encoding_length(&self) -> ValueEncodingLength {
+        Self::category_encoding_length(self.value_type_category())
     }
 
     fn range_of_attribute_id(&self) -> Range<usize> {
@@ -131,16 +131,42 @@ impl AttributeVertex {
         PrefixID::LENGTH + TypeID::LENGTH + self.attribute_id.length()
     }
 
-    pub fn keyspace_for_is_short(is_short_encoding: bool) -> EncodingKeyspace {
-        if is_short_encoding { EncodingKeyspace::DefaultOptimisedPrefix11 } else { EncodingKeyspace::OptimisedPrefix17 }
+    pub fn prefix_key_short() -> StorageKey<'static, { PrefixID::LENGTH }> {
+        StorageKey::new(
+            AttributeVertex::keyspace_for_short_encoding(),
+            Bytes::copy(&Prefix::VertexAttribute.prefix_id().to_bytes()),
+        )
+    }
+
+    pub fn prefix_key_long() -> StorageKey<'static, { PrefixID::LENGTH }> {
+        StorageKey::new(
+            AttributeVertex::keyspace_for_long_encoding(),
+            Bytes::copy(&Prefix::VertexAttribute.prefix_id().to_bytes()),
+        )
+    }
+
+    fn keyspace_for_encoding_length(encoding_length: ValueEncodingLength) -> EncodingKeyspace {
+        if encoding_length.is_short() {
+            Self::keyspace_for_short_encoding()
+        } else {
+            Self::keyspace_for_long_encoding()
+        }
+    }
+
+    pub fn keyspace_for_short_encoding() -> EncodingKeyspace {
+        EncodingKeyspace::DefaultOptimisedPrefix11
+    }
+
+    pub fn keyspace_for_long_encoding() -> EncodingKeyspace {
+        EncodingKeyspace::OptimisedPrefix17
     }
 
     pub fn keyspace_for_category(value_type_category: ValueTypeCategory) -> EncodingKeyspace {
-        Self::keyspace_for_is_short(AttributeID::value_type_encoded_value_length(value_type_category).is_short())
+        Self::keyspace_for_encoding_length(AttributeID::value_type_encoded_value_length(value_type_category))
     }
 
     pub(crate) fn keyspace(&self) -> EncodingKeyspace {
-        Self::keyspace_for_is_short(self.is_short_encoding())
+        Self::keyspace_for_encoding_length(self.encoding_length())
     }
 
     pub(crate) fn is_valid_keyspace(keyspace_id: KeyspaceId) -> bool {
@@ -205,7 +231,7 @@ impl ValueEncodingLength {
         }
     }
 
-    const fn is_short(&self) -> bool {
+    pub(crate) const fn is_short(&self) -> bool {
         matches!(self, Self::Short)
     }
 
@@ -280,10 +306,9 @@ impl AttributeID {
             ValueTypeCategory::DateTime => (DateTimeAttributeID::write(value.encode_date_time(), bytes), true),
             ValueTypeCategory::DateTimeTZ => (DateTimeTZAttributeID::write(value.encode_date_time_tz(), bytes), true),
             ValueTypeCategory::Duration => (DurationAttributeID::write(value.encode_duration(), bytes), true),
-            ValueTypeCategory::String => (
-                StringAttributeID::write_deterministic_prefix(value.encode_string::<64>(), large_value_hasher, bytes),
-                false,
-            ),
+            ValueTypeCategory::String => {
+                (StringAttributeID::write_deterministic_prefix(value.encode_string::<64>(), bytes), false)
+            }
             ValueTypeCategory::Struct => (
                 StructAttributeID::write_hashed_id_deterministic_prefix(
                     value.encode_struct::<64>(),
@@ -741,20 +766,14 @@ impl StringAttributeID {
     // write the deterministic prefix of the hash ID, and return the length of the prefix written
     pub(crate) fn write_deterministic_prefix<const INLINE_LENGTH: usize>(
         string: StringBytes<INLINE_LENGTH>,
-        hasher: &impl Fn(&[u8]) -> u64,
         bytes: &mut [u8],
     ) -> usize {
         debug_assert!(bytes.len() >= Self::LENGTH);
-        if Self::is_inlineable(string.as_reference()) {
-            let bytes_range = &mut bytes[0..Self::LENGTH];
-            Self::write_inline_id(bytes_range.try_into().unwrap(), string);
-            Self::LENGTH
-        } else {
-            bytes[0..Self::VALUE_TYPE_LENGTH].copy_from_slice(&ValueTypeCategory::String.to_bytes());
-            bytes[Self::HASHED_PREFIX_RANGE].copy_from_slice(&string.bytes()[0..{ Self::HASHED_PREFIX_LENGTH }]);
-            let hash_length = Self::write_hash(&mut bytes[Self::HASHED_HASH_RANGE], hasher, string.bytes());
-            Self::VALUE_TYPE_LENGTH + Self::HASHED_PREFIX_LENGTH + hash_length
-        }
+        bytes[0..Self::VALUE_TYPE_LENGTH].copy_from_slice(&ValueTypeCategory::String.to_bytes());
+        bytes[Self::HASHED_PREFIX_RANGE].fill(0);
+        let prefix_len = usize::min(Self::HASHED_PREFIX_LENGTH, string.len());
+        bytes[Self::HASHED_PREFIX_RANGE.start..][..prefix_len].copy_from_slice(&string.bytes()[..prefix_len]);
+        Self::VALUE_TYPE_LENGTH + Self::HASHED_PREFIX_LENGTH
     }
 
     ///

@@ -8,7 +8,7 @@ use answer::variable::Variable;
 use encoding::value::value::Value;
 use typeql::{
     common::{Span, Spanned},
-    expression::{BuiltinFunctionName, FunctionName},
+    expression::{BuiltinFunctionName, FunctionName, NamespacedFunctionName},
     token::{ArithmeticOperator, Function},
 };
 
@@ -199,6 +199,18 @@ fn build_function(
     tree: &mut ExpressionTree<Variable>,
 ) -> Result<Expression<Variable>, Box<RepresentationError>> {
     match &function_call.name {
+        FunctionName::Namespaced(namespaced) => {
+            let args = function_call
+                .args
+                .iter()
+                .map(|expr| build_recursive(function_index, constraints, expr, tree))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Expression::BuiltinValueFunctionCall(BuiltinValueFunctionCall::new(
+                to_namespaced_value_function_id(namespaced, &args)?,
+                args,
+                namespaced.span(),
+            )))
+        }
         FunctionName::Builtin(builtin) if is_builtin_value_function(builtin) => {
             let args = function_call
                 .args
@@ -278,6 +290,13 @@ fn is_builtin_value_function(typeql_id: &BuiltinFunctionName) -> bool {
             | Function::Min
             | Function::Len
     )
+}
+
+fn to_namespaced_value_function_id(
+    name: &NamespacedFunctionName,
+    args: &[usize],
+) -> Result<BuiltinValueFunctionID, Box<RepresentationError>> {
+    BuiltinValueFunctionID::resolve_namespaced(name)
 }
 
 fn to_builtin_value_function_id(

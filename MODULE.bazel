@@ -107,11 +107,11 @@ workspace_refs(
     name = "typedb_workspace_refs",
     workspace_commit_dict = {
 #        "typedb_protocol+": "3a39f0b94fd7ea316ba5a4f74d44d5afc454cedf",
-#        "typeql+": "556db69efc01936442d0579e2ed7ef0f0d84d27e",
+        "typeql+": "88d4b7a727a18650a9676d3a33b943a3a0dcfe76",
     },
     workspace_tag_dict = {
         "typedb_protocol+": "3.12.0",
-        "typeql+": "3.12.0",
+#        "typeql+": "3.12.0",
     },
 )
 
@@ -162,21 +162,21 @@ bazel_dep(name = "typedb_bazel_distribution", version = "0.0.0")
 git_override(
     module_name = "typedb_bazel_distribution",
     remote = "https://github.com/typedb/bazel-distribution",
-    commit = "dd811cf28715bbce8374e5e0f9defaf772e7dd36",
+    commit = "8756119e8ad5cd52d8a25f0d0204d6ff29dccebf",
 )
 
 bazel_dep(name = "typedb_dependencies", version = "0.0.0")
 git_override(
     module_name = "typedb_dependencies",
     remote = "https://github.com/typedb/dependencies",
-    commit = "3ef0b92e0285100e8a6f1909749a700bb5df4ad2",
+    commit = "a5c51254088f343fb8b6a9668eaf99b35503dad4",
 )
 
 bazel_dep(name = "typeql", version = "0.0.0")
 git_override(
     module_name = "typeql",
-    remote = "https://github.com/typedb/typeql",
-    tag = "3.12.0",
+    remote = "https://github.com/krishnangovindraj/typeql",
+    commit = "88d4b7a727a18650a9676d3a33b943a3a0dcfe76",
 )
 
 bazel_dep(name = "typedb_protocol", version = "0.0.0")
@@ -190,5 +190,13 @@ bazel_dep(name = "typedb_behaviour", version = "0.0.0")
 git_override(
     module_name = "typedb_behaviour",
     remote = "https://github.com/typedb/typedb-behaviour",
-    commit = "d668fb0c6d42f3fa22e3c6bd8be34369c268553d",
+    commit = "60841abfb8e4239b48a43789fcde7159c50bfaa6",
+)
+
+http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
+http_file(
+    name = "vaticle_developer_id_combined",
+    url = "https://repo.typedb.com/basic/private-tools/raw/files/VaticleDeveloperIDCombined.p12",
+    sha256 = "e6da59e0698ea876c89ac2a19c87ac6e6936df98ee5df31d8895a09ef26b15c7",
+    downloaded_file_path = "VaticleDeveloperIDCombined.p12",
 )
