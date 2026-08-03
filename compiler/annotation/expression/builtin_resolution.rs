@@ -18,8 +18,9 @@ use crate::annotation::expression::{
             MathMinDoubleDouble, MathMinIntegerInteger,
         },
         unary::{
-            LenString, MathAbsDecimal, MathAbsDouble, MathAbsInteger, MathCeilDecimal, MathCeilDouble,
-            MathFloorDecimal, MathFloorDouble, MathLog10Double, MathLog10Integer, MathRoundDecimal, MathRoundDouble,
+            LenString, MathAbsDecimal, MathAbsDouble, MathAbsInteger, MathCeilDecimal, MathCeilDouble, MathExpDouble,
+            MathExpInteger, MathFloorDecimal, MathFloorDouble, MathLog10Double, MathLog10Integer, MathLogNatDouble,
+            MathLogNatInteger, MathRoundDecimal, MathRoundDouble,
         },
     },
 };
@@ -97,6 +98,8 @@ unary_builtin! {
     Floor = MathFloor [ Double, Decimal, ]
     Round = MathRound [ Double, Decimal, ]
     Log10 = MathLog10 [ Integer, Double, ]
+    LogNat = MathLogNat [ Integer, Double, ]
+    Exp = MathExp [ Integer, Double, ]
     Len = Len [ String, ]
 }
 

@@ -319,6 +319,8 @@ function_id_enum! {
     Len = "len",
 
     Log10 = "math::log10",
+    LogNat = "math::ln",
+    Exp = "math::exp",
 }
 
 impl StructuralEquality for BuiltinValueFunctionID {
