@@ -41,7 +41,7 @@ use crate::{
         pipeline::{
             AnnotatedStage, RunningVariableAnnotations, annotate_pipeline_stages, resolve_reducer_by_value_type,
         },
-        type_seeder,
+        inference::type_seeder,
     },
     executable::reduce::ReduceInstruction,
 };
