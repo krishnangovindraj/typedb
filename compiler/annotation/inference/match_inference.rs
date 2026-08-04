@@ -25,14 +25,13 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::annotation::{
     PipelineAnnotationContext, TypeInferenceError,
+    inference::{VertexAnnotations, type_seeder::TypeGraphSeedingContext},
     pipeline::RunningVariableAnnotations,
     type_annotations::{
         BlockAnnotations, ConstraintTypeAnnotations, LeftRightAnnotations, LinksAnnotations, TypeAnnotations,
     },
     type_inference::TypeInferenceMode,
-    inference::type_seeder::TypeGraphSeedingContext,
 };
-use crate::annotation::inference::VertexAnnotations;
 
 pub fn infer_types_for_block(
     ctx: &mut PipelineAnnotationContext<'_, impl ReadableSnapshot>,
@@ -46,24 +45,18 @@ pub fn infer_types_for_block(
         .iter()
         .map(|(var, annotations)| (Vertex::Variable(*var), (**annotations).clone()))
         .collect();
-    infer_types_impl(
-        ctx,
-        block.conjunction(),
-        &input_annotations,
-        type_inference_mode,
-        &mut flattened_graphs,
-    )?;
+    infer_types_impl(ctx, block.conjunction(), &input_annotations, type_inference_mode, &mut flattened_graphs)?;
 
-    let type_annotations_by_scope = flattened_graphs.into_iter().map(|(scope_id, flattened_graph)| {
-        (scope_id, flattened_graph.into_type_annotations())
-    }).collect();
+    let type_annotations_by_scope = flattened_graphs
+        .into_iter()
+        .map(|(scope_id, flattened_graph)| (scope_id, flattened_graph.into_type_annotations()))
+        .collect();
     debug_assert!(all_vertex_annotations_available(
         block.block_context(),
         ctx.variable_registry,
         block.conjunction(),
         &type_annotations_by_scope
     ));
-
 
     Ok(BlockAnnotations::new(type_annotations_by_scope))
 }
@@ -90,22 +83,10 @@ fn infer_types_in_negations_and_optionals_then_flatten<'conj>(
         match nested {
             NestedPattern::Disjunction(_) => {} // Done above
             NestedPattern::Negation(negation) => {
-                infer_types_impl(
-                    ctx,
-                    negation.conjunction(),
-                    &graph.vertices,
-                    type_inference_mode,
-                    flattened_graphs,
-                )?;
+                infer_types_impl(ctx, negation.conjunction(), &graph.vertices, type_inference_mode, flattened_graphs)?;
             }
             NestedPattern::Optional(optional) => {
-                infer_types_impl(
-                    ctx,
-                    optional.conjunction(),
-                    &graph.vertices,
-                    type_inference_mode,
-                    flattened_graphs,
-                )?;
+                infer_types_impl(ctx, optional.conjunction(), &graph.vertices, type_inference_mode, flattened_graphs)?;
                 let optional_root_annotations =
                     &flattened_graphs.get(&optional.conjunction().scope_id()).unwrap().vertices;
                 let required_inputs = optional.required_inputs().collect::<HashSet<_>>();
@@ -120,12 +101,10 @@ fn infer_types_in_negations_and_optionals_then_flatten<'conj>(
         }
     }
     let (flattened_graph, disjunctions) = graph.flatten_graph();
-    disjunctions.into_iter()
-        .flat_map(|disjunction| disjunction.disjunction.into_iter())
-        .try_for_each(|nested| {
-            infer_types_in_negations_and_optionals_then_flatten(ctx, nested, type_inference_mode, flattened_graphs)?;
-            Ok(())
-        })?;
+    disjunctions.into_iter().flat_map(|disjunction| disjunction.disjunction.into_iter()).try_for_each(|nested| {
+        infer_types_in_negations_and_optionals_then_flatten(ctx, nested, type_inference_mode, flattened_graphs)?;
+        Ok(())
+    })?;
     flattened_graphs.insert(flattened_graph.conjunction.scope_id(), flattened_graph);
     Ok(())
 }
@@ -244,7 +223,9 @@ pub(crate) struct TypeInferenceGraph<'this> {
 }
 
 impl<'this> TypeInferenceGraph<'this> {
-    pub(crate) fn flatten_graph(self) -> (FlattenedTypeInferenceGraph<'this>, Vec<NestedTypeInferenceGraphDisjunction<'this>>) {
+    pub(crate) fn flatten_graph(
+        self,
+    ) -> (FlattenedTypeInferenceGraph<'this>, Vec<NestedTypeInferenceGraphDisjunction<'this>>) {
         let Self { conjunction, vertices, edges, nested_disjunctions } = self;
         (FlattenedTypeInferenceGraph { conjunction, vertices, edges }, nested_disjunctions)
     }
@@ -519,9 +500,12 @@ pub mod tests {
                 AnnotatedFunctionSignature, AnnotatedFunctionSignaturesImpl, EmptyAnnotatedFunctionSignatures,
                 annotate_named_function,
             },
-            match_inference::{
-                NestedTypeInferenceGraphDisjunction, TypeInferenceEdge, TypeInferenceGraph, VertexAnnotations,
-                compute_type_inference_graph, infer_types_for_block, prune_types,
+            inference::{
+                match_inference::{
+                    NestedTypeInferenceGraphDisjunction, TypeInferenceEdge, TypeInferenceGraph, VertexAnnotations,
+                    compute_type_inference_graph, infer_types_for_block, prune_types,
+                },
+                type_seeder::TypeGraphSeedingContext,
             },
             pipeline::{AnnotatedStage, RunningVariableAnnotations},
             tests::{
@@ -533,7 +517,6 @@ pub mod tests {
                 setup_storage,
             },
             type_inference::TypeInferenceMode,
-            type_seeder::TypeGraphSeedingContext,
         },
     };
 
@@ -552,66 +535,66 @@ pub mod tests {
             FunctionID::Preamble(0),
             FunctionID::Schema(DefinitionKey::new(Prefix::DefinitionFunction, DefinitionID::new(0))),
         ]
-            .iter()
-            .map(|function_id| {
-                // with fun fn_test() -> animal: match $called_animal isa cat, has $called_name; return { $called_animal };
-                // match $animal = fn_test();
-                let mut function_context = PipelineTranslationContext::new();
-                let mut value_parameters = ParameterRegistry::new();
-                let mut builder = Block::builder(function_context.new_block_builder_context(&mut value_parameters));
-                let mut f_conjunction = builder.conjunction_mut();
-                let f_var_animal = f_conjunction.constraints_mut().get_or_declare_variable("called_animal", None).unwrap();
-                let f_var_animal_type =
-                    f_conjunction.constraints_mut().get_or_declare_variable("called_animal_type", None).unwrap();
-                let f_var_name = f_conjunction.constraints_mut().get_or_declare_variable("called_name", None).unwrap();
-                f_conjunction.constraints_mut().add_label(f_var_animal_type, LABEL_CAT.clone()).unwrap();
-                f_conjunction
-                    .constraints_mut()
-                    .add_isa(IsaKind::Subtype, f_var_animal, f_var_animal_type.into(), None)
-                    .unwrap();
-                f_conjunction.constraints_mut().add_has(f_var_animal, f_var_name, None).unwrap();
-                let function_block = builder.finish().unwrap();
-                let f_ir = Function::new(
-                    "fn_test",
-                    function_context,
-                    value_parameters,
+        .iter()
+        .map(|function_id| {
+            // with fun fn_test() -> animal: match $called_animal isa cat, has $called_name; return { $called_animal };
+            // match $animal = fn_test();
+            let mut function_context = PipelineTranslationContext::new();
+            let mut value_parameters = ParameterRegistry::new();
+            let mut builder = Block::builder(function_context.new_block_builder_context(&mut value_parameters));
+            let mut f_conjunction = builder.conjunction_mut();
+            let f_var_animal = f_conjunction.constraints_mut().get_or_declare_variable("called_animal", None).unwrap();
+            let f_var_animal_type =
+                f_conjunction.constraints_mut().get_or_declare_variable("called_animal_type", None).unwrap();
+            let f_var_name = f_conjunction.constraints_mut().get_or_declare_variable("called_name", None).unwrap();
+            f_conjunction.constraints_mut().add_label(f_var_animal_type, LABEL_CAT.clone()).unwrap();
+            f_conjunction
+                .constraints_mut()
+                .add_isa(IsaKind::Subtype, f_var_animal, f_var_animal_type.into(), None)
+                .unwrap();
+            f_conjunction.constraints_mut().add_has(f_var_animal, f_var_name, None).unwrap();
+            let function_block = builder.finish().unwrap();
+            let f_ir = Function::new(
+                "fn_test",
+                function_context,
+                value_parameters,
+                vec![],
+                Some(vec![]),
+                None,
+                FunctionBody::new(
+                    vec![TranslatedStage::Match { block: function_block, source_span: None }],
+                    ReturnOperation::Stream(vec![f_var_animal], None),
+                ),
+                vec![],
+            );
+
+            let mut entry_context = PipelineTranslationContext::new();
+            let mut value_parameters = ParameterRegistry::new();
+            let mut builder = Block::builder(entry_context.new_block_builder_context(&mut value_parameters));
+            let mut conjunction = builder.conjunction_mut();
+            let var_animal = conjunction.constraints_mut().get_or_declare_variable("animal", None).unwrap();
+
+            let callee_signature = FunctionSignature::new(
+                function_id.clone(),
+                vec![],
+                vec![(VariableCategory::Object, VariableOptionality::Required)],
+                true,
+            );
+            conjunction
+                .constraints_mut()
+                .add_function_binding(
+                    vec![AssignedVariable::new_required(var_animal)],
+                    &callee_signature,
                     vec![],
-                    Some(vec![]),
+                    "test_fn",
                     None,
-                    FunctionBody::new(
-                        vec![TranslatedStage::Match { block: function_block, source_span: None }],
-                        ReturnOperation::Stream(vec![f_var_animal], None),
-                    ),
-                    vec![],
-                );
-
-                let mut entry_context = PipelineTranslationContext::new();
-                let mut value_parameters = ParameterRegistry::new();
-                let mut builder = Block::builder(entry_context.new_block_builder_context(&mut value_parameters));
-                let mut conjunction = builder.conjunction_mut();
-                let var_animal = conjunction.constraints_mut().get_or_declare_variable("animal", None).unwrap();
-
-                let callee_signature = FunctionSignature::new(
-                    function_id.clone(),
-                    vec![],
-                    vec![(VariableCategory::Object, VariableOptionality::Required)],
-                    true,
-                );
-                conjunction
-                    .constraints_mut()
-                    .add_function_binding(
-                        vec![AssignedVariable::new_required(var_animal)],
-                        &callee_signature,
-                        vec![],
-                        "test_fn",
-                        None,
-                    )
-                    .unwrap();
-                let entry = builder.finish().unwrap();
-                (entry, entry_context, f_ir)
-            })
-            .collect_tuple()
-            .unwrap();
+                )
+                .unwrap();
+            let entry = builder.finish().unwrap();
+            (entry, entry_context, f_ir)
+        })
+        .collect_tuple()
+        .unwrap();
 
         let snapshot = storage.open_snapshot_read();
         let empty_annotation_context =
@@ -631,12 +614,12 @@ pub mod tests {
                 &entry,
                 TypeInferenceMode::ConcreteSubtypesOnly,
             )
-                .unwrap()
-                .into_parts()
-                .into_iter()
-                .exactly_one()
-                .unwrap()
-                .1;
+            .unwrap()
+            .into_parts()
+            .into_iter()
+            .exactly_one()
+            .unwrap()
+            .1;
             assert_eq!(
                 *annotations_without_schema_cache.vertex_annotations(),
                 BTreeMap::from([(var_animal.into(), Arc::new(BTreeSet::from(all_concrete_instance_types)))])
@@ -689,7 +672,7 @@ pub mod tests {
                 &entry,
                 TypeInferenceMode::ConcreteSubtypesOnly,
             )
-                .unwrap();
+            .unwrap();
             assert_eq!(
                 entry_annotations.type_annotations_of(entry.conjunction()).unwrap().vertex_annotations(),
                 &BTreeMap::from([(var_animal.into(), Arc::new(BTreeSet::from([type_cat])))]),
@@ -814,7 +797,7 @@ pub mod tests {
                 &BTreeMap::new(),
                 TypeInferenceMode::ConcreteSubtypesOnly,
             )
-                .unwrap();
+            .unwrap();
 
             let expected_graph = TypeInferenceGraph {
                 conjunction: block.conjunction(),
@@ -882,7 +865,7 @@ pub mod tests {
                 &BTreeMap::new(),
                 TypeInferenceMode::ConcreteSubtypesOnly,
             )
-                .unwrap();
+            .unwrap();
 
             let expected_graph = TypeInferenceGraph {
                 conjunction: block.conjunction(),
@@ -945,7 +928,7 @@ pub mod tests {
                 &BTreeMap::new(),
                 TypeInferenceMode::ConcreteSubtypesOnly,
             )
-                .unwrap_err();
+            .unwrap_err();
 
             assert_true!(match err {
                 TypeInferenceError::DetectedUnsatisfiableEdge { left_variable, right_variable, .. } => {
@@ -989,7 +972,7 @@ pub mod tests {
                 &BTreeMap::new(),
                 TypeInferenceMode::ConcreteSubtypesOnly,
             )
-                .unwrap();
+            .unwrap();
 
             let expected_graph = TypeInferenceGraph {
                 conjunction: block.conjunction(),
@@ -1079,7 +1062,7 @@ pub mod tests {
             &BTreeMap::new(),
             TypeInferenceMode::ConcreteSubtypesOnly,
         )
-            .unwrap();
+        .unwrap();
 
         let conjunction = block.conjunction();
         let disj = conjunction.nested_patterns()[0].as_disjunction().unwrap();
@@ -1186,7 +1169,7 @@ pub mod tests {
             &BTreeMap::new(),
             TypeInferenceMode::ConcreteSubtypesOnly,
         )
-            .unwrap();
+        .unwrap();
 
         let expected_graph = TypeInferenceGraph {
             conjunction,
@@ -1239,10 +1222,10 @@ pub mod tests {
             "role_has_fear_type",
             "role_is_feared_type",
         ]
-            .into_iter()
-            .map(|name| conjunction.constraints_mut().get_or_declare_variable(name, None).unwrap())
-            .collect_tuple()
-            .unwrap();
+        .into_iter()
+        .map(|name| conjunction.constraints_mut().get_or_declare_variable(name, None).unwrap())
+        .collect_tuple()
+        .unwrap();
 
         conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_fears, var_fears_type.into(), None).unwrap();
         conjunction.constraints_mut().add_label(var_fears_type, LABEL_FEARS.clone()).unwrap();
@@ -1273,7 +1256,7 @@ pub mod tests {
             &BTreeMap::new(),
             TypeInferenceMode::ConcreteSubtypesOnly,
         )
-            .unwrap();
+        .unwrap();
 
         let expected_graph = TypeInferenceGraph {
             conjunction,
@@ -1387,7 +1370,7 @@ pub mod tests {
                 &BTreeMap::new(),
                 TypeInferenceMode::ConcreteSubtypesOnly,
             )
-                .unwrap();
+            .unwrap();
 
             let expected_graph = TypeInferenceGraph {
                 conjunction: block.conjunction(),
@@ -1457,7 +1440,7 @@ pub mod tests {
                 &BTreeMap::new(),
                 TypeInferenceMode::ConcreteSubtypesOnly,
             )
-                .unwrap();
+            .unwrap();
 
             let expected_graph = TypeInferenceGraph {
                 conjunction: block.conjunction(),
@@ -1522,9 +1505,9 @@ pub mod tests {
                 &translation_context.variable_registry,
                 TypeInferenceMode::ConcreteSubtypesOnly,
             )
-                .create_graph(&BTreeMap::new(), block.conjunction())
-                .unwrap();
-            crate::annotation::match_inference::prune_types(&mut graph);
+            .create_graph(&BTreeMap::new(), block.conjunction())
+            .unwrap();
+            prune_types(&mut graph);
 
             let expected_graph = TypeInferenceGraph {
                 conjunction: block.conjunction(),
@@ -1578,7 +1561,7 @@ pub mod tests {
                 &BTreeMap::new(),
                 TypeInferenceMode::ConcreteSubtypesOnly,
             )
-                .unwrap();
+            .unwrap();
 
             let expected_graph = TypeInferenceGraph {
                 conjunction: block.conjunction(),
@@ -1657,7 +1640,7 @@ pub mod tests {
                 &BTreeMap::new(),
                 TypeInferenceMode::ConcreteSubtypesOnly,
             )
-                .unwrap();
+            .unwrap();
 
             let expected_graph = TypeInferenceGraph {
                 conjunction: block.conjunction(),
@@ -1724,7 +1707,7 @@ pub mod tests {
                 &BTreeMap::new(),
                 TypeInferenceMode::ConcreteSubtypesOnly,
             )
-                .unwrap();
+            .unwrap();
 
             let expected_graph = TypeInferenceGraph {
                 conjunction: block.conjunction(),
@@ -1786,7 +1769,7 @@ pub mod tests {
                 &BTreeMap::new(),
                 TypeInferenceMode::ConcreteSubtypesOnly,
             )
-                .unwrap_err();
+            .unwrap_err();
             assert_true!(match err {
                 TypeInferenceError::DetectedUnsatisfiableEdge { left_variable, right_variable, .. } => {
                     left_variable == "animal" && right_variable == "name"
@@ -1827,7 +1810,7 @@ pub mod tests {
                 &BTreeMap::new(),
                 TypeInferenceMode::ConcreteSubtypesOnly,
             )
-                .unwrap();
+            .unwrap();
 
             let expected_graph = TypeInferenceGraph {
                 conjunction: block.conjunction(),

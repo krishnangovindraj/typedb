@@ -5,16 +5,15 @@
  */
 use std::{
     borrow::Cow,
+    collections::{BTreeMap, BTreeSet},
     ops::{Deref, DerefMut},
 };
 
-use std::collections::{BTreeMap, BTreeSet};
-use answer::variable::Variable;
+use answer::{Type as TypeAnnotation, variable::Variable};
 use ir::pattern::Vertex;
-use answer::Type as TypeAnnotation;
 
-pub(crate) mod match_inference;
-pub(crate) mod type_seeder;
+pub mod match_inference;
+pub mod type_seeder;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct VertexAnnotations {

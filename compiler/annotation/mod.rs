@@ -24,7 +24,7 @@ use crate::annotation::{expression::compiled_expression::ExpressionValueType, fu
 pub mod expression;
 pub mod fetch;
 pub mod function;
-pub(crate) mod inference;
+pub mod inference;
 pub mod pipeline;
 pub mod type_annotations;
 pub mod type_inference;
