@@ -40,7 +40,7 @@ pub fn infer_types_for_block(
     block: &Block,
     type_inference_mode: TypeInferenceMode,
 ) -> Result<BlockAnnotations, TypeInferenceError> {
-    let mut type_annotations_by_scope = HashMap::new();
+    let mut flattened_graphs = HashMap::new();
     let input_annotations = previous_stage_annotations
         .concepts
         .iter()
@@ -51,9 +51,12 @@ pub fn infer_types_for_block(
         block.conjunction(),
         &input_annotations,
         type_inference_mode,
-        &mut type_annotations_by_scope,
+        &mut flattened_graphs,
     )?;
 
+    let type_annotations_by_scope = flattened_graphs.into_iter().map(|(scope_id, flattened_graph)| {
+        (scope_id, flattened_graph.into_type_annotations())
+    }).collect();
     debug_assert!(all_vertex_annotations_available(
         block.block_context(),
         ctx.variable_registry,
@@ -61,67 +64,69 @@ pub fn infer_types_for_block(
         &type_annotations_by_scope
     ));
 
+
     Ok(BlockAnnotations::new(type_annotations_by_scope))
 }
 
-fn infer_types_impl(
+fn infer_types_impl<'conj>(
     ctx: &mut PipelineAnnotationContext<'_, impl ReadableSnapshot>,
-    conjunction: &Conjunction,
+    conjunction: &'conj Conjunction,
     input_annotations: &BTreeMap<Vertex<Variable>, BTreeSet<TypeAnnotation>>,
     type_inference_mode: TypeInferenceMode,
-    type_annotations_by_scope: &mut HashMap<ScopeId, TypeAnnotations>,
+    flattened_graphs: &mut HashMap<ScopeId, FlattenedTypeInferenceGraph<'conj>>,
 ) -> Result<(), TypeInferenceError> {
-    let mut graph = compute_type_inference_graph(ctx, conjunction, input_annotations, type_inference_mode)?;
-
-    infer_types_in_negations_and_conjunctions(ctx, &mut graph, type_inference_mode, type_annotations_by_scope)?;
-
-    graph.collect_type_annotations(type_annotations_by_scope);
+    let graph = compute_type_inference_graph(ctx, conjunction, input_annotations, type_inference_mode)?;
+    infer_types_in_negations_and_optionals_then_flatten(ctx, graph, type_inference_mode, flattened_graphs)?;
     Ok(())
 }
 
-fn infer_types_in_negations_and_conjunctions(
+fn infer_types_in_negations_and_optionals_then_flatten<'conj>(
     ctx: &mut PipelineAnnotationContext<'_, impl ReadableSnapshot>,
-    parent_conjunction_graph: &mut TypeInferenceGraph<'_>,
+    mut graph: TypeInferenceGraph<'conj>,
     type_inference_mode: TypeInferenceMode,
-    type_annotations_by_scope: &mut HashMap<ScopeId, TypeAnnotations>,
+    flattened_graphs: &mut HashMap<ScopeId, FlattenedTypeInferenceGraph<'conj>>,
 ) -> Result<(), TypeInferenceError> {
-    let TypeInferenceGraph { conjunction, vertices, nested_disjunctions, .. } = parent_conjunction_graph;
-    nested_disjunctions.iter_mut().flat_map(|disjunction| disjunction.disjunction.iter_mut()).try_for_each(
-        |nested| infer_types_in_negations_and_conjunctions(ctx, nested, type_inference_mode, type_annotations_by_scope),
-    )?;
-    for nested in conjunction.nested_patterns() {
+    for nested in graph.conjunction.nested_patterns() {
         match nested {
             NestedPattern::Disjunction(_) => {} // Done above
             NestedPattern::Negation(negation) => {
                 infer_types_impl(
                     ctx,
                     negation.conjunction(),
-                    &vertices,
+                    &graph.vertices,
                     type_inference_mode,
-                    type_annotations_by_scope,
+                    flattened_graphs,
                 )?;
             }
             NestedPattern::Optional(optional) => {
                 infer_types_impl(
                     ctx,
                     optional.conjunction(),
-                    &vertices,
+                    &graph.vertices,
                     type_inference_mode,
-                    type_annotations_by_scope,
+                    flattened_graphs,
                 )?;
                 let optional_root_annotations =
-                    type_annotations_by_scope.get(&optional.conjunction().scope_id()).unwrap().vertex_annotations();
+                    &flattened_graphs.get(&optional.conjunction().scope_id()).unwrap().vertices;
                 let required_inputs = optional.required_inputs().collect::<HashSet<_>>();
                 optional_root_annotations
                     .iter()
                     .filter(|(vertex, _)| vertex.as_variable().map_or(false, |v| !required_inputs.contains(&v)))
                     .for_each(|(var, annotations)| {
-                        debug_assert!(!vertices.annotations.contains_key(var));
-                        vertices.annotations.insert(var.clone(), (**annotations).clone());
+                        debug_assert!(!graph.vertices.annotations.contains_key(var));
+                        graph.vertices.annotations.insert(var.clone(), annotations.clone());
                     });
             }
         }
     }
+    let (flattened_graph, disjunctions) = graph.flatten_graph();
+    disjunctions.into_iter()
+        .flat_map(|disjunction| disjunction.disjunction.into_iter())
+        .try_for_each(|nested| {
+            infer_types_in_negations_and_optionals_then_flatten(ctx, nested, type_inference_mode, flattened_graphs)?;
+            Ok(())
+        })?;
+    flattened_graphs.insert(flattened_graph.conjunction.scope_id(), flattened_graph);
     Ok(())
 }
 
@@ -238,7 +243,12 @@ pub(crate) struct TypeInferenceGraph<'this> {
     pub(crate) nested_disjunctions: Vec<NestedTypeInferenceGraphDisjunction<'this>>,
 }
 
-impl TypeInferenceGraph<'_> {
+impl<'this> TypeInferenceGraph<'this> {
+    pub(crate) fn flatten_graph(self) -> (FlattenedTypeInferenceGraph<'this>, Vec<NestedTypeInferenceGraphDisjunction<'this>>) {
+        let Self { conjunction, vertices, edges, nested_disjunctions } = self;
+        (FlattenedTypeInferenceGraph { conjunction, vertices, edges }, nested_disjunctions)
+    }
+
     fn prune_constraints_from_vertices(&mut self) {
         for edge in &mut self.edges {
             edge.prune_self_from_vertices(&self.vertices)
@@ -257,45 +267,6 @@ impl TypeInferenceGraph<'_> {
             is_modified |= nested_graph.prune_vertices_from_self(&mut self.vertices);
         }
         is_modified
-    }
-
-    pub(crate) fn collect_type_annotations(self, type_annotations_by_scope: &mut HashMap<ScopeId, TypeAnnotations>) {
-        let TypeInferenceGraph { vertices, edges, nested_disjunctions, conjunction } = self;
-        let mut constraint_annotations = HashMap::new();
-        let mut combine_links_edges = HashMap::new();
-        edges.into_iter().for_each(|edge| {
-            let TypeInferenceEdge { constraint, left_to_right, right_to_left, .. } = edge;
-            if let Constraint::Links(links) = edge.constraint {
-                if let Some((other_left_right, other_right_left)) = combine_links_edges.remove(&edge.right) {
-                    let lrf_annotation = {
-                        if &edge.left == links.relation() {
-                            LinksAnnotations::build(left_to_right, right_to_left, other_left_right, other_right_left)
-                        } else {
-                            LinksAnnotations::build(other_left_right, other_right_left, left_to_right, right_to_left)
-                        }
-                    };
-                    constraint_annotations.insert(constraint.clone(), ConstraintTypeAnnotations::Links(lrf_annotation));
-                } else {
-                    combine_links_edges.insert(edge.right, (left_to_right, right_to_left));
-                }
-            } else {
-                let lr_annotations = LeftRightAnnotations::build(left_to_right, right_to_left);
-                constraint_annotations.insert(constraint.clone(), ConstraintTypeAnnotations::LeftRight(lr_annotations));
-            }
-        });
-
-        let vertex_annotations = vertices
-            .into_iter()
-            .map(|(variable, types)| (variable.into(), Arc::new(types)))
-            .collect::<BTreeMap<_, _>>();
-
-        let type_annotations = TypeAnnotations::new(vertex_annotations, constraint_annotations);
-        type_annotations_by_scope.insert(conjunction.scope_id(), type_annotations);
-
-        nested_disjunctions
-            .into_iter()
-            .flat_map(|disjunction| disjunction.disjunction)
-            .for_each(|nested| nested.collect_type_annotations(type_annotations_by_scope));
     }
 
     fn check_thing_constraints_satisfiable(
@@ -453,6 +424,48 @@ impl NestedTypeInferenceGraphDisjunction<'_> {
             is_modified |= size_before != parent_vertex_types.len();
         }
         is_modified
+    }
+}
+
+#[derive(Debug)]
+struct FlattenedTypeInferenceGraph<'this> {
+    conjunction: &'this Conjunction,
+    vertices: VertexAnnotations,
+    edges: Vec<TypeInferenceEdge<'this>>,
+}
+
+impl FlattenedTypeInferenceGraph<'_> {
+    fn into_type_annotations(self) -> TypeAnnotations {
+        let Self { vertices, edges, .. } = self;
+        let mut constraint_annotations = HashMap::new();
+        let mut combine_links_edges = HashMap::new();
+        edges.into_iter().for_each(|edge| {
+            let TypeInferenceEdge { constraint, left_to_right, right_to_left, .. } = edge;
+            if let Constraint::Links(links) = edge.constraint {
+                if let Some((other_left_right, other_right_left)) = combine_links_edges.remove(&edge.right) {
+                    let lrf_annotation = {
+                        if &edge.left == links.relation() {
+                            LinksAnnotations::build(left_to_right, right_to_left, other_left_right, other_right_left)
+                        } else {
+                            LinksAnnotations::build(other_left_right, other_right_left, left_to_right, right_to_left)
+                        }
+                    };
+                    constraint_annotations.insert(constraint.clone(), ConstraintTypeAnnotations::Links(lrf_annotation));
+                } else {
+                    combine_links_edges.insert(edge.right, (left_to_right, right_to_left));
+                }
+            } else {
+                let lr_annotations = LeftRightAnnotations::build(left_to_right, right_to_left);
+                constraint_annotations.insert(constraint.clone(), ConstraintTypeAnnotations::LeftRight(lr_annotations));
+            }
+        });
+
+        let vertex_annotations = vertices
+            .into_iter()
+            .map(|(variable, types)| (variable.into(), Arc::new(types)))
+            .collect::<BTreeMap<_, _>>();
+
+        TypeAnnotations::new(vertex_annotations, constraint_annotations)
     }
 }
 
