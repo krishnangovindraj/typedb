@@ -9,7 +9,7 @@ use std::{
     sync::Arc,
 };
 
-use answer::{Type as TypeAnnotation, variable::Variable};
+use answer::variable::Variable;
 use ir::{
     pattern::{
         Pattern, Scope, ScopeId, Vertex, conjunction::Conjunction, constraint::Constraint,
@@ -25,7 +25,10 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::annotation::{
     PipelineAnnotationContext, TypeInferenceError,
-    inference::{RetainAndContainExt, VertexAnnotations, type_seeder::TypeGraphSeedingContext},
+    inference::{
+        FromIteratorMappedOperations, RetainAndContainExt, VertexAnnotations, VertexTypeAnnotation,
+        type_seeder::TypeGraphSeedingContext,
+    },
     pipeline::RunningVariableAnnotations,
     type_annotations::{
         BlockAnnotations, ConstraintTypeAnnotations, LeftRightAnnotations, LinksAnnotations, TypeAnnotations,
@@ -43,15 +46,18 @@ pub fn infer_types_for_block(
     let input_annotations = previous_stage_annotations
         .concepts
         .iter()
-        .map(|(var, annotations)| (Vertex::Variable(*var), (**annotations).clone()))
+        .map(|(var, annotations)| (Vertex::Variable(*var), BTreeSet::from_into_ref(annotations.iter())))
         .collect();
     let input_annotations = VertexAnnotations { annotations: input_annotations };
     infer_types_impl(ctx, block.conjunction(), &input_annotations, type_inference_mode, &mut flattened_graphs)?;
 
     let type_annotations_by_scope = flattened_graphs
         .into_iter()
-        .map(|(scope_id, flattened_graph)| (scope_id, flattened_graph.into_type_annotations()))
-        .collect();
+        .map(|(scope_id, flattened_graph)| {
+            let annotations = flattened_graph.into_type_annotations()?;
+            Ok::<_, TypeInferenceError>((scope_id, annotations))
+        })
+        .collect::<Result<HashMap<ScopeId, TypeAnnotations>, TypeInferenceError>>()?;
     debug_assert!(all_vertex_annotations_available(
         block.block_context(),
         ctx.variable_registry,
@@ -170,11 +176,12 @@ fn construct_error_message_for_unsatisfiable_edge(
         Vertex::Label(label) => label.scoped_name().as_str().to_string(),
         Vertex::Parameter(_) => unreachable!("Parameters can't be involved in TypeInferenceEdges"),
     };
-    let resolve_type_label = |type_: &answer::Type| {
-        type_
+    let resolve_type_label = |type_: &VertexTypeAnnotation| match type_ {
+        VertexTypeAnnotation::Concept(type_) => type_
             .get_label(ctx.snapshot, ctx.type_manager)
             .map(|label| label.scoped_name().to_string())
-            .unwrap_or_else(|_| "(Error while resolving label)".to_owned())
+            .unwrap_or_else(|_| "(Error while resolving label)".to_owned()),
+        VertexTypeAnnotation::Value(type_) => type_.category().name().to_owned(),
     };
     let left_variable = resolve_vertex(&edge.left);
     let right_variable = resolve_vertex(&edge.right);
@@ -278,8 +285,8 @@ pub struct TypeInferenceEdge<'this> {
     pub(crate) constraint: &'this Constraint<Variable>,
     pub(crate) left: Vertex<Variable>,
     pub(crate) right: Vertex<Variable>,
-    pub(crate) left_to_right: BTreeMap<TypeAnnotation, BTreeSet<TypeAnnotation>>,
-    pub(crate) right_to_left: BTreeMap<TypeAnnotation, BTreeSet<TypeAnnotation>>,
+    pub(crate) left_to_right: BTreeMap<VertexTypeAnnotation, BTreeSet<VertexTypeAnnotation>>,
+    pub(crate) right_to_left: BTreeMap<VertexTypeAnnotation, BTreeSet<VertexTypeAnnotation>>,
 }
 
 impl<'this> TypeInferenceEdge<'this> {
@@ -289,8 +296,8 @@ impl<'this> TypeInferenceEdge<'this> {
         constraint: &'this Constraint<Variable>,
         left: Vertex<Variable>,
         right: Vertex<Variable>,
-        initial_left_to_right: BTreeMap<TypeAnnotation, BTreeSet<TypeAnnotation>>,
-        initial_right_to_left: BTreeMap<TypeAnnotation, BTreeSet<TypeAnnotation>>,
+        initial_left_to_right: BTreeMap<VertexTypeAnnotation, BTreeSet<VertexTypeAnnotation>>,
+        initial_right_to_left: BTreeMap<VertexTypeAnnotation, BTreeSet<VertexTypeAnnotation>>,
     ) -> TypeInferenceEdge<'this> {
         // The left_to_right & right_to_left sets must be consistent with each other. i.e.
         //   They must contain the same set of edges.
@@ -316,9 +323,9 @@ impl<'this> TypeInferenceEdge<'this> {
     }
 
     fn remove_type_from_values_of(
-        type_: &TypeAnnotation,
-        keys_to_look_under: &BTreeSet<TypeAnnotation>,
-        remove_from_values_of: &mut BTreeMap<TypeAnnotation, BTreeSet<TypeAnnotation>>,
+        type_: &VertexTypeAnnotation,
+        keys_to_look_under: &BTreeSet<VertexTypeAnnotation>,
+        remove_from_values_of: &mut BTreeMap<VertexTypeAnnotation, BTreeSet<VertexTypeAnnotation>>,
     ) {
         for other_type in keys_to_look_under {
             let value_set_to_remove_from = remove_from_values_of.get_mut(other_type).unwrap();
@@ -414,7 +421,7 @@ struct FlattenedTypeInferenceGraph<'this> {
 }
 
 impl FlattenedTypeInferenceGraph<'_> {
-    fn into_type_annotations(self) -> TypeAnnotations {
+    fn into_type_annotations(self) -> Result<TypeAnnotations, TypeInferenceError> {
         let Self { vertices, edges, .. } = self;
         let mut constraint_annotations = HashMap::new();
         let mut combine_links_edges = HashMap::new();
@@ -438,13 +445,12 @@ impl FlattenedTypeInferenceGraph<'_> {
                 constraint_annotations.insert(constraint.clone(), ConstraintTypeAnnotations::LeftRight(lr_annotations));
             }
         });
-
-        let vertex_annotations = vertices
+        let concept_annotations = vertices
+            .annotations
             .into_iter()
-            .map(|(variable, types)| (variable.into(), Arc::new(types)))
-            .collect::<BTreeMap<_, _>>();
-
-        TypeAnnotations::new(vertex_annotations, constraint_annotations)
+            .map(|(vertex, types)| (vertex, Arc::new(types.into_iter().filter_map(|t| t.as_concept()).collect())))
+            .collect();
+        Ok(TypeAnnotations::new(concept_annotations, constraint_annotations))
     }
 }
 

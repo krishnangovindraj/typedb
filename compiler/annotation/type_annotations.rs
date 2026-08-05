@@ -12,7 +12,10 @@ use std::{
 use answer::{Type, variable::Variable};
 use ir::pattern::{Scope, ScopeId, Vertex, conjunction::Conjunction, constraint::Constraint};
 
-use crate::annotation::expression::compiled_expression::ExpressionValueType;
+use crate::annotation::{
+    expression::compiled_expression::ExpressionValueType,
+    inference::{FromIteratorMappedOperations, VertexTypeAnnotation},
+};
 
 #[derive(Debug, Clone)]
 pub struct BlockAnnotations {
@@ -161,22 +164,26 @@ pub struct LeftRightAnnotations {
     right_to_left: Arc<BTreeMap<Type, Vec<Type>>>,
 }
 
+fn unwrap_concept(t: VertexTypeAnnotation) -> Type {
+    t.as_concept().unwrap()
+}
+
 impl LeftRightAnnotations {
     pub fn new(left_to_right: BTreeMap<Type, Vec<Type>>, right_to_left: BTreeMap<Type, Vec<Type>>) -> Self {
         Self { left_to_right: Arc::new(left_to_right), right_to_left: Arc::new(right_to_left) }
     }
 
     pub(crate) fn build(
-        left_to_right_set: BTreeMap<Type, BTreeSet<Type>>,
-        right_to_left_set: BTreeMap<Type, BTreeSet<Type>>,
+        left_to_right_set: BTreeMap<VertexTypeAnnotation, BTreeSet<VertexTypeAnnotation>>,
+        right_to_left_set: BTreeMap<VertexTypeAnnotation, BTreeSet<VertexTypeAnnotation>>,
     ) -> Self {
         let mut left_to_right = BTreeMap::new();
         for (left, right_set) in left_to_right_set {
-            left_to_right.insert(left, right_set.into_iter().collect());
+            left_to_right.insert(unwrap_concept(left), right_set.into_iter().map(unwrap_concept).collect());
         }
         let mut right_to_left = BTreeMap::new();
         for (right, left_set) in right_to_left_set {
-            right_to_left.insert(right, left_set.into_iter().collect());
+            right_to_left.insert(unwrap_concept(right), left_set.into_iter().map(unwrap_concept).collect());
         }
         Self::new(left_to_right, right_to_left)
     }
@@ -201,28 +208,36 @@ pub struct LinksAnnotations {
 
 impl LinksAnnotations {
     pub(crate) fn build(
-        relation_to_role: BTreeMap<Type, BTreeSet<Type>>,
-        role_to_relation: BTreeMap<Type, BTreeSet<Type>>,
-        player_to_role: BTreeMap<Type, BTreeSet<Type>>,
-        role_to_player: BTreeMap<Type, BTreeSet<Type>>,
+        relation_to_role: BTreeMap<VertexTypeAnnotation, BTreeSet<VertexTypeAnnotation>>,
+        role_to_relation: BTreeMap<VertexTypeAnnotation, BTreeSet<VertexTypeAnnotation>>,
+        player_to_role: BTreeMap<VertexTypeAnnotation, BTreeSet<VertexTypeAnnotation>>,
+        role_to_player: BTreeMap<VertexTypeAnnotation, BTreeSet<VertexTypeAnnotation>>,
     ) -> Self {
         let relation_to_player = relation_to_role
             .iter()
             .map(|(relation, role_set)| {
-                (*relation, role_set.iter().flat_map(|role| role_to_player[role].clone()).collect())
+                let players = role_set.iter().flat_map(|role| role_to_player[role].iter());
+                (relation.unwrap_concept(), Vec::from_mapped_ref(players, unwrap_concept))
             })
             .collect();
-        let relation_to_role_vec =
-            relation_to_role.into_iter().map(|(rel, role_set)| (rel, role_set.into_iter().collect())).collect();
+        let relation_to_role_vec = relation_to_role
+            .into_iter()
+            .map(|(rel, role_set)| (rel.unwrap_concept(), BTreeSet::from_mapped(role_set.into_iter(), unwrap_concept)))
+            .collect();
 
         let player_to_relation = player_to_role
             .iter()
             .map(|(player, role_set)| {
-                (*player, role_set.iter().flat_map(|role| role_to_relation[role].clone()).collect())
+                let relations = role_set.into_iter().flat_map(|role| role_to_relation[role].iter());
+                (player.unwrap_concept(), Vec::from_mapped_ref(relations, unwrap_concept))
             })
             .collect();
-        let player_to_role_vec =
-            player_to_role.into_iter().map(|(player, role_set)| (player, role_set.into_iter().collect())).collect();
+        let player_to_role_vec = player_to_role
+            .into_iter()
+            .map(|(player, role_set)| {
+                (player.unwrap_concept(), BTreeSet::from_iter(role_set.into_iter().map(unwrap_concept)))
+            })
+            .collect();
 
         Self {
             relation_to_player: Arc::new(relation_to_player),

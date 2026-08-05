@@ -9,15 +9,108 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use answer::{Type as TypeAnnotation, variable::Variable};
+use answer::variable::Variable;
+use concept::{
+    error::ConceptReadError,
+    type_::{
+        attribute_type::AttributeType, entity_type::EntityType, object_type::ObjectType, relation_type::RelationType,
+        role_type::RoleType,
+    },
+};
+use encoding::value::value_type::ValueType;
 use ir::pattern::Vertex;
 
 pub mod match_inference;
 pub mod type_seeder;
 
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub(crate) enum VertexTypeAnnotation {
+    Concept(answer::Type),
+    Value(ValueType),
+}
+
+impl From<answer::Type> for VertexTypeAnnotation {
+    fn from(value: answer::Type) -> Self {
+        Self::Concept(value)
+    }
+}
+
+impl From<EntityType> for VertexTypeAnnotation {
+    fn from(value: EntityType) -> Self {
+        Self::Concept(answer::Type::Entity(value))
+    }
+}
+
+impl From<RelationType> for VertexTypeAnnotation {
+    fn from(value: RelationType) -> Self {
+        Self::Concept(answer::Type::Relation(value))
+    }
+}
+
+impl From<AttributeType> for VertexTypeAnnotation {
+    fn from(value: AttributeType) -> Self {
+        Self::Concept(answer::Type::Attribute(value))
+    }
+}
+
+impl From<RoleType> for VertexTypeAnnotation {
+    fn from(value: RoleType) -> Self {
+        Self::Concept(answer::Type::RoleType(value))
+    }
+}
+
+impl From<ObjectType> for VertexTypeAnnotation {
+    fn from(value: ObjectType) -> Self {
+        match value {
+            ObjectType::Entity(entity) => Self::Concept(answer::Type::Entity(entity)),
+            ObjectType::Relation(relation) => Self::Concept(answer::Type::Relation(relation)),
+        }
+    }
+}
+
+impl VertexTypeAnnotation {
+    pub(crate) fn as_concept(&self) -> Option<answer::Type> {
+        match self {
+            VertexTypeAnnotation::Concept(type_) => Some(*type_),
+            VertexTypeAnnotation::Value(_) => None,
+        }
+    }
+
+    pub(crate) fn as_value(&self) -> Option<ValueType> {
+        match self {
+            VertexTypeAnnotation::Concept(_) => None,
+            VertexTypeAnnotation::Value(type_) => Some(*type_),
+        }
+    }
+
+    pub(crate) fn unwrap_concept(&self) -> answer::Type {
+        self.as_concept().expect("Expected to be concept variant")
+    }
+
+    pub(crate) fn unwrap_value(&self) -> ValueType {
+        self.as_value().expect("Expected to be value variant")
+    }
+
+    pub fn try_retain(
+        annotations: &mut BTreeSet<Self>,
+        predicate: impl Fn(&Self) -> Result<bool, Box<ConceptReadError>>,
+    ) -> Result<(), Box<ConceptReadError>> {
+        let mut to_be_removed = Vec::new();
+        for annotation in annotations.iter() {
+            if !predicate(annotation)? {
+                to_be_removed.push(*annotation);
+            }
+        }
+        for annotation in to_be_removed.iter() {
+            annotations.remove(annotation);
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct VertexAnnotations {
-    annotations: BTreeMap<Vertex<Variable>, BTreeSet<TypeAnnotation>>,
+    annotations: BTreeMap<Vertex<Variable>, BTreeSet<VertexTypeAnnotation>>,
 }
 
 impl VertexAnnotations {
@@ -28,7 +121,7 @@ impl VertexAnnotations {
     pub(crate) fn add_or_intersect(
         &mut self,
         vertex: &Vertex<Variable>,
-        new_annotations: Cow<'_, BTreeSet<TypeAnnotation>>,
+        new_annotations: Cow<'_, BTreeSet<VertexTypeAnnotation>>,
     ) -> bool {
         if let Some(existing_annotations) = self.get_mut(vertex) {
             existing_annotations.retain_intersection(&*new_annotations)
@@ -40,7 +133,7 @@ impl VertexAnnotations {
 }
 
 impl Deref for VertexAnnotations {
-    type Target = BTreeMap<Vertex<Variable>, BTreeSet<TypeAnnotation>>;
+    type Target = BTreeMap<Vertex<Variable>, BTreeSet<VertexTypeAnnotation>>;
 
     fn deref(&self) -> &Self::Target {
         &self.annotations
@@ -54,24 +147,24 @@ impl DerefMut for VertexAnnotations {
 }
 
 impl IntoIterator for VertexAnnotations {
-    type Item = <BTreeMap<Vertex<Variable>, BTreeSet<TypeAnnotation>> as IntoIterator>::Item;
-    type IntoIter = <BTreeMap<Vertex<Variable>, BTreeSet<TypeAnnotation>> as IntoIterator>::IntoIter;
+    type Item = <BTreeMap<Vertex<Variable>, BTreeSet<VertexTypeAnnotation>> as IntoIterator>::Item;
+    type IntoIter = <BTreeMap<Vertex<Variable>, BTreeSet<VertexTypeAnnotation>> as IntoIterator>::IntoIter;
     fn into_iter(self) -> Self::IntoIter {
         self.annotations.into_iter()
     }
 }
 
 impl<'a> IntoIterator for &'a VertexAnnotations {
-    type Item = <&'a BTreeMap<Vertex<Variable>, BTreeSet<TypeAnnotation>> as IntoIterator>::Item;
-    type IntoIter = <&'a BTreeMap<Vertex<Variable>, BTreeSet<TypeAnnotation>> as IntoIterator>::IntoIter;
+    type Item = <&'a BTreeMap<Vertex<Variable>, BTreeSet<VertexTypeAnnotation>> as IntoIterator>::Item;
+    type IntoIter = <&'a BTreeMap<Vertex<Variable>, BTreeSet<VertexTypeAnnotation>> as IntoIterator>::IntoIter;
     fn into_iter(self) -> Self::IntoIter {
         self.annotations.iter()
     }
 }
 
 impl<'a> IntoIterator for &'a mut VertexAnnotations {
-    type Item = <&'a mut BTreeMap<Vertex<Variable>, BTreeSet<TypeAnnotation>> as IntoIterator>::Item;
-    type IntoIter = <&'a mut BTreeMap<Vertex<Variable>, BTreeSet<TypeAnnotation>> as IntoIterator>::IntoIter;
+    type Item = <&'a mut BTreeMap<Vertex<Variable>, BTreeSet<VertexTypeAnnotation>> as IntoIterator>::Item;
+    type IntoIter = <&'a mut BTreeMap<Vertex<Variable>, BTreeSet<VertexTypeAnnotation>> as IntoIterator>::IntoIter;
     fn into_iter(self) -> Self::IntoIter {
         self.annotations.iter_mut()
     }
@@ -79,7 +172,7 @@ impl<'a> IntoIterator for &'a mut VertexAnnotations {
 
 impl<T> From<T> for VertexAnnotations
 where
-    BTreeMap<Vertex<Variable>, BTreeSet<TypeAnnotation>>: From<T>,
+    BTreeMap<Vertex<Variable>, BTreeSet<VertexTypeAnnotation>>: From<T>,
 {
     fn from(t: T) -> Self {
         Self { annotations: t.into() }
