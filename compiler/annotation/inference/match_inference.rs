@@ -49,10 +49,6 @@ use crate::{
     filter_variants,
 };
 
-macro_rules! needs_value_type_inference {
-    ($_message:literal) => {};
-}
-
 pub fn infer_types_for_block(
     ctx: &mut PipelineAnnotationContext<'_, impl ReadableSnapshot>,
     previous_stage_annotations: &RunningVariableAnnotations,
@@ -116,12 +112,7 @@ fn infer_types_in_negations_and_optionals_and_complete<'conj>(
                 let optional_graph = infer_types_impl(ctx, optional.conjunction(), &vertices, type_inference_mode)?;
                 optional.optionally_bound_by_pattern().for_each(|optional_var| {
                     let optional_vertex = Vertex::Variable(optional_var);
-                    needs_value_type_inference!("Remove the cagtegory check");
-                    debug_assert!(
-                        optional_graph.vertices.contains_key(&optional_vertex)
-                            || ctx.variable_registry.get_variable_category(optional_var)
-                                == Some(VariableCategory::Value)
-                    );
+                    debug_assert!(optional_graph.vertices.contains_key(&optional_vertex));
                     if ctx.variable_registry.get_variable_category(optional_var) == Some(VariableCategory::Value) {
                         return;
                     }
@@ -419,11 +410,10 @@ impl NestedTypeInferenceGraphDisjunction<'_> {
 
     fn prune_vertices_from_self(&mut self, parent_vertices: &mut VertexAnnotations) -> bool {
         // TODO: Re-enable when we have value-type inference
-        needs_value_type_inference!("Uncomment debug_assert");
-        // debug_assert!(Self::variables_affecting_parent(self.disjunction_pattern).all(|vertex| {
-        //     self.disjunction.iter().all(|branch| branch.vertices.contains_key(&vertex))
-        //         && parent_vertices.contains_key(&vertex)
-        // }));
+        debug_assert!(Self::variables_affecting_parent(self.disjunction_pattern).all(|vertex| {
+            self.disjunction.iter().all(|branch| branch.vertices.contains_key(&vertex))
+                && parent_vertices.contains_key(&vertex)
+        }));
 
         let mut is_modified = false;
         for nested_graph in &mut self.disjunction {
@@ -431,10 +421,6 @@ impl NestedTypeInferenceGraphDisjunction<'_> {
         }
 
         for vertex in Self::variables_affecting_parent(self.disjunction_pattern) {
-            if !parent_vertices.contains_key(&vertex) {
-                needs_value_type_inference!("condition goes away");
-                continue;
-            }
             let parent_vertex_types = parent_vertices.get_mut(&vertex).unwrap();
             let size_before = parent_vertex_types.len();
             parent_vertex_types.retain_types(|type_| {
