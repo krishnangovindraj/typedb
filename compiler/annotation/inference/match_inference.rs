@@ -20,6 +20,7 @@ use ir::{
         constraint::{Constraint, ExpressionBinding},
         disjunction::Disjunction,
         nested_pattern::NestedPattern,
+        variable_category::VariableCategory,
     },
     pipeline::{
         VariableRegistry,
@@ -55,7 +56,7 @@ pub fn infer_types_for_block(
     block: &Block,
     type_inference_mode: TypeInferenceMode,
 ) -> Result<BlockAnnotations, TypeInferenceError> {
-    let mut input_annotations: BTreeMap<Vertex<Variable>, VertexTypeAnnotations> = BTreeMap::new();
+    let mut input_annotations = VertexAnnotations::new();
     previous_stage_annotations.concepts.iter().for_each(|(var, annotations)| {
         input_annotations
             .insert(Vertex::Variable(*var), VertexTypeAnnotations::concept_from(annotations.iter().copied()));
@@ -66,7 +67,6 @@ pub fn infer_types_for_block(
         };
         input_annotations.insert(Vertex::Variable(*var), VertexTypeAnnotations::value_from([*value_type]));
     });
-    let input_annotations = VertexAnnotations { annotations: input_annotations };
     let root_graph = infer_types_impl(ctx, block.conjunction(), &input_annotations, type_inference_mode)?;
     let mut type_annotations_by_scope = HashMap::new();
     root_graph.into_type_annotations_by_scope(&mut type_annotations_by_scope);
@@ -98,7 +98,7 @@ fn infer_types_in_negations_and_optionals_and_complete<'conj>(
 ) -> Result<FullTypeInferenceGraph<'conj>, TypeInferenceError> {
     // Add the negations & optionals to TypeInferenceGraph to get FullTypeInferenceGraph.
     // Copy over the optional variable annotations from optionals & disjunctions.
-    let TypeInferenceGraph { conjunction, mut vertices, edges, nested_disjunctions } = graph;
+    let TypeInferenceGraph { conjunction, mut vertices, edges, expressions, nested_disjunctions } = graph;
     let mut negations = Vec::new();
     let mut optionals = Vec::new();
     for nested in conjunction.nested_patterns() {
@@ -139,14 +139,14 @@ fn infer_types_in_negations_and_optionals_and_complete<'conj>(
             if ctx.variable_registry.get_variable_category(optional_var) == Some(VariableCategory::Value) {
                 return Ok(());
             }
-            let annotations = VertexAnnotations::try_union(branches.iter().map(|g| &vertices), &optional_vertex)?
+            let annotations = VertexAnnotations::try_union(branches.iter().map(|g| &g.vertices), &optional_vertex)?
                 .expect("Can't be None if there's atleast one branch");
             vertices.insert(optional_vertex, annotations);
             Ok::<_, TypeInferenceError>(())
         })?;
         disjunctions.push(branches);
     }
-    Ok(FullTypeInferenceGraph { conjunction, vertices, edges, disjunctions, optionals, negations })
+    Ok(FullTypeInferenceGraph { conjunction, vertices, edges, expressions, disjunctions, optionals, negations })
 }
 
 fn all_vertex_annotations_available(
@@ -453,6 +453,7 @@ impl NestedTypeInferenceGraphDisjunction<'_> {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct TypeInferenceExpression<'this> {
     pub(crate) expression: &'this ExpressionBinding<Variable>,
     pub(crate) assigned: Vertex<Variable>,
@@ -516,6 +517,7 @@ struct FullTypeInferenceGraph<'this> {
     conjunction: &'this Conjunction,
     vertices: VertexAnnotations,
     edges: Vec<TypeInferenceEdge<'this>>,
+    expressions: Vec<TypeInferenceExpression<'this>>,
     disjunctions: Vec<Vec<FullTypeInferenceGraph<'this>>>,
     optionals: Vec<FullTypeInferenceGraph<'this>>,
     negations: Vec<FullTypeInferenceGraph<'this>>,
@@ -523,8 +525,8 @@ struct FullTypeInferenceGraph<'this> {
 
 impl FullTypeInferenceGraph<'_> {
     fn into_type_annotations_by_scope(self, by_scope: &mut HashMap<ScopeId, TypeAnnotations>) {
-        let Self { conjunction, vertices, edges, disjunctions, negations, optionals } = self;
-        let type_annotations = Self::build_type_annotations(vertices, edges);
+        let Self { conjunction, vertices, edges, disjunctions, negations, expressions, optionals } = self;
+        let type_annotations = Self::build_type_annotations(vertices, edges, expressions);
         by_scope.insert(conjunction.scope_id(), type_annotations);
         let all_nested = disjunctions
             .into_iter()
@@ -575,12 +577,12 @@ impl FullTypeInferenceGraph<'_> {
         });
         let compiled_expressions =
             expressions.into_iter().map(|expr| (expr.expression.clone(), expr.compiled_expression.unwrap())).collect();
-        Ok(TypeAnnotations::new(
+        TypeAnnotations::new(
             concept_vertex_annotations,
             value_vertex_annotations,
             constraint_annotations,
             compiled_expressions,
-        ))
+        )
     }
 }
 

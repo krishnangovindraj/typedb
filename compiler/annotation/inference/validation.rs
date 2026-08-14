@@ -167,7 +167,20 @@ fn check_uniqueness_of_value_types_at_disjunctions(
         .iter()
         .flat_map(|d| d.nested_disjunctions.iter())
         .try_for_each(|nested| check_uniqueness_of_value_types_at_disjunctions(nested, variable_registry))?;
-    if let Some((variable, value_types)) = find_multiply_typed_value_vertex(&disjunction.shared_vertex_annotations) {
+    let shared_value_annotations =
+        NestedTypeInferenceGraphDisjunction::variables_affecting_parent(disjunction.disjunction_pattern)
+            .filter_map(|v| {
+                if disjunction.disjunction.iter().all(|b| matches!(b.vertices[&v], VertexTypeAnnotations::Value(_))) {
+                    let union = VertexAnnotations::try_union(disjunction.disjunction.iter().map(|b| &b.vertices), &v)
+                        .expect("Homogenous")?;
+                    Some((v, union))
+                } else {
+                    None
+                }
+            })
+            .collect();
+    let shared_value_annotations = VertexAnnotations { annotations: shared_value_annotations };
+    if let Some((variable, value_types)) = find_multiply_typed_value_vertex(&shared_value_annotations) {
         let variable = variable_registry.get_variable_name_or_unnamed(variable).to_owned();
         let value_types = join_value_type_names(value_types.iter());
         let source_span = disjunction.disjunction_pattern.source_span();
