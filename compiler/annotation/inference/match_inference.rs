@@ -525,7 +525,6 @@ impl<'this> TypeInferenceExpression<'this> {
     }
 }
 
-
 #[derive(Debug)]
 struct FullTypeInferenceGraph<'this> {
     conjunction: &'this Conjunction,
@@ -549,7 +548,11 @@ impl FullTypeInferenceGraph<'_> {
         all_nested.for_each(|nested| nested.into_type_annotations_by_scope(by_scope));
     }
 
-    fn build_type_annotations(vertices: VertexAnnotations, edges: Vec<TypeInferenceEdge<'_>>, expressions: Vec<TypeInferenceExpression<'_>>) -> TypeAnnotations {
+    fn build_type_annotations(
+        vertices: VertexAnnotations,
+        edges: Vec<TypeInferenceEdge<'_>>,
+        expressions: Vec<TypeInferenceExpression<'_>>,
+    ) -> TypeAnnotations {
         let mut constraint_annotations = HashMap::new();
         let mut combine_links_edges = HashMap::new();
         edges.into_iter().for_each(|edge| {
