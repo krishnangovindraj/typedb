@@ -20,7 +20,6 @@ use ir::{
         constraint::{Constraint, ExpressionBinding},
         disjunction::Disjunction,
         nested_pattern::NestedPattern,
-        variable_category::VariableCategory,
     },
     pipeline::{
         VariableRegistry,
@@ -113,9 +112,6 @@ fn infer_types_in_negations_and_optionals_and_complete<'conj>(
                 optional.optionally_bound_by_pattern().for_each(|optional_var| {
                     let optional_vertex = Vertex::Variable(optional_var);
                     debug_assert!(optional_graph.vertices.contains_key(&optional_vertex));
-                    if ctx.variable_registry.get_variable_category(optional_var) == Some(VariableCategory::Value) {
-                        return;
-                    }
                     let annotations = optional_graph.vertices[&optional_vertex].clone();
                     vertices.insert(optional_vertex, annotations);
                 });
@@ -132,13 +128,7 @@ fn infer_types_in_negations_and_optionals_and_complete<'conj>(
             .collect::<Result<Vec<_>, _>>()?;
         nested_disjunction.disjunction_pattern.optionally_bound_by_pattern().try_for_each(|optional_var| {
             let optional_vertex = Vertex::Variable(optional_var);
-            debug_assert!(
-                branches.iter().all(|b| b.vertices.contains_key(&optional_vertex))
-                    || ctx.variable_registry.get_variable_category(optional_var) == Some(VariableCategory::Value)
-            );
-            if ctx.variable_registry.get_variable_category(optional_var) == Some(VariableCategory::Value) {
-                return Ok(());
-            }
+            debug_assert!(branches.iter().all(|b| b.vertices.contains_key(&optional_vertex)));
             let annotations = VertexAnnotations::try_union(branches.iter().map(|g| &g.vertices), &optional_vertex)?
                 .expect("Can't be None if there's atleast one branch");
             vertices.insert(optional_vertex, annotations);
