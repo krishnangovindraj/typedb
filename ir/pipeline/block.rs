@@ -281,13 +281,7 @@ fn validate_optional_returns_recursive(
     });
     if let Some((var, &source_span)) = reused_optional_return_opt {
         let variable = context.get_variable_name_or_unnamed(*var).to_owned();
-        // TODO: This has to wait till we finalize the spec
-        // // Err(Box::new(RepresentationError::OptionalFunctionReturnReferenced { variable, source_span }))
-        // use error::TypeDBError;
-        // tracing::warn!(
-        //     "Function call reuses optionally assigned variable. This will fail in the next version:\n{}",
-        //     RepresentationError::OptionalFunctionReturnReferenced { variable, source_span }.format_description()
-        // );
+        error::optional_usage_error!(RepresentationError::OptionalFunctionReturnReferenced { variable, source_span });
         Ok(())
     } else {
         Ok(())
