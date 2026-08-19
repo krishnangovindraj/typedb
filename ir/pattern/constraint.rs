@@ -2251,7 +2251,7 @@ impl<ID: IrID> fmt::Display for ExpressionBinding<ID> {
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct FunctionCallBinding<ID> {
     assigned: Vec<Vertex<ID>>,
-    optionally_assigned: BTreeSet<ID>,
+    optionally_assigned: BTreeSet<ID>, // TODO: This might not be enough for `let $f, $f = one_opt_other_reqd()`;
     function_call: FunctionCall<ID>,
     is_stream: bool,
     source_span: Option<Span>,
