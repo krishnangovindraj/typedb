@@ -10,7 +10,7 @@ use std::{
     fmt,
     hash::{Hash, Hasher},
     mem,
-    ops::{BitAnd, BitAndAssign, BitOr, BitXor},
+    ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor},
 };
 
 use answer::variable::Variable;
@@ -94,7 +94,11 @@ macro_rules! impl_pattern_from_pattern_variables {
 }
 pub(self) use impl_pattern_from_pattern_variables;
 
-use crate::pattern::constraint::Constraint;
+use crate::pattern::{
+    conjunction::{ConjunctionBuilder, NestedPatternBuilder},
+    constraint::Constraint,
+    disjunction::DisjunctionBuilder,
+};
 
 // TODO: rename to 'Identifier' in lieu of a better name
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -561,15 +565,12 @@ impl BitAndAssign for AssignmentMode {
 pub(super) enum OptionalReferenceMode {
     // We do not use this to detect the semantic issues of two try blocks assigning the same variable.
     // That is done by the regular BindingMode.
-    UnsafeUnwrap(LocationNote),     // Can be reset by a safe unwrap in a parent
-    RegularReference(LocationNote), // match $x isa person;
-    Assigned(LocationNote),         // Can we treat them as the same thing?
+    UnsafeUnwrap(LocationNote),         // Can be reset by a safe unwrap in a parent
+    RegularReference(LocationNote),     // match $x isa person;
+    AssignedOrStageInput(LocationNote), // Can we treat Assign & Input them as the same thing?
 
     // TryBlockReference,      // Identical to regular reference?
 
-    // Future:
-
-    // UsedAsOptional,         // Identity element, for when optional arguments are supported.
     #[default]
     AbsentOrSafe, // When uninteresting
 }
@@ -583,11 +584,11 @@ impl BitAnd for OptionalReferenceMode {
             (OptionalReferenceMode::UnsafeUnwrap(location), _) | (_, OptionalReferenceMode::UnsafeUnwrap(location)) => {
                 OptionalReferenceMode::UnsafeUnwrap(location)
             }
-            (OptionalReferenceMode::Assigned(location), OptionalReferenceMode::Assigned(_)) => {
+            (OptionalReferenceMode::AssignedOrStageInput(location), OptionalReferenceMode::AssignedOrStageInput(_)) => {
                 OptionalReferenceMode::UnsafeUnwrap(location) // Should trigger the MultipleAssignments
             }
-            (OptionalReferenceMode::RegularReference(location), OptionalReferenceMode::Assigned(_))
-            | (OptionalReferenceMode::Assigned(_), OptionalReferenceMode::RegularReference(location)) => {
+            (OptionalReferenceMode::RegularReference(location), OptionalReferenceMode::AssignedOrStageInput(_))
+            | (OptionalReferenceMode::AssignedOrStageInput(_), OptionalReferenceMode::RegularReference(location)) => {
                 OptionalReferenceMode::UnsafeUnwrap(location)
             }
             (OptionalReferenceMode::RegularReference(location), OptionalReferenceMode::RegularReference(_)) => {
@@ -606,12 +607,12 @@ impl BitOr for OptionalReferenceMode {
             (OptionalReferenceMode::UnsafeUnwrap(location), _) | (_, OptionalReferenceMode::UnsafeUnwrap(location)) => {
                 OptionalReferenceMode::UnsafeUnwrap(location)
             }
-            (OptionalReferenceMode::Assigned(location), OptionalReferenceMode::Assigned(_)) => {
-                OptionalReferenceMode::Assigned(location) // Should trigger the MultipleAssignments
+            (OptionalReferenceMode::AssignedOrStageInput(location), OptionalReferenceMode::AssignedOrStageInput(_)) => {
+                OptionalReferenceMode::AssignedOrStageInput(location) // Should trigger the MultipleAssignments
             }
-            (OptionalReferenceMode::RegularReference(location), OptionalReferenceMode::Assigned(_))
-            | (OptionalReferenceMode::Assigned(_), OptionalReferenceMode::RegularReference(location)) => {
-                OptionalReferenceMode::Assigned(location) // Should be illegal unsatisfiable input / double assignment
+            (OptionalReferenceMode::RegularReference(location), OptionalReferenceMode::AssignedOrStageInput(_))
+            | (OptionalReferenceMode::AssignedOrStageInput(_), OptionalReferenceMode::RegularReference(location)) => {
+                OptionalReferenceMode::AssignedOrStageInput(location) // Should be illegal unsatisfiable input / double assignment
             }
             (OptionalReferenceMode::RegularReference(location), OptionalReferenceMode::RegularReference(_)) => {
                 OptionalReferenceMode::RegularReference(location)
@@ -635,7 +636,7 @@ pub(crate) struct VariableUsageMode {
     pub(super) assigned: AssignmentMode,
     pub(super) optionality: OptionalReferenceMode,
     pub(super) unused_unwrap: Option<LocationNote>,
-    pub(super) safe_unwrap: Option<LocationNote>,
+    pub(super) safe_unwrap: Option<LocationNote>, // To detect unwraps on non-optionals at the top
 }
 
 impl VariableUsageMode {
@@ -645,7 +646,7 @@ impl VariableUsageMode {
         if let Constraint::FunctionCallBinding(f) = constraint {
             Box::new(f.binding_modes().filter_map(|(id, binding_mode)| match binding_mode {
                 BindingMode::AlwaysBinding => {
-                    Some((id, gVariableUsageMode::assigned(VariableOptionality::Required, f.source_span())))
+                    Some((id, VariableUsageMode::assigned(VariableOptionality::Required, f.source_span())))
                 }
                 BindingMode::OptionallyBinding => {
                     Some((id, VariableUsageMode::assigned(VariableOptionality::Optional, f.source_span())))
@@ -659,6 +660,47 @@ impl VariableUsageMode {
         } else {
             Box::new(constraint.ids().map(|id| (id, VariableUsageMode::regular_reference(constraint.source_span()))))
         }
+    }
+
+    pub(crate) fn for_conjunction(conjunction: &ConjunctionBuilder) -> HashMap<Variable, VariableUsageMode> {
+        let mut modes = HashMap::new();
+        conjunction.constraints().iter().flat_map(Self::of_constraint).for_each(|(id, mode)| {
+            *modes.entry(id).or_default() &= mode;
+        });
+
+        conjunction
+            .nested_patterns()
+            .iter()
+            .flat_map(|nested| match nested {
+                NestedPatternBuilder::Disjunction(disjunction) => Self::for_disjunction(disjunction).into_iter(),
+                NestedPatternBuilder::Negation(negation) => Self::for_conjunction(negation.conjunction()).into_iter(),
+                NestedPatternBuilder::Optional(optional) => Self::for_conjunction(optional.conjunction()).into_iter(),
+            })
+            .for_each(|(id, mode)| {
+                *modes.entry(id).or_default() &= mode;
+            });
+
+        // Reset any safely unwrapped
+        for unwrap in conjunction.constraints().as_unwrap() {
+            for id in unwrap.unwrapped_vars() {
+                let entry = modes.entry(id).or_default();
+                if entry.optionality_mode == OptionalReferenceMode::AbsentOrSafe {
+                    entry.unused_unwrap = pick_any_set(entry.unused_unwrap, Some(unwrap.source_span()));
+                }
+                entry.unused_unwrap = OptionalReferenceMode::AbsentOrSafe;
+                entry.safe_unwrap = pick_any_set(entry.safe_unwrap, Some(unwrap.source_span()))
+            }
+        }
+    }
+
+    pub(crate) fn for_disjunction(disjunction: &DisjunctionBuilder) -> HashMap<Variable, VariableUsageMode> {
+        let mut modes = HashMap::new();
+        disjunction.conjunctions().flat_map(|branch| Self::for_conjunction(branch).into_iter()).for_each(
+            |(id, mode)| {
+                *modes.entry(id).or_default() |= mode;
+            },
+        );
+        modes
     }
 
     fn new(assignment_mode: AssignmentMode, optionality_mode: OptionalReferenceMode) -> Self {
@@ -688,7 +730,7 @@ impl VariableUsageMode {
     pub(crate) fn assigned(optionality: VariableOptionality, location: LocationNote) -> Self {
         let assignment_mode = AssignmentMode::AtMostOncePerBranch(location);
         let optionality_mode = match optionality {
-            VariableOptionality::Optional => OptionalReferenceMode::Assigned(location),
+            VariableOptionality::Optional => OptionalReferenceMode::AssignedOrStageInput(location),
             VariableOptionality::Required => OptionalReferenceMode::RegularReference(location),
         };
         Self::new(assignment_mode, optionality_mode)
@@ -724,6 +766,12 @@ impl BitOr for VariableUsageMode {
 impl BitAndAssign for VariableUsageMode {
     fn bitand_assign(&mut self, rhs: Self) {
         *self = *self & rhs;
+    }
+}
+
+impl BitOrAssign for VariableUsageMode {
+    fn bitor_assign(&mut self, rhs: Self) {
+        *self = *self | rhs;
     }
 }
 

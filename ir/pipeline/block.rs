@@ -17,11 +17,12 @@ use typeql::common::Span;
 use crate::{
     RepresentationError,
     pattern::{
-        BindingMode, BranchID, ContextualisedBindingMode, Pattern, ScopeId,
+        AssignmentMode, BindingMode, BranchID, ContextualisedBindingMode, OptionalReferenceMode, Pattern, ScopeId,
+        VariableUsageMode,
         conjunction::{Conjunction, ConjunctionBuilder, ConjunctionBuilderWithContext, NestedPatternBuilder},
         constraint::Constraint,
         nested_pattern::NestedPattern,
-        variable_category::VariableCategory,
+        variable_category::{VariableCategory, VariableOptionality},
     },
     pipeline::{ParameterRegistry, VariableCategorySource, VariableRegistry},
 };
@@ -78,6 +79,7 @@ impl<'reg> BlockBuilder<'reg> {
         validate_all_required_variables_can_be_bound(&self, &block_binding_modes, &self.context.variable_registry)?;
         validate_no_unbound_variable_categories(&self.conjunction, &self.context)?;
         validate_is_variables_have_same_category(&self.conjunction, &self.context.variable_registry)?;
+        validate_all_optional_dereferences_are_safe(&self.conjunction, &self.context)?;
 
         // Update
         block_binding_modes
@@ -290,6 +292,43 @@ fn validate_optional_returns_recursive(
     } else {
         Ok(())
     }
+}
+
+fn validate_all_optional_dereferences_are_safe(
+    conjunction: &ConjunctionBuilder,
+    context: &BlockBuilderContext<'_>,
+) -> Result<(), Box<RepresentationError>> {
+    let mut modes = VariableUsageMode::for_conjunction(conjunction);
+    for (id, optionality) in context.input_variable_optionality() {
+        let mode = modes.entry(id).or_default();
+        if optionality == VariableOptionality::Optional {
+            mode.optionality = mode.optionality & OptionalReferenceMode::AssignedOrStageInput(None);
+        } else {
+            if let Some(non_optional_unwrap) = mode.safe_unwrap {
+                // TODO: error? Unwrapping a non-optional
+            }
+        }
+
+        if let AssignmentMode::AtMostOncePerBranch(source_span) = mode.assigned {
+            let variable = context.get_variable_name_or_unnamed(id).to_owned();
+            return Err(Box::new(RepresentationError::AssigningToInputVariable { variable, source_span }));
+        }
+    }
+
+    for (id, mode) in &modes {
+        if let AssignmentMode::ErrorMultipleAssignments(source_span, other_span) = mode.assigned {
+            let variable = context.get_variable_name_or_unnamed(*id).to_owned();
+            return Err(Box::new(RepresentationError::AssigningToInputVariable { variable, source_span }));
+        }
+        if let OptionalReferenceMode::UnsafeUnwrap(source_span) = mode.assigned {
+            let variable = context.get_variable_name_or_unnamed(*id).to_owned();
+            return Err(Box::new(RepresentationError::UnsafeOptionalDereference { variable, source_span }));
+        }
+        if let Some(source_span) = mode.unused_unwrap {
+            // TODO: error? Unwrapping an optional variable that isn't actually referenced in that scope.
+        }
+    }
+    Ok(())
 }
 
 fn validate_is_plannable(
