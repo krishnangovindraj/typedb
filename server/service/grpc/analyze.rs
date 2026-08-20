@@ -444,7 +444,7 @@ fn query_structure_constraint(
             let variables = is_set.vertices().map(encode_structure_vertex_variable).collect::<Result<Vec<_>, _>>()?;
             constraints.push(conjunction_proto::Constraint {
                 span,
-                constraint: Some(structure_constraint::Constraint::IsSet(structure_constraint::IsSet { variables }))
+                constraint: Some(structure_constraint::Constraint::IsSet(structure_constraint::IsSet { variables })),
             });
         }
         Constraint::Iid(iid) => {

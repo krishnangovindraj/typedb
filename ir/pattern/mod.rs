@@ -693,10 +693,7 @@ impl VariableUsageMode {
     }
 
     fn new(assignment_mode: AssignmentMode, optionality_mode: OptionalReferenceMode) -> Self {
-        Self {
-            assigned: AssignmentMode::NotAssigned,
-            optionality: optionality_mode,
-        }
+        Self { assigned: AssignmentMode::NotAssigned, optionality: optionality_mode }
     }
 
     pub(crate) fn absent() -> Self {
@@ -728,10 +725,7 @@ impl BitAnd for VariableUsageMode {
     type Output = Self;
 
     fn bitand(self, rhs: Self) -> Self {
-        Self {
-            assigned: self.assigned & rhs.assigned,
-            optionality: self.optionality & rhs.optionality,
-        }
+        Self { assigned: self.assigned & rhs.assigned, optionality: self.optionality & rhs.optionality }
     }
 }
 
@@ -739,10 +733,7 @@ impl BitOr for VariableUsageMode {
     type Output = Self;
 
     fn bitor(self, rhs: Self) -> Self {
-        Self {
-            assigned: self.assigned | rhs.assigned,
-            optionality: self.optionality | rhs.optionality,
-        }
+        Self { assigned: self.assigned | rhs.assigned, optionality: self.optionality | rhs.optionality }
     }
 }
 
