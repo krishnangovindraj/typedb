@@ -681,16 +681,16 @@ impl VariableUsageMode {
             });
 
         // Reset any safely unwrapped
-        for unwrap in conjunction.constraints().as_unwrap() {
-            for id in unwrap.unwrapped_vars() {
-                let entry = modes.entry(id).or_default();
-                if entry.optionality_mode == OptionalReferenceMode::AbsentOrSafe {
-                    entry.unused_unwrap = pick_any_set(entry.unused_unwrap, Some(unwrap.source_span()));
-                }
-                entry.unused_unwrap = OptionalReferenceMode::AbsentOrSafe;
-                entry.safe_unwrap = pick_any_set(entry.safe_unwrap, Some(unwrap.source_span()))
+        for is_set in conjunction.constraints().iter().filter_map(|c| c.as_is_set()) {
+            for id in is_set.ids() {
+                let entry: &mut VariableUsageMode = modes.entry(id).or_default();
+                if entry.optionality == OptionalReferenceMode::AbsentOrSafe {
+                    entry.unused_unwrap = pick_any_set(entry.unused_unwrap, Some(is_set.source_span()));
+                };
+                entry.safe_unwrap = pick_any_set(entry.safe_unwrap, Some(is_set.source_span()))
             }
         }
+        modes
     }
 
     pub(crate) fn for_disjunction(disjunction: &DisjunctionBuilder) -> HashMap<Variable, VariableUsageMode> {

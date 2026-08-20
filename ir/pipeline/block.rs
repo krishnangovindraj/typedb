@@ -320,7 +320,7 @@ fn validate_all_optional_dereferences_are_safe(
             let variable = context.get_variable_name_or_unnamed(*id).to_owned();
             return Err(Box::new(RepresentationError::AssigningToInputVariable { variable, source_span }));
         }
-        if let OptionalReferenceMode::UnsafeUnwrap(source_span) = mode.assigned {
+        if let OptionalReferenceMode::UnsafeUnwrap(source_span) = mode.optionality {
             let variable = context.get_variable_name_or_unnamed(*id).to_owned();
             return Err(Box::new(RepresentationError::UnsafeOptionalDereference { variable, source_span }));
         }
@@ -591,6 +591,16 @@ impl<'a> BlockBuilderContext<'a> {
 
     pub(crate) fn input_variables(&self) -> impl Iterator<Item = Variable> + '_ {
         self.block_context.registered_variables().filter(|var| self.is_block_input_variable(*var))
+    }
+
+    pub(crate) fn input_variable_optionality(&self) -> impl Iterator<Item=(Variable, VariableOptionality)> +'_ {
+        // TODO: Actually propagate per-stage optionality changes
+        self.input_variables().map(|v| {
+            match self.variable_registry.is_variable_optional(v) {
+                true => (v, VariableOptionality::Optional),
+                false => (v, VariableOptionality::Required),
+            }
+        })
     }
 
     pub(crate) fn next_scope_id(&mut self) -> ScopeId {
