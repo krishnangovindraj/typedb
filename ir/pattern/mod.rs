@@ -686,6 +686,7 @@ impl VariableUsageMode {
                 if entry.optionality == OptionalReferenceMode::AbsentOrSafe {
                     entry.unused_unwrap = pick_any_set(entry.unused_unwrap, Some(is_set.source_span()));
                 };
+                entry.optionality = OptionalReferenceMode::AbsentOrSafe;
                 entry.safe_unwrap = pick_any_set(entry.safe_unwrap, Some(is_set.source_span()))
             }
         }
