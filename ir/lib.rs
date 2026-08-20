@@ -234,6 +234,12 @@ typedb_error! {
             variable: String,
             source_span: Option<Span>,
         ),
+        MultipleAssignmentsForVariable(
+            36,
+            "Variable '{variable}' cannot be assigned to multiple times in the same branch.",
+            variable: String,
+            source_span: Option<Span>,
+        ),
         UpdateVariableUnavailable(
             39,
             "The variable '{variable}' referenced in the update stage is unavailable. It should be bound in the previous stage.",

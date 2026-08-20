@@ -308,7 +308,7 @@ fn validate_all_optional_dereferences_are_safe(
     for (id, mode) in &modes {
         if let AssignmentMode::ErrorMultipleAssignments(source_span, other_span) = mode.assigned {
             let variable = context.get_variable_name_or_unnamed(*id).to_owned();
-            return Err(Box::new(RepresentationError::AssigningToInputVariable { variable, source_span }));
+            return Err(Box::new(RepresentationError::MultipleAssignmentsForVariable { variable, source_span }));
         }
         if let OptionalReferenceMode::UnsafeUnwrap(source_span) = mode.optionality {
             let variable = context.get_variable_name_or_unnamed(*id).to_owned();
