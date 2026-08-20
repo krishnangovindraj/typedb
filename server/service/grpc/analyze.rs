@@ -440,6 +440,7 @@ fn query_structure_constraint(
                 })),
             });
         }
+        Constraint::IsSet(_) => error::todo_must_implement!("todo"),
         Constraint::Iid(iid) => {
             let iid_bytes = Vec::from(context.get_parameter_iid(iid.iid().as_parameter().as_ref().unwrap()).unwrap());
             constraints.push(conjunction_proto::Constraint {

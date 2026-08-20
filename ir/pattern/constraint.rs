@@ -2988,7 +2988,7 @@ impl<ID: IrID> IsSet<ID> {
     pub fn map<T: Clone>(self, mapping: &HashMap<ID, T>) -> IsSet<T> {
         let variables = self.variables.iter().map(|v| v.clone().map(mapping)).collect();
         let source_span = self.source_span;
-        IsSet { variables , source_span }
+        IsSet { variables, source_span }
     }
 }
 

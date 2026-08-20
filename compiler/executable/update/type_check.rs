@@ -52,8 +52,8 @@ pub fn check_annotations(
                     constraint_annotations[constraint].as_links(),
                 )?;
             }
-
-            Constraint::Isa(_)
+            Constraint::IsSet(_) // Maybe we should accept but ignore this.
+            | Constraint::Isa(_)
             | Constraint::Is(_)
             | Constraint::Comparison(_)
             | Constraint::LinksDeduplication(_)

@@ -570,7 +570,6 @@ pub(super) enum OptionalReferenceMode {
     AssignedOrStageInput(LocationNote), // Can we treat Assign & Input them as the same thing?
 
     // TryBlockReference,      // Identical to regular reference?
-
     #[default]
     AbsentOrSafe, // When uninteresting
 }

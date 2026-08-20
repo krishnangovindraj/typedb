@@ -593,13 +593,11 @@ impl<'a> BlockBuilderContext<'a> {
         self.block_context.registered_variables().filter(|var| self.is_block_input_variable(*var))
     }
 
-    pub(crate) fn input_variable_optionality(&self) -> impl Iterator<Item=(Variable, VariableOptionality)> +'_ {
+    pub(crate) fn input_variable_optionality(&self) -> impl Iterator<Item = (Variable, VariableOptionality)> + '_ {
         // TODO: Actually propagate per-stage optionality changes
-        self.input_variables().map(|v| {
-            match self.variable_registry.is_variable_optional(v) {
-                true => (v, VariableOptionality::Optional),
-                false => (v, VariableOptionality::Required),
-            }
+        self.input_variables().map(|v| match self.variable_registry.is_variable_optional(v) {
+            true => (v, VariableOptionality::Optional),
+            false => (v, VariableOptionality::Required),
         })
     }
 

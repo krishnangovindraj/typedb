@@ -397,6 +397,7 @@ impl<'a> ConjunctionPlanBuilder<'a> {
                 Constraint::Unsatisfiable(optimised_unsatisfiable) => {
                     self.register_optimised_to_unsatisfiable(optimised_unsatisfiable)
                 }
+                Constraint::IsSet(_) => {} // Do nothing
             }
         }
     }
