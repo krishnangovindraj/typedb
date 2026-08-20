@@ -303,10 +303,6 @@ fn validate_all_optional_dereferences_are_safe(
         let mode = modes.entry(id).or_default();
         if optionality == VariableOptionality::Optional {
             mode.optionality = mode.optionality & OptionalReferenceMode::AssignedOrStageInput(None);
-        } else {
-            if let Some(non_optional_unwrap) = mode.safe_unwrap {
-                // TODO: error? Unwrapping a non-optional
-            }
         }
 
         if let AssignmentMode::AtMostOncePerBranch(source_span) = mode.assigned {
@@ -323,9 +319,6 @@ fn validate_all_optional_dereferences_are_safe(
         if let OptionalReferenceMode::UnsafeUnwrap(source_span) = mode.optionality {
             let variable = context.get_variable_name_or_unnamed(*id).to_owned();
             return Err(Box::new(RepresentationError::UnsafeOptionalDereference { variable, source_span }));
-        }
-        if let Some(source_span) = mode.unused_unwrap {
-            // TODO: error? Unwrapping an optional variable that isn't actually referenced in that scope.
         }
     }
     Ok(())

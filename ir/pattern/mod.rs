@@ -522,11 +522,6 @@ pub(crate) enum AssignmentMode {
     ErrorMultipleAssignments(Option<Span>, Option<Span>),
 }
 
-fn combine_spans(mut into: Vec<Option<Span>>, other: impl Iterator<Item = Option<Span>>) -> Vec<Option<Span>> {
-    into.extend(other);
-    into
-}
-
 impl BitAnd for AssignmentMode {
     type Output = Self;
 
@@ -634,8 +629,6 @@ fn pick_any_set(first: Option<LocationNote>, second: Option<LocationNote>) -> Op
 pub(crate) struct VariableUsageMode {
     pub(super) assigned: AssignmentMode,
     pub(super) optionality: OptionalReferenceMode,
-    pub(super) unused_unwrap: Option<LocationNote>,
-    pub(super) safe_unwrap: Option<LocationNote>, // To detect unwraps on non-optionals at the top
 }
 
 impl VariableUsageMode {
@@ -683,11 +676,7 @@ impl VariableUsageMode {
         for is_set in conjunction.constraints().iter().filter_map(|c| c.as_is_set()) {
             for id in is_set.ids() {
                 let entry: &mut VariableUsageMode = modes.entry(id).or_default();
-                if entry.optionality == OptionalReferenceMode::AbsentOrSafe {
-                    entry.unused_unwrap = pick_any_set(entry.unused_unwrap, Some(is_set.source_span()));
-                };
                 entry.optionality = OptionalReferenceMode::AbsentOrSafe;
-                entry.safe_unwrap = pick_any_set(entry.safe_unwrap, Some(is_set.source_span()))
             }
         }
         modes
@@ -707,8 +696,6 @@ impl VariableUsageMode {
         Self {
             assigned: AssignmentMode::NotAssigned,
             optionality: optionality_mode,
-            safe_unwrap: None,
-            unused_unwrap: None,
         }
     }
 
@@ -744,8 +731,6 @@ impl BitAnd for VariableUsageMode {
         Self {
             assigned: self.assigned & rhs.assigned,
             optionality: self.optionality & rhs.optionality,
-            unused_unwrap: pick_any_set(self.unused_unwrap, rhs.unused_unwrap),
-            safe_unwrap: pick_any_set(self.safe_unwrap, rhs.safe_unwrap),
         }
     }
 }
@@ -757,8 +742,6 @@ impl BitOr for VariableUsageMode {
         Self {
             assigned: self.assigned | rhs.assigned,
             optionality: self.optionality | rhs.optionality,
-            unused_unwrap: pick_any_set(self.unused_unwrap, rhs.unused_unwrap),
-            safe_unwrap: pick_any_set(self.safe_unwrap, rhs.safe_unwrap),
         }
     }
 }

@@ -26,7 +26,7 @@ use encoding::{
     graph::thing::THING_VERTEX_MAX_LENGTH,
     value::{ValueEncodable, value::Value},
 };
-use error::{todo_must_implement, unimplemented_feature};
+use error::unimplemented_feature;
 use ir::{
     pattern::constraint::{Comparator, IsaKind, SubKind},
     pipeline::ParameterRegistry,
