@@ -460,3 +460,13 @@ macro_rules! needs_update_when_feature_is_implemented {
     ($feature:path) => {};
     ($feature:path, $msg:literal) => {};
 }
+
+#[macro_export]
+macro_rules! optional_usage_error {
+    ($err:expr) => {
+        tracing::warn!(
+            "Deprecated usage of optional variable. This will fail in the next version:\n{}",
+            <_ as error::TypeDBError>::format_description(&$err)
+        );
+    };
+}
