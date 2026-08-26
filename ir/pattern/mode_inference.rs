@@ -10,6 +10,8 @@ use core::cmp::Eq;
 use typeql::common::Span;
 use answer::variable::Variable;
 use std::collections::HashMap;
+use std::io::Read;
+use std::iter;
 use crate::pattern::conjunction::{ConjunctionBuilder, NestedPatternBuilder};
 use crate::pattern::constraint::Constraint;
 use crate::pattern::disjunction::DisjunctionBuilder;
@@ -30,22 +32,81 @@ impl VariableUsageMode {
     pub(crate) fn of_constraint(
         constraint: &Constraint<Variable>,
     ) -> Box<dyn Iterator<Item = (Variable, VariableUsageMode)> + '_> {
-        if let Constraint::FunctionCallBinding(f) = constraint {
-            Box::new(f.binding_modes().filter_map(|(id, binding_mode)| match binding_mode {
-                BindingMode::AlwaysBinding => {
-                    Some((id, VariableUsageMode::assigned(VariableOptionality::Required, f.source_span())))
-                }
-                BindingMode::BoundInTry => {
-                    Some((id, VariableUsageMode::assigned(VariableOptionality::Optional, f.source_span())))
-                }
-                BindingMode::RequirePrebound => Some((id, VariableUsageMode::regular_reference(f.source_span()))),
-                BindingMode::Absent | BindingMode::LocallyBindingInChild => {
-                    debug_assert!(false, "Unreachable");
-                    None
-                }
-            }))
-        } else {
-            Box::new(constraint.ids().map(|id| (id, VariableUsageMode::regular_reference(constraint.source_span()))))
+        fn _all_binding<'a>(
+            it: impl Iterator<Item = Variable> + 'a,
+            span: LocationNote,
+        ) -> Box<dyn Iterator<Item = (Variable, VariableUsageMode)> + 'a> {
+            Box::new(it.map(|id| (id, VariableUsageMode  {
+                binding_mode: BindingMode::AlwaysBinding,
+                assignment: AssignmentStatus::NotAssigned,
+                optional_safety: OptionalReferenceSafety::UnwrappingReference(span),
+                optionality_status: OptionalityStatus::UnwrappedInAllPaths,
+            })))
+        }
+        fn _all_required<'a, ID1>(
+            it: impl Iterator<Item = ID1> + 'a,
+            span: LocationNote,
+        ) -> Box<dyn Iterator<Item = (ID1, BindingMode)> + 'a> {
+            Box::new(it.map(|id| (id, VariableUsageMode  {
+                binding_mode: BindingMode::RequirePrebound,
+                assignment: AssignmentStatus::NotAssigned,
+                optional_safety: OptionalReferenceSafety::UnwrappingReference(span),
+                optionality_status: OptionalityStatus::UnwrappedInAllPaths,
+            })))
+        }
+        let span = constraint.source_span();
+        match constraint {
+            Constraint::Kind(kind) => _all_binding(kind.ids(), span),
+            Constraint::Label(label) => _all_binding(label.ids(), span),
+            Constraint::RoleName(role_name) => _all_binding(role_name.ids(), span),
+            Constraint::Sub(sub) => _all_binding(sub.ids(), span),
+            Constraint::Isa(isa) => _all_binding(isa.ids(), span),
+            Constraint::Iid(iid) => _all_binding(iid.ids(), span),
+            Constraint::Links(rp) => _all_binding(rp.ids(), span),
+            Constraint::IndexedRelation(indexed) => _all_binding(indexed.ids(), span),
+            Constraint::Has(has) => _all_binding(has.ids(), span),
+            Constraint::Owns(owns) => _all_binding(owns.ids(), span),
+            Constraint::Relates(relates) => _all_binding(relates.ids(), span),
+            Constraint::Plays(plays) => _all_binding(plays.ids(), span),
+            Constraint::Value(value) => _all_binding(value.ids(), span),
+
+            Constraint::Comparison(comparison) => _all_required(comparison.ids(), span),
+            Constraint::Is(is) => _all_binding(is.ids(), span),
+            Constraint::Unsatisfiable(inner) => _all_binding(inner.ids(), span),
+            Constraint::IsSet(inner) => _all_required(inner.ids(), span),
+            Constraint::LinksDeduplication(_) => Box::new(iter::empty()),
+
+
+            Constraint::ExpressionBinding(binding) => {
+                Box::new(binding.binding_modes())
+            },
+            Constraint::FunctionCallBinding(binding) => {
+                let arg_modes = binding.function_call_arg_ids().map(|id| (id, VariableUsageMode  {
+                    binding_mode: BindingMode::RequirePrebound,
+                    assignment: AssignmentStatus::NotAssigned,
+                    optional_safety: OptionalReferenceSafety::UnwrappingReference(constraint.span()),
+                    optionality_status: OptionalityStatus::UnwrappedInAllPaths,
+                }));
+                let assigned_modes = binding.assigned_optionalities().map(|(id, optionality)| {
+                    let (optional_safety, optionality_status) = match optionality {
+                        VariableOptionality::Optional => (
+                            OptionalReferenceSafety::AbsentOrSafe,
+                            OptionalityStatus::IntactInSomePaths
+                        ),
+                        VariableOptionality::Required => (
+                            OptionalReferenceSafety::UnwrappingReference(constraint.source_span()),
+                            OptionalityStatus::UnwrappedInAllPaths
+                        ),
+                    };
+                    (id, VariableUsageMode  {
+                        binding_mode: BindingMode::AlwaysBinding,
+                        assignment: AssignmentStatus::AtMostOncePerBranch(constraint.source_span()),
+                        optional_safety,
+                        optionality_status,
+                    })
+                });
+                Box::new(arg_modes.chain(assigned_modes))
+            },
         }
     }
 
@@ -54,7 +115,6 @@ impl VariableUsageMode {
         conjunction.constraints().iter().flat_map(Self::of_constraint).for_each(|(id, mode)| {
             *modes.entry(id).or_default() &= mode;
         });
-
         conjunction
             .nested_patterns()
             .iter()
@@ -87,11 +147,17 @@ impl VariableUsageMode {
         modes
     }
 
-    fn for_negation(negation: NegationBuilder) -> HashMap<Variable, Self> {
+    fn for_negation(negation: &NegationBuilder) -> HashMap<Variable, Self> {
         Self::for_conjunction(negation.conjunction()).into_iter().map(|(var, mode)| {
             // Could be `impl UnaryNot`, I guess
+            let binding_mode = if mode.binding_mode.is_always_binding() {
+                // if it is binding, we demote it to only locally binding (only relevant in the negation)
+                BindingMode::LocallyBindingInChild
+            } else {
+                mode.binding_mode
+            };
             let negated_mode = Self {
-                binding_mode: ,
+                binding_mode,
                 assignment: mode.assignment,
                 optional_safety: mode.optional_safety,
                 optionality_status: OptionalityStatus::IntactInSomePaths,
@@ -100,33 +166,43 @@ impl VariableUsageMode {
         }).collect()
     }
 
-    fn for_optional(negation: OptionalBuilder) -> Self {
-        todo!()
-    }
-
-    fn new(assignment_mode: AssignmentStatus, optionality_mode: OptionalReferenceSafety) -> Self {
-        Self {
-            assignment: AssignmentStatus::NotAssigned,
-            optional_safety: optionality_mode,
-
-        }
+    fn for_optional(optional: &OptionalBuilder) -> HashMap<Variable, Self> {
+        Self::for_conjunction(optional.conjunction()).into_iter().map(|(var, mode)| {
+            let binding_mode = if mode.binding_mode.is_always_binding() {
+                BindingMode::BoundInTry
+            } else {
+                mode.binding_mode
+            };
+            let negated_mode = Self {
+                binding_mode: binding_mode,
+                assignment: mode.assignment,
+                optional_safety: mode.optional_safety, // Unless `try` implicitly `isset`s
+                optionality_status: OptionalityStatus::IntactInSomePaths,
+            };
+            (var, negated_mode)
+        }).collect()
     }
 
     pub(crate) fn regular_reference(location: LocationNote) -> Self {
         Self {
+            binding_mode: BindingMode::AlwaysBinding,
             assignment: AssignmentStatus::NotAssigned,
-            optional_safety: OptionalReferenceSafety::RegularReference(location),
-
+            optional_safety: OptionalReferenceSafety::UnwrappingReference(location),
+            optionality_status: OptionalityStatus::UnwrappedInAllPaths,
         }
     }
 
-    pub(crate) fn assigned(optionality: VariableOptionality, location: LocationNote) -> Self {
-        let assignment_mode = AssignmentStatus::AtMostOncePerBranch(location);
-        let optionality_mode = match optionality {
+    pub(crate) fn assigned(return_optionality: VariableOptionality, location: LocationNote) -> Self {
+        let optionality_safety = match return_optionality {
             VariableOptionality::Optional => OptionalReferenceSafety::AssignedOrStageInput(location),
-            VariableOptionality::Required => OptionalReferenceSafety::RegularReference(location),
+            VariableOptionality::Required => OptionalReferenceSafety::UnwrappingReference(location),
         };
-        Self::new(assignment_mode, optionality_mode)
+        Self {
+            binding_mode: BindingMode::AlwaysBinding,
+            assignment: AssignmentStatus::AtMostOncePerBranch(location),
+            optional_safety: optionality_safety,
+            optionality_status: OptionalityStatus::UnwrappedInAllPaths,
+        }
     }
 }
 
@@ -138,7 +214,7 @@ impl BitAnd for VariableUsageMode {
             assignment: self.assignment & rhs.assignment,
             binding_mode: self.binding_mode & rhs.binding_mode,
             optional_safety: self.optional_safety & rhs.optional_safety,
-            optionality_status: self.optionality_status & rhs.optional_safety,
+            optionality_status: self.optionality_status & rhs.optionality_status,
         }
     }
 }
@@ -288,7 +364,7 @@ pub(crate) enum OptionalReferenceSafety {
     // The semantic issues of two try blocks assigning the same variable,
     //      and actual variable optionality are computed by other `*Mode`s
     UnsafeUnwrap(LocationNote),         // Can be reset by a safe unwrap in a parent
-    RegularReference(LocationNote),     // match $x isa person;
+    UnwrappingReference(LocationNote),     // match $x isa person;
     AssignedOrStageInput(LocationNote), // Can we treat Assign & Input them as the same thing?
 
     // TryBlockReference,      // Identical to regular reference?
@@ -308,12 +384,12 @@ impl BitAnd for OptionalReferenceSafety {
             (OptionalReferenceSafety::AssignedOrStageInput(location), OptionalReferenceSafety::AssignedOrStageInput(_)) => {
                 OptionalReferenceSafety::UnsafeUnwrap(location) // Should trigger the MultipleAssignments
             }
-            (OptionalReferenceSafety::RegularReference(location), OptionalReferenceSafety::AssignedOrStageInput(_))
-            | (OptionalReferenceSafety::AssignedOrStageInput(_), OptionalReferenceSafety::RegularReference(location)) => {
+            (OptionalReferenceSafety::UnwrappingReference(location), OptionalReferenceSafety::AssignedOrStageInput(_))
+            | (OptionalReferenceSafety::AssignedOrStageInput(_), OptionalReferenceSafety::UnwrappingReference(location)) => {
                 OptionalReferenceSafety::UnsafeUnwrap(location)
             }
-            (OptionalReferenceSafety::RegularReference(location), OptionalReferenceSafety::RegularReference(_)) => {
-                OptionalReferenceSafety::RegularReference(location)
+            (OptionalReferenceSafety::UnwrappingReference(location), OptionalReferenceSafety::UnwrappingReference(_)) => {
+                OptionalReferenceSafety::UnwrappingReference(location)
             }
         }
     }
@@ -331,12 +407,12 @@ impl BitOr for OptionalReferenceSafety {
             (OptionalReferenceSafety::AssignedOrStageInput(location), OptionalReferenceSafety::AssignedOrStageInput(_)) => {
                 OptionalReferenceSafety::AssignedOrStageInput(location) // Should trigger the MultipleAssignments
             }
-            (OptionalReferenceSafety::RegularReference(location), OptionalReferenceSafety::AssignedOrStageInput(_))
-            | (OptionalReferenceSafety::AssignedOrStageInput(_), OptionalReferenceSafety::RegularReference(location)) => {
+            (OptionalReferenceSafety::UnwrappingReference(location), OptionalReferenceSafety::AssignedOrStageInput(_))
+            | (OptionalReferenceSafety::AssignedOrStageInput(_), OptionalReferenceSafety::UnwrappingReference(location)) => {
                 OptionalReferenceSafety::AssignedOrStageInput(location) // Should be illegal unsatisfiable input / double assignment
             }
-            (OptionalReferenceSafety::RegularReference(location), OptionalReferenceSafety::RegularReference(_)) => {
-                OptionalReferenceSafety::RegularReference(location)
+            (OptionalReferenceSafety::UnwrappingReference(location), OptionalReferenceSafety::UnwrappingReference(_)) => {
+                OptionalReferenceSafety::UnwrappingReference(location)
             }
         }
     }

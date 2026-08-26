@@ -22,7 +22,6 @@ use crate::{
     pattern::{
         conjunction::Conjunction, expression::{ExpressionRepresentationError, ExpressionTree}, function_call::FunctionCall, variable_category::{
             VariableCategory, VariableOptionality,
-            VariableOptionality::{Optional, Required},
         }, AssignedVariable, IrID,
         ParameterID,
         ScopeId,
@@ -34,7 +33,7 @@ use crate::{
     LiteralParseError,
     RepresentationError,
 };
-use crate::pattern::mode_inference::BindingMode;
+use crate::pattern::mode_inference::{BindingMode, VariableUsageMode};
 
 #[derive(Debug, Clone)]
 pub struct Constraints {
@@ -2325,6 +2324,17 @@ impl<ID: IrID> FunctionCallBinding<ID> {
 
     pub fn ids_assigned(&self) -> impl Iterator<Item = ID> + '_ {
         self.assigned.iter().filter_map(Vertex::as_variable)
+    }
+
+    pub fn assigned_optionalities(&self) -> impl Iterator<Item = (ID, VariableOptionality)> + '_ {
+        self.ids_assigned().map(|id| {
+            let optionality = if self.optionally_assigned.contains(&id) {
+                VariableOptionality::Optional
+            } else {
+                VariableOptionality::Required
+            };
+            (id, optionality)
+        })
     }
 
     pub(crate) fn binding_modes(&self) -> impl Iterator<Item = (ID, BindingMode)> + '_ {

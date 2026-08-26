@@ -340,7 +340,7 @@ fn validate_expressions_assignments_are_unique(
     context: &BlockBuilderContext<'_>,
 ) -> Result<(), Box<RepresentationError>> {
     for (id, _) in context.input_variable_optionalities() {
-        let assignment_mode = variable_usage_modes.get(&id).map_or(AssignmentStatus::NotAssigned, |mode| mode.assigned);
+        let assignment_mode = variable_usage_modes.get(&id).map_or(AssignmentStatus::NotAssigned, |mode| mode.assignment);
         if let AssignmentStatus::AtMostOncePerBranch(source_span) = assignment_mode {
             let variable = context.get_variable_name_or_unnamed(id).to_owned();
             return Err(Box::new(RepresentationError::AssigningToInputVariable { variable, source_span }));
