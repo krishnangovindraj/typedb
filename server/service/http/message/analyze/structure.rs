@@ -592,6 +592,7 @@ pub mod bdd {
         Plays { player, role, } |
         FunctionCall { name, assigned, arguments, } |
         Expression { text, assigned, arguments, } |
+        IsSet { variables, } |
         Is { lhs, rhs, } |
         Iid { concept, iid, } |
         Comparison { lhs, rhs, comparator, } |

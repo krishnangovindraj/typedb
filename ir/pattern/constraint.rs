@@ -444,7 +444,7 @@ impl<'cx, 'reg> ConstraintsBuilder<'cx, 'reg> {
         for (index, var) in binding.ids_assigned().enumerate() {
             self.context.set_variable_category(var, callee_signature.returns[index].0, binding.clone().into())?;
         }
-        todo_must_implement!("Ensure this is still wired up properly. Add a test");
+        // todo_must_implement!("Ensure this is still wired up properly. Add a test");
         // binding.optionally_assigned.iter().for_each(|var| self.context.set_variable_optionality(*var, true));
         // for (callee_arg_index, caller_var) in binding.function_call.argument_ids().enumerate() {
         //     self.context.set_variable_category(
@@ -459,7 +459,7 @@ impl<'cx, 'reg> ConstraintsBuilder<'cx, 'reg> {
 
     pub fn add_function_binding(
         &mut self,
-        assigned: Vec<AssignedVariable>,
+        mut assigned: Vec<AssignedVariable>,
         callee_signature: &FunctionSignature,
         arguments: Vec<Variable>,
         function_name: &str,
@@ -486,23 +486,19 @@ impl<'cx, 'reg> ConstraintsBuilder<'cx, 'reg> {
             },
         );
         if let Err(err) = mismatched_optionality_in_assignment {
+            // TODO Remove when we commit to erroring.
+            for (assigned_var, (_, optionality)) in assigned.iter_mut().zip(callee_signature.returns.iter()) {
+                assigned_var.optionality = *optionality;
+            }
             error::optional_usage_error!(err)
-        }
+        };
         let function_call =
             self.create_function_call(&assigned, callee_signature, arguments, function_name, source_span)?;
         let binding = FunctionCallBinding::new(assigned, function_call, callee_signature.return_is_stream, source_span);
         for (index, var) in binding.ids_assigned().enumerate() {
             self.context.set_variable_category(var, callee_signature.returns[index].0, binding.clone().into())?;
         }
-        todo_must_implement!("Ensure this is still wired up properly. Add a test");
-        // binding.optionally_assigned.iter().for_each(|var| self.context.set_variable_optionality(*var, true));
-        // for (callee_arg_index, caller_var) in binding.function_call.argument_ids().enumerate() {
-        //     self.context.set_variable_category(
-        //         caller_var,
-        //         callee_signature.arguments[callee_arg_index],
-        //         binding.clone().into(),
-        //     )?;
-        // }
+
         let constraint = self.constraints.add_constraint(binding);
         Ok(constraint.as_function_call_binding().unwrap())
     }
