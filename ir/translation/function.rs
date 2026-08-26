@@ -111,12 +111,12 @@ fn translate_function_from(
     match (&signature.output, &body.return_operation) {
         (Output::Stream(declared_vars), ReturnOperation::Stream(defined_vars, _)) => {
             check_consistent_return(signature, block, &declared_vars.types, defined_vars, |v| {
-                context.variable_registry.is_variable_optional(*v)
+                context.is_variable_optional(*v)
             })?
         }
         (Output::Single(declared_vars), ReturnOperation::Single(_, defined_vars, _)) => {
             check_consistent_return(signature, block, &declared_vars.types, defined_vars, |v| {
-                context.variable_registry.is_variable_optional(*v)
+                context.is_variable_optional(*v)
             })?
         }
         (Output::Single(declared_vars), ReturnOperation::ReduceReducer(reducers, _)) => {

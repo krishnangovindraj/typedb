@@ -17,7 +17,7 @@ use answer::variable::Variable;
 use itertools::Itertools;
 use structural_equality::StructuralEquality;
 use typeql::common::Span;
-
+use error::todo_must_implement;
 use crate::{
     LiteralParseError, RepresentationError,
     pattern::{
@@ -94,6 +94,7 @@ impl Constraints {
             debug_assert!(vertex.is_variable());
             if let Vertex::Variable(var) = vertex {
                 let old_var = *var;
+                todo_must_implement!("DO we need optionality, BindingMode info for this?");
                 *var = variable_registry.create_anonymous_variable_copying(old_var)?;
                 let category = variable_registry.get_variable_category(old_var).expect("Expected category");
                 let check = if matches!(category, VariableCategory::Value | VariableCategory::ValueList) {
@@ -443,14 +444,15 @@ impl<'cx, 'reg> ConstraintsBuilder<'cx, 'reg> {
         for (index, var) in binding.ids_assigned().enumerate() {
             self.context.set_variable_category(var, callee_signature.returns[index].0, binding.clone().into())?;
         }
-        binding.optionally_assigned.iter().for_each(|var| self.context.set_variable_optionality(*var, true));
-        for (callee_arg_index, caller_var) in binding.function_call.argument_ids().enumerate() {
-            self.context.set_variable_category(
-                caller_var,
-                callee_signature.arguments[callee_arg_index],
-                binding.clone().into(),
-            )?;
-        }
+        todo_must_implement!("Ensure this is still wired up properly. Add a test");
+        // binding.optionally_assigned.iter().for_each(|var| self.context.set_variable_optionality(*var, true));
+        // for (callee_arg_index, caller_var) in binding.function_call.argument_ids().enumerate() {
+        //     self.context.set_variable_category(
+        //         caller_var,
+        //         callee_signature.arguments[callee_arg_index],
+        //         binding.clone().into(),
+        //     )?;
+        // }
         let constraint = self.constraints.add_constraint(binding);
         Ok(constraint.as_function_call_binding().unwrap())
     }
@@ -492,14 +494,15 @@ impl<'cx, 'reg> ConstraintsBuilder<'cx, 'reg> {
         for (index, var) in binding.ids_assigned().enumerate() {
             self.context.set_variable_category(var, callee_signature.returns[index].0, binding.clone().into())?;
         }
-        binding.optionally_assigned.iter().for_each(|var| self.context.set_variable_optionality(*var, true));
-        for (callee_arg_index, caller_var) in binding.function_call.argument_ids().enumerate() {
-            self.context.set_variable_category(
-                caller_var,
-                callee_signature.arguments[callee_arg_index],
-                binding.clone().into(),
-            )?;
-        }
+        todo_must_implement!("Ensure this is still wired up properly. Add a test");
+        // binding.optionally_assigned.iter().for_each(|var| self.context.set_variable_optionality(*var, true));
+        // for (callee_arg_index, caller_var) in binding.function_call.argument_ids().enumerate() {
+        //     self.context.set_variable_category(
+        //         caller_var,
+        //         callee_signature.arguments[callee_arg_index],
+        //         binding.clone().into(),
+        //     )?;
+        // }
         let constraint = self.constraints.add_constraint(binding);
         Ok(constraint.as_function_call_binding().unwrap())
     }

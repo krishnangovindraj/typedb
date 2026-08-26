@@ -34,7 +34,7 @@ use ir::{
 };
 use storage::snapshot::ReadableSnapshot;
 use typeql::common::Span;
-
+use typeql::type_::NamedTypeAny;
 use crate::{
     PipelineOrigin,
     annotation::{
@@ -164,10 +164,9 @@ fn annotate_given_stage(
             typedb_source,
         },
     )?;
-    let optionality = variables
-        .iter()
-        .map(|&variable| {
-            if ctx.variable_registry.is_variable_optional(variable) {
+    let optionality = variables.iter().zip(labels.iter())
+        .map(|(&variable, label)| {
+            if matches!(label, NamedTypeAny::Optional(_)) {
                 VariableOptionality::Optional
             } else {
                 VariableOptionality::Required

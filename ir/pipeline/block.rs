@@ -87,8 +87,14 @@ impl<'reg> BlockBuilder<'reg> {
         // Update
         block_binding_modes
             .iter()
-            .filter(|(_, mode)| mode.is_optionally_binding())
-            .for_each(|(v, _)| self.context.set_variable_optionality(*v, true));
+            .for_each(|(v, mode)| {
+                let optionality = if mode.is_optionally_binding() {
+                    VariableOptionality::Optional
+                } else {
+                    VariableOptionality::Required
+                };
+                self.context.variable_optionalities.insert(*v, optionality);
+            });
         self.context
             .variable_names_index
             .retain(|_, var| block_binding_modes.get(var).copied() != Some(BindingMode::LocallyBindingInChild));
@@ -120,7 +126,7 @@ impl<'reg> BlockBuilder<'reg> {
 
     fn variable_usage_modes(&self) -> HashMap<Variable, VariableUsageMode> {
         let mut variable_usage_modes = VariableUsageMode::for_conjunction(&self.conjunction);
-        for (id, optionality) in self.context.input_variable_optionality() {
+        for (id, optionality) in self.context.input_variable_optionalities() {
             let mode = variable_usage_modes.entry(id).or_default();
             if optionality == VariableOptionality::Optional {
                 mode.optionality = mode.optionality & OptionalReferenceMode::AssignedOrStageInput(None);
@@ -134,7 +140,8 @@ fn validate_no_unbound_variable_categories(
     conjunction: &ConjunctionBuilder,
     context: &BlockBuilderContext<'_>,
 ) -> Result<(), Box<RepresentationError>> {
-    let unbound = context.block_context.registered_variables().find(|&variable| {
+    // TODO: We need an intermediate ConjunctionBeingFinalized that stores these variable_binding_modes
+    let unbound = conjunction.variable_binding_modes().keys().copied().find(|&variable| {
         matches!(
             context.variable_registry.get_variable_category(variable),
             Some(VariableCategory::AttributeOrValue) | None
@@ -146,6 +153,19 @@ fn validate_no_unbound_variable_categories(
             source_span: context.variable_registry.source_span(variable),
         }))
     } else {
+        conjunction.nested_patterns().iter().try_for_each(|nested| {
+            match nested {
+                NestedPatternBuilder::Disjunction(disjunction) => {
+                    disjunction.conjunctions().try_for_each(|c| validate_no_unbound_variable_categories(c, context))
+                }
+                NestedPatternBuilder::Negation(negation) => {
+                    validate_no_unbound_variable_categories(negation.conjunction(), context)
+                }
+                NestedPatternBuilder::Optional(optional) => {
+                    validate_no_unbound_variable_categories(optional.conjunction(), context)
+                }
+            }
+        })?;
         Ok(())
     }
 }
@@ -319,7 +339,7 @@ fn validate_expressions_assignments_are_unique(
     variable_usage_modes: &HashMap<Variable, VariableUsageMode>,
     context: &BlockBuilderContext<'_>,
 ) -> Result<(), Box<RepresentationError>> {
-    for (id, optionality) in context.input_variable_optionality() {
+    for (id, _) in context.input_variable_optionalities() {
         let assignment_mode = variable_usage_modes.get(&id).map_or(AssignmentMode::NotAssigned, |mode| mode.assigned);
         if let AssignmentMode::AtMostOncePerBranch(source_span) = assignment_mode {
             let variable = context.get_variable_name_or_unnamed(id).to_owned();
@@ -497,30 +517,22 @@ impl fmt::Display for UnplannableConstraints {
 
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub struct BlockContext {
-    input_variables: HashSet<Variable>,
-    variable_declaration: HashSet<Variable>,
+    input_variable_optionalities: HashMap<Variable, VariableOptionality>,
+    // variable_declaration: HashSet<Variable>,
 }
 
+// TODO: All private? Can we inline BlockContext then?
 impl BlockContext {
-    fn new() -> Self {
-        Default::default()
+    fn new(input_variable_optionalities: HashMap<Variable, VariableOptionality>) -> Self {
+        Self { input_variable_optionalities }
     }
 
-    fn add_input_declaration(&mut self, var: Variable) {
-        self.add_variable_declaration(var);
-        self.input_variables.insert(var);
-    }
-
-    fn add_variable_declaration(&mut self, var: Variable) {
-        self.variable_declaration.insert(var);
+    fn input_variable_optionalities(&self) -> impl Iterator<Item=(Variable, VariableOptionality)> + '_ {
+        self.input_variable_optionalities.iter().map(|(&k, &v)| (k,v))
     }
 
     fn is_block_input_variable(&self, var: &Variable) -> bool {
-        self.input_variables.contains(var)
-    }
-
-    fn registered_variables(&self) -> impl Iterator<Item = Variable> + '_ {
-        self.variable_declaration.iter().copied()
+        self.input_variable_optionalities.contains_key(var)
     }
 }
 
@@ -528,6 +540,7 @@ impl BlockContext {
 pub struct BlockBuilderContext<'a> {
     variable_registry: &'a mut VariableRegistry,
     variable_names_index: &'a mut HashMap<String, Variable>,
+    variable_optionalities: &'a mut HashMap<Variable, VariableOptionality>,
     parameters: &'a mut ParameterRegistry,
 
     block_context: BlockContext,
@@ -538,15 +551,14 @@ impl<'a> BlockBuilderContext<'a> {
     pub(crate) fn new(
         variable_registry: &'a mut VariableRegistry,
         available_input_names: &'a mut HashMap<String, Variable>,
+        variable_optionalities: &'a mut HashMap<Variable, VariableOptionality>,
         parameters: &'a mut ParameterRegistry,
     ) -> BlockBuilderContext<'a> {
-        let mut block_context = BlockContext::new();
-        available_input_names.values().for_each(|v| {
-            block_context.add_input_declaration(*v);
-        });
+        let mut block_context = BlockContext::new(variable_optionalities.clone());
         Self {
             variable_registry,
             variable_names_index: available_input_names,
+            variable_optionalities,
             parameters,
             scope_id_allocator: 2, // `0`, `1` are reserved for INPUT, ROOT respectively.
             block_context,
@@ -573,7 +585,6 @@ impl<'a> BlockBuilderContext<'a> {
         match self.variable_names_index.get(name) {
             None => {
                 let variable = self.variable_registry.register_variable_named(name.to_string(), source_span)?;
-                self.block_context.add_variable_declaration(variable);
                 self.variable_names_index.insert(name.to_string(), variable);
                 Ok(variable)
             }
@@ -586,7 +597,6 @@ impl<'a> BlockBuilderContext<'a> {
         source_span: Option<Span>,
     ) -> Result<Variable, Box<RepresentationError>> {
         let variable = self.variable_registry.register_anonymous_variable(source_span)?;
-        self.block_context.add_variable_declaration(variable);
         Ok(variable)
     }
 
@@ -595,15 +605,12 @@ impl<'a> BlockBuilderContext<'a> {
     }
 
     pub(crate) fn input_variables(&self) -> impl Iterator<Item = Variable> + '_ {
-        self.block_context.registered_variables().filter(|var| self.is_block_input_variable(*var))
+        self.block_context.input_variable_optionalities.keys().copied()
     }
 
-    pub(crate) fn input_variable_optionality(&self) -> impl Iterator<Item = (Variable, VariableOptionality)> + '_ {
+    pub(crate) fn input_variable_optionalities(&self) -> impl Iterator<Item = (Variable, VariableOptionality)> + '_ {
         // TODO: Actually propagate per-stage optionality changes
-        self.input_variables().map(|v| match self.variable_registry.is_variable_optional(v) {
-            true => (v, VariableOptionality::Optional),
-            false => (v, VariableOptionality::Required),
-        })
+        self.block_context.input_variable_optionalities()
     }
 
     pub(crate) fn next_scope_id(&mut self) -> ScopeId {
@@ -620,10 +627,6 @@ impl<'a> BlockBuilderContext<'a> {
         source: Constraint<Variable>,
     ) -> Result<(), Box<RepresentationError>> {
         self.variable_registry.set_variable_category(variable, category, VariableCategorySource::Constraint(source))
-    }
-
-    pub(crate) fn set_variable_optionality(&mut self, variable: Variable, is_optional: bool) {
-        self.variable_registry.set_variable_is_optional(variable, is_optional);
     }
 
     pub(crate) fn parameters(&mut self) -> &mut ParameterRegistry {
