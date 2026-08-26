@@ -19,21 +19,22 @@ use structural_equality::StructuralEquality;
 use typeql::common::Span;
 use error::todo_must_implement;
 use crate::{
-    LiteralParseError, RepresentationError,
     pattern::{
-        AssignedVariable, BindingMode, IrID, ParameterID, ScopeId, ValueType, Vertex,
-        conjunction::Conjunction,
-        expression::{ExpressionRepresentationError, ExpressionTree},
-        function_call::FunctionCall,
-        variable_category::{
+        conjunction::Conjunction, expression::{ExpressionRepresentationError, ExpressionTree}, function_call::FunctionCall, variable_category::{
             VariableCategory, VariableOptionality,
             VariableOptionality::{Optional, Required},
-        },
+        }, AssignedVariable, IrID,
+        ParameterID,
+        ScopeId,
+        ValueType,
+        Vertex,
+    }, pipeline::{
+        block::BlockBuilderContext, function_signature::FunctionSignature, ParameterRegistry, VariableRegistry,
     },
-    pipeline::{
-        ParameterRegistry, VariableRegistry, block::BlockBuilderContext, function_signature::FunctionSignature,
-    },
+    LiteralParseError,
+    RepresentationError,
 };
+use crate::pattern::mode_inference::BindingMode;
 
 #[derive(Debug, Clone)]
 pub struct Constraints {
@@ -2330,7 +2331,7 @@ impl<ID: IrID> FunctionCallBinding<ID> {
         self.ids_assigned()
             .filter(|id| !self.function_call.arguments().contains(id))
             .map(|id| match self.optionally_assigned.contains(&id) {
-                true => (id, BindingMode::OptionallyBinding),
+                true => (id, BindingMode::BoundInTry),
                 false => (id, BindingMode::AlwaysBinding),
             })
             .chain(self.function_call_arg_ids().map(|id| (id, BindingMode::RequirePrebound)))

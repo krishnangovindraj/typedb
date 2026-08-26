@@ -11,11 +11,12 @@ use structural_equality::StructuralEquality;
 use typeql::common::Span;
 
 use crate::pattern::{
-    BindingMode, ContextualisedBindingMode, Pattern, PatternVariables, Scope, ScopeId,
-    conjunction::{Conjunction, ConjunctionBuilder},
-    impl_pattern_from_pattern_variables,
-    nested_pattern::NestedPattern,
+    conjunction::{Conjunction, ConjunctionBuilder}, impl_pattern_from_pattern_variables, nested_pattern::NestedPattern, ContextualisedBindingMode, Pattern,
+    PatternVariables,
+    Scope,
+    ScopeId,
 };
+use crate::pattern::mode_inference::BindingMode;
 
 #[derive(Debug, Clone)]
 pub struct Negation {

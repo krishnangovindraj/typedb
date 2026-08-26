@@ -15,17 +15,17 @@ use structural_equality::StructuralEquality;
 use typeql::common::Span;
 
 use crate::{
-    RepresentationError,
     pattern::{
-        AssignmentMode, BindingMode, BranchID, ContextualisedBindingMode, OptionalReferenceMode, Pattern, ScopeId,
-        VariableUsageMode,
-        conjunction::{Conjunction, ConjunctionBuilder, ConjunctionBuilderWithContext, NestedPatternBuilder},
-        constraint::Constraint,
-        nested_pattern::NestedPattern,
-        variable_category::{VariableCategory, VariableOptionality},
+        conjunction::{Conjunction, ConjunctionBuilder, ConjunctionBuilderWithContext, NestedPatternBuilder}, constraint::Constraint, nested_pattern::NestedPattern, variable_category::{VariableCategory, VariableOptionality},
+        BranchID,
+        ContextualisedBindingMode,
+        Pattern,
+        ScopeId,
     },
     pipeline::{ParameterRegistry, VariableCategorySource, VariableRegistry},
+    RepresentationError,
 };
+use crate::pattern::mode_inference::{AssignmentStatus, BindingMode, OptionalReferenceSafety, VariableUsageMode};
 
 #[derive(Debug, Clone)]
 pub struct Block {
@@ -129,7 +129,7 @@ impl<'reg> BlockBuilder<'reg> {
         for (id, optionality) in self.context.input_variable_optionalities() {
             let mode = variable_usage_modes.entry(id).or_default();
             if optionality == VariableOptionality::Optional {
-                mode.optionality = mode.optionality & OptionalReferenceMode::AssignedOrStageInput(None);
+                mode.optional_safety = mode.optional_safety & OptionalReferenceSafety::AssignedOrStageInput(None);
             }
         }
         variable_usage_modes
@@ -303,7 +303,7 @@ fn validate_optional_returns_recursive(
     })?;
     conjunction.constraints().iter().filter_map(|c| c.as_function_call_binding()).for_each(|call| {
         for (var, mode) in call.binding_modes() {
-            if mode == BindingMode::OptionallyBinding {
+            if mode == BindingMode::BoundInTry {
                 acc.insert(var, call.source_span());
             }
         }
@@ -311,7 +311,7 @@ fn validate_optional_returns_recursive(
     // Check at each level
     let reused_optional_return_opt = acc.iter().find(|(var, _)| match conjunction_binding_modes.get(var) {
         None => false,
-        Some(mode) => *mode != BindingMode::OptionallyBinding,
+        Some(mode) => *mode != BindingMode::BoundInTry,
     });
     if let Some((var, &source_span)) = reused_optional_return_opt {
         let variable = context.get_variable_name_or_unnamed(*var).to_owned();
@@ -327,7 +327,7 @@ fn validate_all_optional_dereferences_are_safe(
     context: &BlockBuilderContext<'_>,
 ) -> Result<(), Box<RepresentationError>> {
     for (id, mode) in variable_usage_modes {
-        if let OptionalReferenceMode::UnsafeUnwrap(source_span) = mode.optionality {
+        if let OptionalReferenceSafety::UnsafeUnwrap(source_span) = mode.optional_safety {
             let variable = context.get_variable_name_or_unnamed(*id).to_owned();
             return Err(Box::new(RepresentationError::UnsafeOptionalDereference { variable, source_span }));
         }
@@ -340,15 +340,15 @@ fn validate_expressions_assignments_are_unique(
     context: &BlockBuilderContext<'_>,
 ) -> Result<(), Box<RepresentationError>> {
     for (id, _) in context.input_variable_optionalities() {
-        let assignment_mode = variable_usage_modes.get(&id).map_or(AssignmentMode::NotAssigned, |mode| mode.assigned);
-        if let AssignmentMode::AtMostOncePerBranch(source_span) = assignment_mode {
+        let assignment_mode = variable_usage_modes.get(&id).map_or(AssignmentStatus::NotAssigned, |mode| mode.assigned);
+        if let AssignmentStatus::AtMostOncePerBranch(source_span) = assignment_mode {
             let variable = context.get_variable_name_or_unnamed(id).to_owned();
             return Err(Box::new(RepresentationError::AssigningToInputVariable { variable, source_span }));
         }
     }
 
     for (id, mode) in variable_usage_modes {
-        if let AssignmentMode::ErrorMultipleAssignments(source_span, other_span) = mode.assigned {
+        if let AssignmentStatus::ErrorMultipleAssignments(source_span, other_span) = mode.assignment {
             let variable = context.get_variable_name_or_unnamed(*id).to_owned();
             return Err(Box::new(RepresentationError::MultipleAssignmentsForVariable { variable, source_span }));
         }

@@ -16,18 +16,19 @@ use structural_equality::StructuralEquality;
 use typeql::common::Span;
 
 use crate::{
-    RepresentationError,
     pattern::{
-        BindingMode, ContextualisedBindingMode, Pattern, PatternVariables, Scope, ScopeId,
-        constraint::{Constraint, Constraints, ConstraintsBuilder, Unsatisfiable},
-        disjunction::{DisjunctionBuilder, DisjunctionBuilderWithContext},
-        impl_pattern_from_pattern_variables,
-        negation::NegationBuilder,
-        nested_pattern::NestedPattern,
+        constraint::{Constraint, Constraints, ConstraintsBuilder, Unsatisfiable}, disjunction::{DisjunctionBuilder, DisjunctionBuilderWithContext}, impl_pattern_from_pattern_variables, negation::NegationBuilder, nested_pattern::NestedPattern,
         optional::OptionalBuilder,
+        ContextualisedBindingMode,
+        Pattern,
+        PatternVariables,
+        Scope,
+        ScopeId,
     },
-    pipeline::{VariableRegistry, block::BlockBuilderContext},
+    pipeline::{block::BlockBuilderContext, VariableRegistry},
+    RepresentationError,
 };
+use crate::pattern::mode_inference::BindingMode;
 
 #[derive(Debug, Clone)]
 pub struct Conjunction {

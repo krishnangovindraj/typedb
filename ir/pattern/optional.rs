@@ -11,11 +11,12 @@ use structural_equality::StructuralEquality;
 use typeql::common::Span;
 
 use crate::pattern::{
-    BindingMode, BranchID, ContextualisedBindingMode, Pattern, PatternVariables, Scope, ScopeId,
-    conjunction::{Conjunction, ConjunctionBuilder},
-    impl_pattern_from_pattern_variables,
-    nested_pattern::NestedPattern,
+    conjunction::{Conjunction, ConjunctionBuilder}, impl_pattern_from_pattern_variables, nested_pattern::NestedPattern, BranchID, ContextualisedBindingMode, Pattern,
+    PatternVariables,
+    Scope,
+    ScopeId,
 };
+use crate::pattern::mode_inference::BindingMode;
 
 #[derive(Debug, Clone)]
 pub struct Optional {
@@ -101,7 +102,7 @@ impl OptionalBuilder {
         self.conjunction
             .variable_binding_modes()
             .into_iter()
-            .map(|(v, mode)| if mode.is_always_binding() { (v, BindingMode::OptionallyBinding) } else { (v, mode) })
+            .map(|(v, mode)| if mode.is_always_binding() { (v, BindingMode::BoundInTry) } else { (v, mode) })
             .collect()
     }
 }
