@@ -14,7 +14,10 @@ use itertools::Itertools;
 use structural_equality::StructuralEquality;
 use typeql::common::Span;
 
-use crate::pattern::AssignmentStatus;
+use crate::pattern::{
+    AssignmentStatus,
+    mode_inference::{OptionalSafety, OptionalSafetyError},
+};
 use crate::{
     RepresentationError,
     pattern::{
@@ -102,7 +105,7 @@ impl<'reg> BlockBuilder<'reg> {
             self.conjunction.finish(&PatternVariables::for_block(block_binding_modes, self.context.input_variables()));
 
         // let variable_usage_modes = todo_must_implement!("TODO");
-        // validate_all_optional_dereferences_are_safe(&variable_usage_modes, &self.context)?;
+        validate_all_optional_dereferences_are_safe(&conjunction, &self.context)?;
 
         validate_is_plannable(
             &conjunction,
@@ -319,18 +322,32 @@ fn validate_optional_returns_recursive(
     }
 }
 
-// fn validate_all_optional_dereferences_are_safe(
-//     variable_usage_modes: &HashMap<Variable, VariableUsageMode>,
-//     context: &BlockBuilderContext<'_>,
-// ) -> Result<(), Box<RepresentationError>> {
-//     for (id, mode) in variable_usage_modes {
-//         if let OptionalReferenceSafety::UnsafeUnwrap(source_span) = mode.optional_safety {
-//             let variable = context.get_variable_name_or_unnamed(*id).to_owned();
-//             return Err(Box::new(RepresentationError::UnsafeOptionalDereference { variable, source_span }));
-//         }
-//     }
-//     Ok(())
-// }
+fn validate_all_optional_dereferences_are_safe(
+    conjunction: &Conjunction,
+    context: &BlockBuilderContext<'_>,
+) -> Result<HashMap<Variable, OptionalSafety>, Box<RepresentationError>> {
+    let mut root_modes = OptionalSafety::for_conjunction(conjunction).map_err(|safety_error| {
+        let OptionalSafetyError { variable, optionality: origin_span, unwrapping: source_span } = safety_error;
+        let variable = context.get_variable_name_or_unnamed(variable).to_owned();
+        Box::new(RepresentationError::UnsafeOptionalDereferenceBlockOrigin { variable, source_span, origin_span })
+    })?;
+
+    let new_optionals = context
+        .input_variable_optionalities()
+        .filter_map(|(id, o)| (o == VariableOptionality::Optional).then_some((id, None)));
+    OptionalSafety::update_with_new_optionals(&mut root_modes, new_optionals);
+
+    let is_sets = conjunction.constraints().iter().filter_map(|constraint| constraint.as_is_set());
+    let reset_variables = is_sets.flat_map(|is_set| is_set.ids());
+    OptionalSafety::reset_unwrapped_variables(&mut root_modes, reset_variables);
+    OptionalSafety::check_bad_unwraps(&root_modes).map_err(|safety_error| {
+        let OptionalSafetyError { variable, optionality: origin_span, unwrapping: source_span } = safety_error;
+        debug_assert!(origin_span.is_none()); // Just to use it.
+        let variable = context.get_variable_name_or_unnamed(variable).to_owned();
+        Box::new(RepresentationError::UnsafeOptionalDereferenceInputOrigin { variable, source_span })
+    })?;
+    Ok(root_modes)
+}
 
 fn validate_expressions_assignments_are_unique(
     conjunction: &ConjunctionBuilder,

@@ -598,19 +598,16 @@ impl AssignmentStatus {
                 _ => return,
             };
         });
-        conjunction
-            .nested_patterns()
-            .iter()
-            .map(|nested| match nested {
+        for nested in conjunction.nested_patterns() {
+            let nested_statuses = match nested {
                 NestedPatternBuilder::Negation(negation) => Self::for_conjunction(negation.conjunction()),
                 NestedPatternBuilder::Optional(optional) => Self::for_conjunction(optional.conjunction()),
                 NestedPatternBuilder::Disjunction(disjunction) => Self::for_disjunction(disjunction),
-            })
-            .for_each(|nested_statuses| {
-                for (id, status) in nested_statuses {
-                    *assignment_statuses.entry(id).or_default() &= status;
-                }
-            });
+            };
+            for (id, status) in nested_statuses {
+                *assignment_statuses.entry(id).or_default() &= status;
+            }
+        };
         assignment_statuses
     }
 

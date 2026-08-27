@@ -386,6 +386,7 @@ pub enum UnimplementedFeature {
     LetInBuiltinCall,
     Subkey,
     OptionalFunctions,
+    OptionalArguments,
 
     UnsortedJoin,
 
