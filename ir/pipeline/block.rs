@@ -14,14 +14,20 @@ use itertools::Itertools;
 use structural_equality::StructuralEquality;
 use typeql::common::Span;
 
+use crate::pattern::AssignmentStatus;
 use crate::{
     RepresentationError,
     pattern::{
-        BindingMode, BranchID, Pattern, PatternVariables, ScopeId,
+        BindingMode,
+        BranchID,
+        Pattern,
+        PatternVariables,
+        ScopeId,
         conjunction::{Conjunction, ConjunctionBuilder, ConjunctionBuilderWithContext, NestedPatternBuilder},
         constraint::Constraint,
+        // mode_inference::{AssignmentStatus, OptionalReferenceSafety, VariableUsageMode},
         nested_pattern::NestedPattern,
-        variable_category::VariableCategory,
+        variable_category::{VariableCategory, VariableOptionality},
     },
     pipeline::{ParameterRegistry, VariableCategorySource, VariableRegistry},
 };
@@ -78,21 +84,32 @@ impl<'reg> BlockBuilder<'reg> {
         validate_all_required_variables_can_be_bound(&self, &block_binding_modes, &self.context.variable_registry)?;
         validate_no_unbound_variable_categories(&self.conjunction, &self.context)?;
         validate_is_variables_have_same_category(&self.conjunction, &self.context.variable_registry)?;
+        validate_expressions_assignments_are_unique(&self.conjunction, &self.context)?;
 
         // Update
-        block_binding_modes
-            .iter()
-            .filter(|(_, mode)| mode.is_optionally_binding())
-            .for_each(|(v, _)| self.context.set_variable_optionality(*v, true));
+        block_binding_modes.iter().for_each(|(v, mode)| {
+            let optionality = if mode.is_optionally_binding() {
+                VariableOptionality::Optional
+            } else {
+                VariableOptionality::Required
+            };
+            self.context.variable_optionalities.insert(*v, optionality);
+        });
         self.context
             .variable_names_index
-            .retain(|_, var| block_binding_modes.get(var).copied() != Some(BindingMode::LocallyBindingInChild));
+            .retain(|_, var| block_binding_modes.get(var) != Some(&BindingMode::LocallyBindingInChild));
         let conjunction =
             self.conjunction.finish(&PatternVariables::for_block(block_binding_modes, self.context.input_variables()));
 
-        let input_variables = self.context.input_variables().collect();
-        validate_is_plannable(&conjunction, &input_variables, &self.context.variable_registry)?;
-        validate_expressions_assignments_are_unique(&conjunction, &input_variables, &self.context.variable_registry)?;
+        // let variable_usage_modes = todo_must_implement!("TODO");
+        // validate_all_optional_dereferences_are_safe(&variable_usage_modes, &self.context)?;
+
+        validate_is_plannable(
+            &conjunction,
+            &self.context.input_variables().collect(),
+            &self.context.variable_registry,
+        )?;
+
         let block_context = self.context.block_context;
         Ok(Block { conjunction, block_context })
     }
@@ -106,9 +123,15 @@ impl<'reg> BlockBuilder<'reg> {
     }
 
     fn variable_binding_modes(&self) -> HashMap<Variable, BindingMode> {
-        let mut block_binding_modes = self.conjunction.variable_binding_modes();
-        block_binding_modes.extend(self.context.input_variables().map(|v| (v, BindingMode::AlwaysBinding)));
-        block_binding_modes
+        let mut variable_usage_modes = self.conjunction.variable_binding_modes();
+        for (id, optionality) in self.context.input_variable_optionalities() {
+            let mode = variable_usage_modes.entry(id).or_default();
+            *mode = BindingMode::AlwaysBinding;
+            // if optionality == VariableOptionality::Optional {
+            //     mode.optional_safety = mode.optional_safety & OptionalReferenceSafety::AssignedOrStageInput(None);
+            // }
+        }
+        variable_usage_modes
     }
 }
 
@@ -116,7 +139,8 @@ fn validate_no_unbound_variable_categories(
     conjunction: &ConjunctionBuilder,
     context: &BlockBuilderContext<'_>,
 ) -> Result<(), Box<RepresentationError>> {
-    let unbound = context.block_context.registered_variables().find(|&variable| {
+    // TODO: We need an intermediate ConjunctionBeingFinalized that stores these variable_usage_modes
+    let unbound = conjunction.variable_binding_modes().keys().copied().find(|&variable| {
         matches!(
             context.variable_registry.get_variable_category(variable),
             Some(VariableCategory::AttributeOrValue) | None
@@ -128,6 +152,17 @@ fn validate_no_unbound_variable_categories(
             source_span: context.variable_registry.source_span(variable),
         }))
     } else {
+        conjunction.nested_patterns().iter().try_for_each(|nested| match nested {
+            NestedPatternBuilder::Disjunction(disjunction) => {
+                disjunction.conjunctions().try_for_each(|c| validate_no_unbound_variable_categories(c, context))
+            }
+            NestedPatternBuilder::Negation(negation) => {
+                validate_no_unbound_variable_categories(negation.conjunction(), context)
+            }
+            NestedPatternBuilder::Optional(optional) => {
+                validate_no_unbound_variable_categories(optional.conjunction(), context)
+            }
+        })?;
         Ok(())
     }
 }
@@ -251,7 +286,6 @@ fn validate_optional_returns_recursive(
     conjunction: &ConjunctionBuilder,
     acc: &mut HashMap<Variable, Option<Span>>,
 ) -> Result<(), Box<RepresentationError>> {
-    let conjunction_binding_modes = conjunction.variable_binding_modes();
     conjunction.nested_patterns().iter().try_for_each(|nested| match nested {
         NestedPatternBuilder::Disjunction(disjunction) => {
             disjunction.conjunctions().try_for_each(|branch| validate_optional_returns_recursive(context, branch, acc))
@@ -271,93 +305,49 @@ fn validate_optional_returns_recursive(
         }
     });
     // Check at each level
+    let conjunction_binding_modes = conjunction.variable_binding_modes();
     let reused_optional_return_opt = acc.iter().find(|(var, _)| match conjunction_binding_modes.get(var) {
         None => false,
         Some(mode) => *mode != BindingMode::OptionallyBinding,
     });
     if let Some((var, &source_span)) = reused_optional_return_opt {
         let variable = context.get_variable_name_or_unnamed(*var).to_owned();
-        // TODO: This has to wait till we finalize the spec
-        // // Err(Box::new(RepresentationError::OptionalFunctionReturnReferenced { variable, source_span }))
-        // use error::TypeDBError;
-        // tracing::warn!(
-        //     "Function call reuses optionally assigned variable. This will fail in the next version:\n{}",
-        //     RepresentationError::OptionalFunctionReturnReferenced { variable, source_span }.format_description()
-        // );
+        error::optional_usage_error!(RepresentationError::OptionalFunctionReturnReferenced { variable, source_span });
         Ok(())
     } else {
         Ok(())
     }
 }
+
+// fn validate_all_optional_dereferences_are_safe(
+//     variable_usage_modes: &HashMap<Variable, VariableUsageMode>,
+//     context: &BlockBuilderContext<'_>,
+// ) -> Result<(), Box<RepresentationError>> {
+//     for (id, mode) in variable_usage_modes {
+//         if let OptionalReferenceSafety::UnsafeUnwrap(source_span) = mode.optional_safety {
+//             let variable = context.get_variable_name_or_unnamed(*id).to_owned();
+//             return Err(Box::new(RepresentationError::UnsafeOptionalDereference { variable, source_span }));
+//         }
+//     }
+//     Ok(())
+// }
 
 fn validate_expressions_assignments_are_unique(
-    conjunction: &Conjunction,
-    input_variables: &BTreeSet<Variable>,
-    variable_registry: &VariableRegistry,
+    conjunction: &ConjunctionBuilder,
+    context: &BlockBuilderContext<'_>,
 ) -> Result<(), Box<RepresentationError>> {
-    let mut assigned_in_block = BTreeMap::new();
-    validate_expressions_assignments_are_unique_impl(conjunction, &mut assigned_in_block, variable_registry)?;
-
-    if let Some((&variable, &source_span)) = assigned_in_block.iter().find(|(var, _)| input_variables.contains(var)) {
-        let variable = variable_registry.get_variable_name_or_unnamed(variable).to_owned();
-        Err(Box::new(RepresentationError::AssigningToInputVariable { variable, source_span }))
-    } else {
-        Ok(())
-    }
-}
-fn validate_expressions_assignments_are_unique_impl(
-    conjunction: &Conjunction,
-    assigned: &mut BTreeMap<Variable, Option<Span>>,
-    variable_registry: &VariableRegistry,
-) -> Result<(), Box<RepresentationError>> {
-    // TODO: Can we absorb this change into BindingModes if we introduce an "Assigned" variant?
-    fn add_or_error(
-        variable_registry: &VariableRegistry,
-        assigned: &mut BTreeMap<Variable, Option<Span>>,
-        (id, source_span): (Variable, Option<Span>),
-    ) -> Result<(), Box<RepresentationError>> {
-        if let Some(other_span) = assigned.insert(id, source_span) {
-            let variable = variable_registry.get_variable_name_or_unnamed(id).to_owned();
-            Err(Box::new(RepresentationError::MultipleAssignmentsForVariable { variable, source_span, other_span }))
-        } else {
-            Ok(())
+    let assignment_statuses = AssignmentStatus::for_conjunction(conjunction);
+    for (id, _) in context.input_variable_optionalities() {
+        if let Some(AssignmentStatus::AtMostOncePerBranch(source_span)) = assignment_statuses.get(&id).copied() {
+            let variable = context.get_variable_name_or_unnamed(id).to_owned();
+            return Err(Box::new(RepresentationError::AssigningToInputVariable { variable, source_span }));
         }
     }
 
-    conjunction
-        .constraints()
-        .iter()
-        .filter_map(|constraint| constraint.as_expression_binding())
-        .flat_map(|expr| expr.ids_assigned().map(|id| (id, expr.source_span())))
-        .try_for_each(|id_span| add_or_error(variable_registry, assigned, id_span))?;
-
-    conjunction
-        .constraints()
-        .iter()
-        .filter_map(|constraint| constraint.as_function_call_binding())
-        .flat_map(|func_call| func_call.ids_assigned().map(|id| (id, func_call.source_span())))
-        .try_for_each(|id_span| add_or_error(variable_registry, assigned, id_span))?;
-
-    for nested in conjunction.nested_patterns() {
-        match nested {
-            NestedPattern::Optional(optional) => {
-                validate_expressions_assignments_are_unique_impl(optional.conjunction(), assigned, variable_registry)?;
-            }
-            NestedPattern::Negation(negation) => {
-                validate_expressions_assignments_are_unique_impl(negation.conjunction(), assigned, variable_registry)?;
-            }
-            NestedPattern::Disjunction(disjunction) => {
-                let mut disjunction_assigned = BTreeMap::new();
-                disjunction.conjunctions().iter().try_for_each(|branch| {
-                    let mut branch_assigned = BTreeMap::new();
-                    validate_expressions_assignments_are_unique_impl(branch, &mut branch_assigned, variable_registry)?;
-                    disjunction_assigned.extend(branch_assigned);
-                    Ok::<_, Box<RepresentationError>>(())
-                })?;
-                disjunction_assigned
-                    .into_iter()
-                    .try_for_each(|id_span| add_or_error(variable_registry, assigned, id_span))?;
-            }
+    for (id, mode) in assignment_statuses {
+        if let AssignmentStatus::ErrorMultipleAssignments(source_span, other_span) = mode {
+            let variable = context.get_variable_name_or_unnamed(id).to_owned();
+            return Err(Box::new(RepresentationError::MultipleAssignmentsForVariable { variable, source_span }));
         }
     }
     Ok(())
@@ -412,8 +402,9 @@ fn validate_conjunction_has_valid_constraint_ordering(
             .iter()
             .copied()
             .filter(|i| {
-                let mut required_vars =
-                    constraint_at(*i).binding_modes().filter_map(|(id, mode)| mode.is_require_prebound().then_some(id));
+                let mut required_vars = constraint_at(*i)
+                    .variable_binding_modes()
+                    .filter_map(|(id, mode)| mode.is_require_prebound().then_some(id));
                 required_vars.all(|v| bound_variables.contains(&v))
             })
             .collect::<HashSet<usize>>();
@@ -498,7 +489,8 @@ impl UnplannableConstraints {
         }
         let mut constraints_and_requirements = Vec::new();
         constraints_and_requirements.extend(remaining_constraints.map(|c| {
-            let required_vars = c.binding_modes().filter_map(|(id, mode)| mode.is_require_prebound().then_some(id));
+            let required_vars =
+                c.variable_binding_modes().filter_map(|(id, mode)| mode.is_require_prebound().then_some(id));
             (c.name().to_owned(), unsatisfied_vars!(required_vars), c.source_span())
         }));
         constraints_and_requirements.extend(remaining_nested_patterns.map(|nested| {
@@ -524,30 +516,22 @@ impl fmt::Display for UnplannableConstraints {
 
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub struct BlockContext {
-    input_variables: HashSet<Variable>,
-    variable_declaration: HashSet<Variable>,
+    input_variable_optionalities: HashMap<Variable, VariableOptionality>,
+    // variable_declaration: HashSet<Variable>,
 }
 
+// TODO: All private? Can we inline BlockContext then?
 impl BlockContext {
-    fn new() -> Self {
-        Default::default()
+    fn new(input_variable_optionalities: HashMap<Variable, VariableOptionality>) -> Self {
+        Self { input_variable_optionalities }
     }
 
-    fn add_input_declaration(&mut self, var: Variable) {
-        self.add_variable_declaration(var);
-        self.input_variables.insert(var);
-    }
-
-    fn add_variable_declaration(&mut self, var: Variable) {
-        self.variable_declaration.insert(var);
+    fn input_variable_optionalities(&self) -> impl Iterator<Item = (Variable, VariableOptionality)> + '_ {
+        self.input_variable_optionalities.iter().map(|(&k, &v)| (k, v))
     }
 
     fn is_block_input_variable(&self, var: &Variable) -> bool {
-        self.input_variables.contains(var)
-    }
-
-    fn registered_variables(&self) -> impl Iterator<Item = Variable> + '_ {
-        self.variable_declaration.iter().copied()
+        self.input_variable_optionalities.contains_key(var)
     }
 }
 
@@ -555,6 +539,7 @@ impl BlockContext {
 pub struct BlockBuilderContext<'a> {
     variable_registry: &'a mut VariableRegistry,
     variable_names_index: &'a mut HashMap<String, Variable>,
+    variable_optionalities: &'a mut HashMap<Variable, VariableOptionality>,
     parameters: &'a mut ParameterRegistry,
 
     block_context: BlockContext,
@@ -565,15 +550,15 @@ impl<'a> BlockBuilderContext<'a> {
     pub(crate) fn new(
         variable_registry: &'a mut VariableRegistry,
         available_input_names: &'a mut HashMap<String, Variable>,
+        variable_optionalities: &'a mut HashMap<Variable, VariableOptionality>,
         parameters: &'a mut ParameterRegistry,
     ) -> BlockBuilderContext<'a> {
-        let mut block_context = BlockContext::new();
-        available_input_names.values().for_each(|v| {
-            block_context.add_input_declaration(*v);
-        });
+        debug_assert!(available_input_names.values().all(|v| variable_optionalities.contains_key(v)));
+        let mut block_context = BlockContext::new(variable_optionalities.clone());
         Self {
             variable_registry,
             variable_names_index: available_input_names,
+            variable_optionalities,
             parameters,
             scope_id_allocator: 2, // `0`, `1` are reserved for INPUT, ROOT respectively.
             block_context,
@@ -600,7 +585,6 @@ impl<'a> BlockBuilderContext<'a> {
         match self.variable_names_index.get(name) {
             None => {
                 let variable = self.variable_registry.register_variable_named(name.to_string(), source_span)?;
-                self.block_context.add_variable_declaration(variable);
                 self.variable_names_index.insert(name.to_string(), variable);
                 Ok(variable)
             }
@@ -613,7 +597,6 @@ impl<'a> BlockBuilderContext<'a> {
         source_span: Option<Span>,
     ) -> Result<Variable, Box<RepresentationError>> {
         let variable = self.variable_registry.register_anonymous_variable(source_span)?;
-        self.block_context.add_variable_declaration(variable);
         Ok(variable)
     }
 
@@ -622,7 +605,12 @@ impl<'a> BlockBuilderContext<'a> {
     }
 
     pub(crate) fn input_variables(&self) -> impl Iterator<Item = Variable> + '_ {
-        self.block_context.registered_variables().filter(|var| self.is_block_input_variable(*var))
+        self.block_context.input_variable_optionalities.keys().copied()
+    }
+
+    pub(crate) fn input_variable_optionalities(&self) -> impl Iterator<Item = (Variable, VariableOptionality)> + '_ {
+        // TODO: Actually propagate per-stage optionality changes
+        self.block_context.input_variable_optionalities()
     }
 
     pub(crate) fn next_scope_id(&mut self) -> ScopeId {
@@ -639,10 +627,6 @@ impl<'a> BlockBuilderContext<'a> {
         source: Constraint<Variable>,
     ) -> Result<(), Box<RepresentationError>> {
         self.variable_registry.set_variable_category(variable, category, VariableCategorySource::Constraint(source))
-    }
-
-    pub(crate) fn set_variable_optionality(&mut self, variable: Variable, is_optional: bool) {
-        self.variable_registry.set_variable_is_optional(variable, is_optional);
     }
 
     pub(crate) fn parameters(&mut self) -> &mut ParameterRegistry {

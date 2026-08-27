@@ -10,7 +10,7 @@ use std::{
     fmt,
     hash::{Hash, Hasher},
     mem,
-    ops::{BitAnd, BitAndAssign, BitOr, BitXor},
+    ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor},
 };
 
 use answer::variable::Variable;
@@ -29,6 +29,7 @@ pub mod variable_category;
 pub mod disjunction;
 pub mod expression;
 pub mod function_call;
+pub(super) mod mode_inference;
 pub mod nested_pattern;
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
@@ -110,6 +111,12 @@ macro_rules! impl_pattern_from_pattern_variables {
     };
 }
 pub(self) use impl_pattern_from_pattern_variables;
+
+use crate::pattern::{
+    conjunction::{Conjunction, ConjunctionBuilder, NestedPatternBuilder},
+    constraint::Constraint,
+    disjunction::{Disjunction, DisjunctionBuilder},
+};
 
 // TODO: rename to 'Identifier' in lieu of a better name
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -395,78 +402,6 @@ impl fmt::Display for ValueType {
     }
 }
 
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) enum BindingMode {
-    RequirePrebound,
-    AlwaysBinding,
-    LocallyBindingInChild,
-    OptionallyBinding,
-    #[default]
-    Absent,
-}
-
-impl BindingMode {
-    pub(crate) fn is_require_prebound(&self) -> bool {
-        *self == BindingMode::RequirePrebound
-    }
-
-    pub(crate) fn is_always_binding(&self) -> bool {
-        *self == BindingMode::AlwaysBinding
-    }
-
-    pub(crate) fn is_locally_binding_in_child(&self) -> bool {
-        *self == BindingMode::LocallyBindingInChild
-    }
-
-    pub(crate) fn is_optionally_binding(&self) -> bool {
-        *self == BindingMode::OptionallyBinding
-    }
-}
-
-impl BitAnd for BindingMode {
-    type Output = Self;
-
-    fn bitand(self, rhs: Self) -> Self {
-        // We upgrade (Optionally|LocallyBinding) & (Optionally|LocallyBinding) to RequirePrebound
-        match (self, rhs) {
-            (Self::Absent, x) | (x, Self::Absent) => x,
-            (Self::AlwaysBinding, _) | (_, Self::AlwaysBinding) => Self::AlwaysBinding,
-            (Self::RequirePrebound, _) | (_, Self::RequirePrebound) => Self::RequirePrebound,
-            (Self::LocallyBindingInChild, _) | (_, Self::LocallyBindingInChild) => Self::RequirePrebound,
-            (Self::OptionallyBinding, Self::OptionallyBinding) => Self::RequirePrebound,
-        }
-    }
-}
-
-impl BitAndAssign for BindingMode {
-    fn bitand_assign(&mut self, rhs: Self) {
-        *self = *self & rhs;
-    }
-}
-
-impl BitOr for BindingMode {
-    type Output = Self;
-    fn bitor(self, rhs: Self) -> Self {
-        match (self, rhs) {
-            (Self::OptionallyBinding, Self::OptionallyBinding) => Self::OptionallyBinding,
-            (Self::AlwaysBinding, Self::AlwaysBinding) => Self::AlwaysBinding,
-            (Self::Absent, Self::Absent) => Self::Absent,
-            (Self::Absent, Self::AlwaysBinding) | (Self::AlwaysBinding, Self::Absent) => Self::LocallyBindingInChild,
-            (Self::Absent, Self::LocallyBindingInChild) | (Self::LocallyBindingInChild, Self::Absent) => {
-                Self::LocallyBindingInChild
-            }
-            (Self::RequirePrebound, _) | (_, Self::RequirePrebound) => Self::RequirePrebound,
-            (Self::OptionallyBinding, _) | (_, Self::OptionallyBinding) => Self::RequirePrebound,
-            (Self::LocallyBindingInChild, _) | (_, Self::LocallyBindingInChild) => {
-                // This preserves associativity, but doesn't correctly escalate to RequirePrebound.
-                // ((AlwaysBinding | AlwaysBinding) | Absent) should be required
-                // That's corrected in disjunction
-                Self::LocallyBindingInChild
-            }
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum PatternVariableMode {
     RequiredInput,
@@ -556,6 +491,177 @@ impl PatternVariables {
 
     pub(crate) fn optionally_bound_by_pattern(&self) -> impl Iterator<Item = Variable> + '_ {
         self.0.iter().filter_map(|(v, required)| (*required == PatternVariableMode::OptionallyBinding).then_some(*v))
+    }
+}
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum BindingMode {
+    RequirePrebound,
+    AlwaysBinding,
+    LocallyBindingInChild, // Bound in some, but not all branches
+    OptionallyBinding,     // Try blocks & assignments.
+    #[default]
+    Absent,
+}
+
+impl BindingMode {
+    pub fn is_require_prebound(&self) -> bool {
+        *self == BindingMode::RequirePrebound
+    }
+
+    pub fn is_always_binding(&self) -> bool {
+        *self == BindingMode::AlwaysBinding
+    }
+
+    pub fn is_locally_binding_in_child(&self) -> bool {
+        *self == BindingMode::LocallyBindingInChild
+    }
+
+    pub fn is_optionally_binding(&self) -> bool {
+        *self == BindingMode::OptionallyBinding
+    }
+}
+
+impl BitAnd for BindingMode {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self {
+        // We upgrade (Optionally|LocallyBinding) & (Optionally|LocallyBinding) to RequirePrebound
+        match (self, rhs) {
+            (Self::Absent, x) | (x, Self::Absent) => x,
+            (Self::AlwaysBinding, _) | (_, Self::AlwaysBinding) => Self::AlwaysBinding,
+            (Self::RequirePrebound, _) | (_, Self::RequirePrebound) => Self::RequirePrebound,
+            (Self::LocallyBindingInChild, _) | (_, Self::LocallyBindingInChild) => Self::RequirePrebound,
+            (Self::OptionallyBinding, Self::OptionallyBinding) => Self::RequirePrebound,
+        }
+    }
+}
+
+impl BitOr for BindingMode {
+    type Output = Self;
+    fn bitor(self, rhs: Self) -> Self {
+        match (self, rhs) {
+            (Self::OptionallyBinding, Self::OptionallyBinding) => Self::OptionallyBinding,
+            (Self::AlwaysBinding, Self::AlwaysBinding) => Self::AlwaysBinding,
+            (Self::Absent, Self::Absent) => Self::Absent,
+            (Self::Absent, Self::AlwaysBinding) | (Self::AlwaysBinding, Self::Absent) => Self::LocallyBindingInChild,
+            (Self::Absent, Self::LocallyBindingInChild) | (Self::LocallyBindingInChild, Self::Absent) => {
+                Self::LocallyBindingInChild
+            }
+            (Self::RequirePrebound, _) | (_, Self::RequirePrebound) => Self::RequirePrebound,
+            (Self::OptionallyBinding, _) | (_, Self::OptionallyBinding) => Self::RequirePrebound,
+            (Self::LocallyBindingInChild, _) | (_, Self::LocallyBindingInChild) => {
+                // This preserves associativity, but doesn't correctly escalate to RequirePrebound.
+                // ((AlwaysBinding | AlwaysBinding) | Absent) should be required
+                // That's corrected in disjunction
+                Self::LocallyBindingInChild
+            }
+        }
+    }
+}
+
+impl BitAndAssign for BindingMode {
+    fn bitand_assign(&mut self, rhs: Self) {
+        *self = *self & rhs;
+    }
+}
+
+impl BitOrAssign for BindingMode {
+    fn bitor_assign(&mut self, rhs: Self) {
+        *self = *self | rhs;
+    }
+}
+
+pub(crate) type LocationNote = Option<Span>;
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) enum AssignmentStatus {
+    #[default]
+    NotAssigned,
+    AtMostOncePerBranch(LocationNote),
+    ErrorMultipleAssignments(LocationNote, LocationNote),
+}
+
+impl AssignmentStatus {
+    pub(crate) fn for_conjunction(conjunction: &ConjunctionBuilder) -> HashMap<Variable, AssignmentStatus> {
+        let mut assignment_statuses = HashMap::new();
+        conjunction.constraints().iter().for_each(|constraint| {
+            let assigned_ids = match constraint {
+                Constraint::FunctionCallBinding(binding) => binding.ids_assigned().for_each(|id| {
+                    *assignment_statuses.entry(id).or_default() &=
+                        AssignmentStatus::AtMostOncePerBranch(constraint.source_span());
+                }),
+                Constraint::ExpressionBinding(binding) => binding.ids_assigned().for_each(|id| {
+                    *assignment_statuses.entry(id).or_default() &=
+                        AssignmentStatus::AtMostOncePerBranch(constraint.source_span());
+                }),
+                _ => return,
+            };
+        });
+        conjunction
+            .nested_patterns()
+            .iter()
+            .map(|nested| match nested {
+                NestedPatternBuilder::Negation(negation) => Self::for_conjunction(negation.conjunction()),
+                NestedPatternBuilder::Optional(optional) => Self::for_conjunction(optional.conjunction()),
+                NestedPatternBuilder::Disjunction(disjunction) => Self::for_disjunction(disjunction),
+            })
+            .for_each(|nested_statuses| {
+                for (id, status) in nested_statuses {
+                    *assignment_statuses.entry(id).or_default() &= status;
+                }
+            });
+        assignment_statuses
+    }
+
+    pub(crate) fn for_disjunction(disjunction: &DisjunctionBuilder) -> HashMap<Variable, AssignmentStatus> {
+        let mut assignment_statuses = HashMap::new();
+        for conjunction in disjunction.conjunctions() {
+            for (id, status) in Self::for_conjunction(conjunction) {
+                *assignment_statuses.entry(id).or_default() |= status;
+            }
+        }
+        assignment_statuses
+    }
+}
+
+impl BitAnd for AssignmentStatus {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self {
+        match (self, rhs) {
+            (Self::NotAssigned, x) | (x, Self::NotAssigned) => x,
+            (Self::ErrorMultipleAssignments(s1, s2), _) | (_, Self::ErrorMultipleAssignments(s1, s2)) => {
+                Self::ErrorMultipleAssignments(s1, s2)
+            }
+            (Self::AtMostOncePerBranch(s1), Self::AtMostOncePerBranch(s2)) => Self::ErrorMultipleAssignments(s1, s2),
+        }
+    }
+}
+
+impl BitOr for AssignmentStatus {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self {
+        match (self, rhs) {
+            (Self::NotAssigned, x) | (x, Self::NotAssigned) => x,
+            (Self::ErrorMultipleAssignments(s1, s2), _) | (_, Self::ErrorMultipleAssignments(s1, s2)) => {
+                Self::ErrorMultipleAssignments(s1, s2)
+            }
+            (Self::AtMostOncePerBranch(s), Self::AtMostOncePerBranch(_)) => Self::AtMostOncePerBranch(s),
+        }
+    }
+}
+
+impl BitAndAssign for AssignmentStatus {
+    fn bitand_assign(&mut self, rhs: Self) {
+        *self = *self & rhs;
+    }
+}
+
+impl BitOrAssign for AssignmentStatus {
+    fn bitor_assign(&mut self, rhs: Self) {
+        *self = *self | rhs;
     }
 }
 
