@@ -549,6 +549,7 @@ impl<'a> BlockBuilderContext<'a> {
         variable_optionalities: &'a mut HashMap<Variable, VariableOptionality>,
         parameters: &'a mut ParameterRegistry,
     ) -> BlockBuilderContext<'a> {
+        debug_assert!(available_input_names.values().all(|v| variable_optionalities.contains_key(v)));
         let mut block_context = BlockContext::new(variable_optionalities.clone());
         Self {
             variable_registry,

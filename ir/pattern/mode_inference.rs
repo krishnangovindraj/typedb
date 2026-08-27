@@ -214,12 +214,6 @@ impl BitAnd for BindingMode {
     }
 }
 
-impl BitAndAssign for BindingMode {
-    fn bitand_assign(&mut self, rhs: Self) {
-        *self = *self & rhs;
-    }
-}
-
 impl BitOr for BindingMode {
     type Output = Self;
     fn bitor(self, rhs: Self) -> Self {
@@ -276,12 +270,6 @@ impl BitOr for AssignmentStatus {
             }
             (Self::AtMostOncePerBranch(s), Self::AtMostOncePerBranch(_)) => Self::AtMostOncePerBranch(s),
         }
-    }
-}
-
-impl BitAndAssign for AssignmentStatus {
-    fn bitand_assign(&mut self, rhs: Self) {
-        *self = *self & rhs;
     }
 }
 
