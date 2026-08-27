@@ -11,9 +11,10 @@ use structural_equality::StructuralEquality;
 use typeql::common::Span;
 
 use crate::pattern::{
-    BindingMode, Pattern, PatternVariables, Scope, ScopeId,
+    Pattern, PatternVariables, Scope, ScopeId,
     conjunction::{Conjunction, ConjunctionBuilder},
     impl_pattern_from_pattern_variables,
+    mode_inference::{BindingMode, OptionalityStatus, VariableUsageMode},
     nested_pattern::NestedPattern,
 };
 
@@ -75,7 +76,7 @@ impl NegationBuilder {
 
     pub(crate) fn finish(self, parent_modes: &PatternVariables) -> NestedPattern {
         let source_span = self.source_span;
-        let pattern_variables = PatternVariables::build(self.variable_binding_modes(), parent_modes);
+        let pattern_variables = PatternVariables::build(self.variable_usage_modes(), parent_modes);
         let conjunction = self.conjunction.finish(&pattern_variables);
         NestedPattern::Negation(Negation { conjunction, pattern_variables, source_span })
     }
@@ -88,18 +89,16 @@ impl NegationBuilder {
         &mut self.conjunction
     }
 
-    pub(crate) fn variable_binding_modes(&self) -> HashMap<Variable, BindingMode> {
-        self.conjunction
-            .variable_binding_modes()
-            .into_iter()
-            .map(|(var, mode)| {
-                if mode.is_always_binding() {
-                    // if it is binding, we demote it to only locally binding (only relevant in the negation)
-                    (var, BindingMode::LocallyBindingInChild)
-                } else {
-                    (var, mode)
-                }
-            })
-            .collect()
+    pub(crate) fn variable_usage_modes(&self) -> HashMap<Variable, VariableUsageMode> {
+        let mut inner_modes = self.conjunction.variable_usage_modes();
+        inner_modes.iter_mut().for_each(|(var, mode)| {
+            // Could be `impl UnaryNot`, I guess
+            if mode.binding_mode.is_always_binding() {
+                // if it is binding, we demote it to only locally binding (only relevant in the negation)
+                mode.binding_mode = BindingMode::LocallyBindingInChild;
+            };
+            mode.optionality_status = OptionalityStatus::IntactInSomePaths;
+        });
+        inner_modes
     }
 }

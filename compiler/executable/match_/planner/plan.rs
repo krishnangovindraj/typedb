@@ -1989,7 +1989,7 @@ impl ConjunctionPlan<'_> {
         if pushed_any {
             conjunction_builder.finish_one();
         }
-        self.check_optional_inputs(conjunction_builder, input_variables, variable_registry);
+        // self.check_optional_inputs(conjunction_builder, input_variables, variable_registry);
     }
 
     fn may_make_not_none_check(&self, conjunction_builder: &mut ConjunctionExecutableBuilder, variable: Variable) {
@@ -1999,28 +1999,28 @@ impl ConjunctionPlan<'_> {
         }
     }
 
-    fn check_optional_inputs(
-        &self,
-        conjunction_builder: &mut ConjunctionExecutableBuilder,
-        input_variables: impl IntoIterator<Item = Variable>,
-        variable_registry: &VariableRegistry,
-    ) {
-        // TODO: Deprecate because all these variables should be in the unwrapped_variables (or in a parent)
-        let mut optional_inputs_in_constraints = input_variables
-            .into_iter()
-            .filter(|&var| variable_registry.is_variable_optional(var))
-            .filter(|var| conjunction_builder.constraint_variables.contains(var))
-            .collect::<Vec<_>>();
-        if !optional_inputs_in_constraints.is_empty() {
-            optional_inputs_in_constraints.into_iter().for_each(|var| {
-                let variable = conjunction_builder.position(var);
-                conjunction_builder.push_check(CheckInstruction::NotNone { variable });
-            });
-            conjunction_builder.finish_one();
-        } else {
-            drop(optional_inputs_in_constraints);
-        }
-    }
+    // fn check_optional_inputs(
+    //     &self,
+    //     conjunction_builder: &mut ConjunctionExecutableBuilder,
+    //     input_variables: impl IntoIterator<Item = Variable>,
+    //     variable_registry: &VariableRegistry,
+    // ) {
+    //     // TODO: Deprecate because all these variables should be in the unwrapped_variables (or in a parent)
+    //     let mut optional_inputs_in_constraints = input_variables
+    //         .into_iter()
+    //         .filter(|&var| variable_registry.is_variable_optional(var))
+    //         .filter(|var| conjunction_builder.constraint_variables.contains(var))
+    //         .collect::<Vec<_>>();
+    //     if !optional_inputs_in_constraints.is_empty() {
+    //         optional_inputs_in_constraints.into_iter().for_each(|var| {
+    //             let variable = conjunction_builder.position(var);
+    //             conjunction_builder.push_check(CheckInstruction::NotNone { variable });
+    //         });
+    //         conjunction_builder.finish_one();
+    //     } else {
+    //         drop(optional_inputs_in_constraints);
+    //     }
+    // }
 }
 
 #[derive(Clone, Debug)]

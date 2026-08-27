@@ -11,9 +11,10 @@ use structural_equality::StructuralEquality;
 use typeql::common::Span;
 
 use crate::pattern::{
-    BindingMode, BranchID, Pattern, PatternVariables, Scope, ScopeId,
+    BranchID, Pattern, PatternVariables, Scope, ScopeId,
     conjunction::{Conjunction, ConjunctionBuilder},
     impl_pattern_from_pattern_variables,
+    mode_inference::{BindingMode, OptionalityStatus, VariableUsageMode},
     nested_pattern::NestedPattern,
 };
 
@@ -82,7 +83,7 @@ impl OptionalBuilder {
 
     pub(crate) fn finish(self, parent_modes: &PatternVariables) -> NestedPattern {
         let source_span = self.source_span;
-        let pattern_variables = PatternVariables::build(self.variable_binding_modes(), parent_modes);
+        let pattern_variables = PatternVariables::build(self.variable_usage_modes(), parent_modes);
         let branch_id = self.branch_id;
         let conjunction = self.conjunction.finish(&pattern_variables);
         NestedPattern::Optional(Optional { branch_id, conjunction, pattern_variables, source_span })
@@ -96,11 +97,15 @@ impl OptionalBuilder {
         &mut self.conjunction
     }
 
-    pub(crate) fn variable_binding_modes(&self) -> HashMap<Variable, BindingMode> {
-        self.conjunction
-            .variable_binding_modes()
-            .into_iter()
-            .map(|(v, mode)| if mode.is_always_binding() { (v, BindingMode::OptionallyBinding) } else { (v, mode) })
-            .collect()
+    pub(crate) fn variable_usage_modes(&self) -> HashMap<Variable, VariableUsageMode> {
+        let mut inner_modes = self.conjunction.variable_usage_modes();
+        inner_modes.iter_mut().for_each(|(var, mode)| {
+            if mode.binding_mode.is_always_binding() {
+                mode.binding_mode = BindingMode::BoundInTry
+            }
+            mode.optionality_status = OptionalityStatus::IntactInSomePaths;
+            // mode.optional_safety = mode.optional_safety; // Unless `try` implicitly `isset`s
+        });
+        inner_modes
     }
 }

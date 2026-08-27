@@ -13,9 +13,10 @@ use typeql::common::Span;
 
 use crate::{
     pattern::{
-        BindingMode, BranchID, Pattern, PatternVariables, Scope, ScopeId,
+        BranchID, Pattern, PatternVariables, Scope, ScopeId,
         conjunction::{Conjunction, ConjunctionBuilder, ConjunctionBuilderWithContext},
         impl_pattern_from_pattern_variables,
+        mode_inference::{BindingMode, VariableUsageMode},
         nested_pattern::NestedPattern,
     },
     pipeline::block::BlockBuilderContext,
@@ -96,7 +97,7 @@ impl DisjunctionBuilder {
 
     pub(crate) fn finish(self, parent_modes: &PatternVariables) -> NestedPattern {
         let source_span = self.source_span;
-        let pattern_variables = PatternVariables::build(self.variable_binding_modes(), parent_modes);
+        let pattern_variables = PatternVariables::build(self.variable_usage_modes(), parent_modes);
         let scope_id = self.scope_id;
         let branch_ids = self.conjunctions.iter().map(|(bid, _)| *bid).collect();
         let conjunctions =
@@ -108,11 +109,11 @@ impl DisjunctionBuilder {
         self.conjunctions.iter().map(|(_, c)| c)
     }
 
-    pub(crate) fn variable_binding_modes(&self) -> HashMap<Variable, BindingMode> {
+    pub(crate) fn variable_usage_modes(&self) -> HashMap<Variable, VariableUsageMode> {
         if self.conjunctions.is_empty() {
             return HashMap::new();
         }
-        let all_branch_modes: Vec<_> = self.conjunctions.iter().map(|(_, c)| c.variable_binding_modes()).collect();
+        let all_branch_modes: Vec<_> = self.conjunctions.iter().map(|(_, c)| c.variable_usage_modes()).collect();
         let all_variables = all_branch_modes.iter().flat_map(|b| b.keys()).dedup().collect::<Vec<_>>();
 
         let mut binding_modes = all_variables
@@ -120,21 +121,23 @@ impl DisjunctionBuilder {
             .map(|v| {
                 let mode = all_branch_modes
                     .iter()
-                    .map(|b| b.get(v).copied().unwrap_or(BindingMode::Absent))
+                    .map(|b| b.get(v).copied().unwrap_or(VariableUsageMode::absent()))
                     .reduce(|a, b| a | b)
-                    .unwrap_or(BindingMode::Absent);
+                    .unwrap_or(VariableUsageMode::absent());
                 (**v, mode)
             })
             .collect::<HashMap<_, _>>();
 
         // Escalate multiple branches locally-bound to RequireBound
-        binding_modes.iter_mut().filter(|(_, mode)| mode.is_locally_binding_in_child()).for_each(|(var, mode)| {
-            let binding_branches_count =
-                all_branch_modes.iter().filter(|branch_modes| branch_modes.get(var).is_some()).count();
-            if binding_branches_count > 1 {
-                *mode = BindingMode::RequirePrebound
-            }
-        });
+        binding_modes.iter_mut().filter(|(_, mode)| mode.binding_mode.is_locally_binding_in_child()).for_each(
+            |(var, mode)| {
+                let binding_branches_count =
+                    all_branch_modes.iter().filter(|branch_modes| branch_modes.get(var).is_some()).count();
+                if binding_branches_count > 1 {
+                    mode.binding_mode = BindingMode::RequirePrebound
+                }
+            },
+        );
         binding_modes
     }
 }

@@ -55,17 +55,17 @@ pub fn compile(
         &mut connection_instructions,
     )?;
 
-    let unsafely_used_optional_variable = block
-        .conjunction()
-        .constraints()
-        .iter()
-        .flat_map(|constraint| constraint.ids())
-        .find(|var| variable_registry.is_variable_optional(*var));
-
-    if let Some(var) = unsafely_used_optional_variable {
-        let variable = variable_registry.get_variable_name_or_unnamed(var).to_owned();
-        return Err(Box::new(WriteCompilationError::OptionalVariableUsedOutsideTry { source_span, variable }));
-    }
+    // let unsafely_used_optional_variable = block
+    //     .conjunction()
+    //     .constraints()
+    //     .iter()
+    //     .flat_map(|constraint| constraint.ids())
+    //     .find(|var| variable_registry.is_variable_optional(*var));
+    //
+    // if let Some(var) = unsafely_used_optional_variable {
+    //     let variable = variable_registry.get_variable_name_or_unnamed(var).to_owned();
+    //     return Err(Box::new(WriteCompilationError::OptionalVariableUsedOutsideTry { source_span, variable }));
+    // }
 
     let mut optional_deletes = Vec::with_capacity(block.conjunction().nested_patterns().len());
     for nested_pattern in block.conjunction().nested_patterns() {
