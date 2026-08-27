@@ -25,7 +25,7 @@ use crate::{
     pipeline::{ParameterRegistry, VariableCategorySource, VariableRegistry},
     RepresentationError,
 };
-use crate::pattern::mode_inference::{AssignmentStatus, BindingMode, OptionalReferenceSafety, VariableUsageMode};
+use crate::pattern::mode_inference::{AssignmentStatus, VariableUsageMode, OptionalReferenceSafety, VariableBindingMode};
 
 #[derive(Debug, Clone)]
 pub struct Block {
@@ -73,7 +73,7 @@ impl<'reg> BlockBuilder<'reg> {
     }
 
     pub fn finish(mut self) -> Result<Block, Box<RepresentationError>> {
-        let block_binding_modes = self.variable_binding_modes();
+        let block_binding_modes = self.variable_usage_modes();
         validate_no_optionals_in_negations(&self.conjunction, false)?;
         validate_optional_returns(&self.context, &self.conjunction)?;
         validate_all_required_variables_can_be_bound(&self, &block_binding_modes, &self.context.variable_registry)?;
@@ -88,7 +88,7 @@ impl<'reg> BlockBuilder<'reg> {
         block_binding_modes
             .iter()
             .for_each(|(v, mode)| {
-                let optionality = if mode.is_optionally_binding() {
+                let optionality = if mode.binding_mode.is_optionally_binding() {
                     VariableOptionality::Optional
                 } else {
                     VariableOptionality::Required
@@ -97,7 +97,9 @@ impl<'reg> BlockBuilder<'reg> {
             });
         self.context
             .variable_names_index
-            .retain(|_, var| block_binding_modes.get(var).copied() != Some(BindingMode::LocallyBindingInChild));
+            .retain(|_, var| {
+                block_binding_modes.get(var).map(|mode| mode.binding_mode) != Some(VariableBindingMode::LocallyBindingInChild)
+            });
         let conjunction = self.conjunction.finish(&ContextualisedBindingMode::for_block(block_binding_modes));
 
         validate_is_plannable(
@@ -118,16 +120,11 @@ impl<'reg> BlockBuilder<'reg> {
         &mut self.context
     }
 
-    fn variable_binding_modes(&self) -> HashMap<Variable, BindingMode> {
-        let mut block_binding_modes = self.conjunction.variable_binding_modes();
-        block_binding_modes.extend(self.context.input_variables().map(|v| (v, BindingMode::AlwaysBinding)));
-        block_binding_modes
-    }
-
     fn variable_usage_modes(&self) -> HashMap<Variable, VariableUsageMode> {
-        let mut variable_usage_modes = VariableUsageMode::for_conjunction(&self.conjunction);
+        let mut variable_usage_modes = self.conjunction.variable_usage_modes();
         for (id, optionality) in self.context.input_variable_optionalities() {
             let mode = variable_usage_modes.entry(id).or_default();
+            mode.binding_mode =  VariableBindingMode::AlwaysBinding;
             if optionality == VariableOptionality::Optional {
                 mode.optional_safety = mode.optional_safety & OptionalReferenceSafety::AssignedOrStageInput(None);
             }
@@ -140,8 +137,8 @@ fn validate_no_unbound_variable_categories(
     conjunction: &ConjunctionBuilder,
     context: &BlockBuilderContext<'_>,
 ) -> Result<(), Box<RepresentationError>> {
-    // TODO: We need an intermediate ConjunctionBeingFinalized that stores these variable_binding_modes
-    let unbound = conjunction.variable_binding_modes().keys().copied().find(|&variable| {
+    // TODO: We need an intermediate ConjunctionBeingFinalized that stores these variable_usage_modes
+    let unbound = conjunction.variable_usage_modes().keys().copied().find(|&variable| {
         matches!(
             context.variable_registry.get_variable_category(variable),
             Some(VariableCategory::AttributeOrValue) | None
@@ -240,11 +237,11 @@ fn validate_is_variables_have_same_category(
 
 fn validate_all_required_variables_can_be_bound(
     block: &BlockBuilder<'_>,
-    block_binding_modes: &HashMap<Variable, BindingMode>,
+    block_binding_modes: &HashMap<Variable, VariableUsageMode>,
     variable_registry: &VariableRegistry,
 ) -> Result<(), Box<RepresentationError>> {
     for (var, mode) in block_binding_modes.iter() {
-        if mode.is_require_prebound() {
+        if mode.binding_mode.is_require_prebound() {
             let mut all_spans = Vec::new();
             find_constraints_referencing_variable(&block.conjunction, *var, &mut all_spans);
             let variable = variable_registry.get_variable_name_or_unnamed(*var).to_owned();
@@ -289,7 +286,7 @@ fn validate_optional_returns_recursive(
     conjunction: &ConjunctionBuilder,
     acc: &mut HashMap<Variable, Option<Span>>,
 ) -> Result<(), Box<RepresentationError>> {
-    let conjunction_binding_modes = conjunction.variable_binding_modes();
+    let conjunction_binding_modes = conjunction.variable_usage_modes();
     conjunction.nested_patterns().iter().try_for_each(|nested| match nested {
         NestedPatternBuilder::Disjunction(disjunction) => {
             disjunction.conjunctions().try_for_each(|branch| validate_optional_returns_recursive(context, branch, acc))
@@ -303,7 +300,7 @@ fn validate_optional_returns_recursive(
     })?;
     conjunction.constraints().iter().filter_map(|c| c.as_function_call_binding()).for_each(|call| {
         for (var, mode) in call.binding_modes() {
-            if mode == BindingMode::BoundInTry {
+            if mode == VariableBindingMode::BoundInTry {
                 acc.insert(var, call.source_span());
             }
         }
@@ -311,7 +308,7 @@ fn validate_optional_returns_recursive(
     // Check at each level
     let reused_optional_return_opt = acc.iter().find(|(var, _)| match conjunction_binding_modes.get(var) {
         None => false,
-        Some(mode) => *mode != BindingMode::BoundInTry,
+        Some(mode) => mode.binding_mode != VariableBindingMode::BoundInTry,
     });
     if let Some((var, &source_span)) = reused_optional_return_opt {
         let variable = context.get_variable_name_or_unnamed(*var).to_owned();
@@ -406,7 +403,7 @@ fn validate_conjunction_has_valid_constraint_ordering(
             .copied()
             .filter(|i| {
                 let mut required_vars =
-                    constraint_at(*i).binding_modes().filter_map(|(id, mode)| mode.is_require_prebound().then_some(id));
+                    constraint_at(*i).variable_usage_modes().filter_map(|(id, mode)| mode.binding_mode.is_require_prebound().then_some(id));
                 required_vars.all(|v| bound_variables.contains(&v))
             })
             .collect::<HashSet<usize>>();
@@ -491,7 +488,9 @@ impl UnplannableConstraints {
         }
         let mut constraints_and_requirements = Vec::new();
         constraints_and_requirements.extend(remaining_constraints.map(|c| {
-            let required_vars = c.binding_modes().filter_map(|(id, mode)| mode.is_require_prebound().then_some(id));
+            let required_vars = c.variable_usage_modes().filter_map(|(id, mode)| {
+                mode.binding_mode.is_require_prebound().then_some(id)
+            });
             (c.name().to_owned(), unsatisfied_vars!(required_vars), c.source_span())
         }));
         constraints_and_requirements.extend(remaining_nested_patterns.map(|nested| {

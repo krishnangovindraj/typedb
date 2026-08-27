@@ -16,7 +16,7 @@ use crate::pattern::{
     Scope,
     ScopeId,
 };
-use crate::pattern::mode_inference::BindingMode;
+use crate::pattern::mode_inference::{OptionalityStatus, VariableBindingMode, VariableUsageMode};
 
 #[derive(Debug, Clone)]
 pub struct Negation {
@@ -76,7 +76,7 @@ impl NegationBuilder {
 
     pub(crate) fn finish(self, parent_modes: &ContextualisedBindingMode) -> NestedPattern {
         let source_span = self.source_span;
-        let binding_modes = ContextualisedBindingMode::from(self.variable_binding_modes(), parent_modes);
+        let binding_modes = ContextualisedBindingMode::from(self.variable_usage_modes(), parent_modes);
         let conjunction = self.conjunction.finish(&binding_modes);
         let pattern_variables = PatternVariables::from(&binding_modes);
         NestedPattern::Negation(Negation { conjunction, pattern_variables, source_span })
@@ -90,18 +90,16 @@ impl NegationBuilder {
         &mut self.conjunction
     }
 
-    pub(crate) fn variable_binding_modes(&self) -> HashMap<Variable, BindingMode> {
-        self.conjunction
-            .variable_binding_modes()
-            .into_iter()
-            .map(|(var, mode)| {
-                if mode.is_always_binding() {
-                    // if it is binding, we demote it to only locally binding (only relevant in the negation)
-                    (var, BindingMode::LocallyBindingInChild)
-                } else {
-                    (var, mode)
-                }
-            })
-            .collect()
+    pub(crate) fn variable_usage_modes(&self) -> HashMap<Variable, VariableUsageMode> {
+        let mut inner_modes = self.conjunction.variable_usage_modes();
+        inner_modes.iter_mut().for_each(|(var, mode)| {
+            // Could be `impl UnaryNot`, I guess
+            if mode.binding_mode.is_always_binding() {
+                // if it is binding, we demote it to only locally binding (only relevant in the negation)
+                mode.binding_mode = VariableBindingMode::LocallyBindingInChild;
+            };
+            mode.optionality_status = OptionalityStatus::IntactInSomePaths;
+            });
+        inner_modes
     }
 }

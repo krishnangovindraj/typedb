@@ -28,7 +28,7 @@ use crate::{
     pipeline::{block::BlockBuilderContext, VariableRegistry},
     RepresentationError,
 };
-use crate::pattern::mode_inference::BindingMode;
+use crate::pattern::mode_inference::{OptionalReferenceSafety, VariableUsageMode};
 
 #[derive(Debug, Clone)]
 pub struct Conjunction {
@@ -143,14 +143,12 @@ impl NestedPatternBuilder {
             NestedPatternBuilder::Optional(optional) => optional.finish(parent_modes),
         }
     }
-}
 
-impl NestedPatternBuilder {
-    fn variable_binding_modes(&self) -> HashMap<Variable, BindingMode> {
+    fn variable_usage_modes(&self) -> HashMap<Variable, VariableUsageMode> {
         match self {
-            NestedPatternBuilder::Disjunction(inner) => inner.variable_binding_modes(),
-            NestedPatternBuilder::Negation(inner) => inner.variable_binding_modes(),
-            NestedPatternBuilder::Optional(inner) => inner.variable_binding_modes(),
+            NestedPatternBuilder::Disjunction(inner) => inner.variable_usage_modes(),
+            NestedPatternBuilder::Negation(inner) => inner.variable_usage_modes(),
+            NestedPatternBuilder::Optional(inner) => inner.variable_usage_modes(),
         }
     }
 }
@@ -168,7 +166,7 @@ impl ConjunctionBuilder {
     }
 
     pub(crate) fn finish(self, parent_modes: &ContextualisedBindingMode) -> Conjunction {
-        let binding_modes = ContextualisedBindingMode::from(self.variable_binding_modes(), parent_modes);
+        let binding_modes = ContextualisedBindingMode::from(self.variable_usage_modes(), parent_modes);
         let Self { scope_id, constraints, nested_patterns } = self;
         let nested_patterns = nested_patterns.into_iter().map(|builder| builder.finish(&binding_modes)).collect();
         let variable_requirements = PatternVariables::from(&binding_modes);
@@ -187,15 +185,27 @@ impl ConjunctionBuilder {
         &self.nested_patterns
     }
 
-    pub(crate) fn variable_binding_modes(&self) -> HashMap<Variable, BindingMode> {
-        let mut binding_modes = self.constraints.variable_binding_modes();
+
+    pub(crate) fn variable_usage_modes(&self) -> HashMap<Variable, VariableUsageMode> {
+        let mut usage_modes = HashMap::new();
+        self.constraints.variable_usage_modes().for_each(|(id, mode)| {
+            *usage_modes.entry(id).or_default() &= mode;
+        });
         for nested in self.nested_patterns.iter() {
-            let nested_pattern_modes = nested.variable_binding_modes();
+            let nested_pattern_modes = nested.variable_usage_modes();
             for (var, mode) in nested_pattern_modes {
-                *binding_modes.entry(var).or_default() &= mode;
+                *usage_modes.entry(var).or_default() &= mode;
             }
         }
-        binding_modes
+
+        // Reset any safely unwrapped
+        for is_set in self.constraints().iter().filter_map(|c| c.as_is_set()) {
+            for id in is_set.ids() {
+                let entry: &mut VariableUsageMode = usage_modes.entry(id).or_default();
+                entry.optional_safety = OptionalReferenceSafety::AbsentOrSafe;
+            }
+        }
+        usage_modes
     }
 }
 

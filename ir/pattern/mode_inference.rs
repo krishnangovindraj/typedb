@@ -10,7 +10,6 @@ use core::cmp::Eq;
 use typeql::common::Span;
 use answer::variable::Variable;
 use std::collections::HashMap;
-use std::io::Read;
 use std::iter;
 use crate::pattern::conjunction::{ConjunctionBuilder, NestedPatternBuilder};
 use crate::pattern::constraint::Constraint;
@@ -22,7 +21,7 @@ use crate::pattern::variable_category::VariableOptionality;
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct VariableUsageMode {
-    pub(crate) binding_mode: BindingMode,
+    pub(crate) binding_mode: VariableBindingMode,
     pub(crate) assignment: AssignmentStatus,
     pub(crate) optional_safety: OptionalReferenceSafety,
     pub(crate) optionality_status: OptionalityStatus,
@@ -36,23 +35,13 @@ impl VariableUsageMode {
             it: impl Iterator<Item = Variable> + 'a,
             span: LocationNote,
         ) -> Box<dyn Iterator<Item = (Variable, VariableUsageMode)> + 'a> {
-            Box::new(it.map(|id| (id, VariableUsageMode  {
-                binding_mode: BindingMode::AlwaysBinding,
-                assignment: AssignmentStatus::NotAssigned,
-                optional_safety: OptionalReferenceSafety::UnwrappingReference(span),
-                optionality_status: OptionalityStatus::UnwrappedInAllPaths,
-            })))
+            Box::new(it.map(move |id| (id, VariableUsageMode::regular_binding(span))))
         }
         fn _all_required<'a, ID1>(
             it: impl Iterator<Item = ID1> + 'a,
             span: LocationNote,
-        ) -> Box<dyn Iterator<Item = (ID1, BindingMode)> + 'a> {
-            Box::new(it.map(|id| (id, VariableUsageMode  {
-                binding_mode: BindingMode::RequirePrebound,
-                assignment: AssignmentStatus::NotAssigned,
-                optional_safety: OptionalReferenceSafety::UnwrappingReference(span),
-                optionality_status: OptionalityStatus::UnwrappedInAllPaths,
-            })))
+        ) -> Box<dyn Iterator<Item = (ID1, VariableUsageMode)> + 'a> {
+            Box::new(it.map(move |id| (id, VariableUsageMode::regular_input(span))))
         }
         let span = constraint.source_span();
         match constraint {
@@ -78,114 +67,43 @@ impl VariableUsageMode {
 
 
             Constraint::ExpressionBinding(binding) => {
-                Box::new(binding.binding_modes())
+                let arg_modes = binding.expression_ids().map(move |id| (id, VariableUsageMode::regular_input(span)));
+                let assigned_modes =
+                    binding.ids_assigned().map(move |id| (id, VariableUsageMode::regular_binding(span)));
+                Box::new(arg_modes.chain(assigned_modes))
             },
             Constraint::FunctionCallBinding(binding) => {
-                let arg_modes = binding.function_call_arg_ids().map(|id| (id, VariableUsageMode  {
-                    binding_mode: BindingMode::RequirePrebound,
-                    assignment: AssignmentStatus::NotAssigned,
-                    optional_safety: OptionalReferenceSafety::UnwrappingReference(constraint.span()),
-                    optionality_status: OptionalityStatus::UnwrappedInAllPaths,
-                }));
-                let assigned_modes = binding.assigned_optionalities().map(|(id, optionality)| {
-                    let (optional_safety, optionality_status) = match optionality {
-                        VariableOptionality::Optional => (
-                            OptionalReferenceSafety::AbsentOrSafe,
-                            OptionalityStatus::IntactInSomePaths
-                        ),
-                        VariableOptionality::Required => (
-                            OptionalReferenceSafety::UnwrappingReference(constraint.source_span()),
-                            OptionalityStatus::UnwrappedInAllPaths
-                        ),
-                    };
-                    (id, VariableUsageMode  {
-                        binding_mode: BindingMode::AlwaysBinding,
-                        assignment: AssignmentStatus::AtMostOncePerBranch(constraint.source_span()),
-                        optional_safety,
-                        optionality_status,
-                    })
+                let arg_modes =
+                    binding.function_call_arg_ids().map(move |id| (id, VariableUsageMode::regular_input(span)));
+                let assigned_modes = binding.assigned_optionalities().map(move |(id, optionality)| {
+                    (id, VariableUsageMode::assigned(optionality, span))
                 });
                 Box::new(arg_modes.chain(assigned_modes))
             },
         }
     }
 
-    pub(crate) fn for_conjunction(conjunction: &ConjunctionBuilder) -> HashMap<Variable, Self> {
-        let mut modes = HashMap::new();
-        conjunction.constraints().iter().flat_map(Self::of_constraint).for_each(|(id, mode)| {
-            *modes.entry(id).or_default() &= mode;
-        });
-        conjunction
-            .nested_patterns()
-            .iter()
-            .flat_map(|nested| match nested {
-                NestedPatternBuilder::Disjunction(disjunction) => Self::for_disjunction(disjunction).into_iter(),
-                NestedPatternBuilder::Negation(negation) => Self::for_negation(negation).into_iter(),
-                NestedPatternBuilder::Optional(optional) => Self::for_optional(optional).into_iter(),
-            })
-            .for_each(|(id, mode)| {
-                *modes.entry(id).or_default() &= mode;
-            });
-
-        // Reset any safely unwrapped
-        for is_set in conjunction.constraints().iter().filter_map(|c| c.as_is_set()) {
-            for id in is_set.ids() {
-                let entry: &mut VariableUsageMode = modes.entry(id).or_default();
-                entry.optional_safety = OptionalReferenceSafety::AbsentOrSafe;
-            }
-        }
-        modes
-    }
-
-    pub(crate) fn for_disjunction(disjunction: &DisjunctionBuilder) -> HashMap<Variable, Self> {
-        let mut modes = HashMap::new();
-        disjunction.conjunctions().flat_map(|branch| Self::for_conjunction(branch).into_iter()).for_each(
-            |(id, mode)| {
-                *modes.entry(id).or_default() |= mode;
-            },
-        );
-        modes
-    }
-
-    fn for_negation(negation: &NegationBuilder) -> HashMap<Variable, Self> {
-        Self::for_conjunction(negation.conjunction()).into_iter().map(|(var, mode)| {
-            // Could be `impl UnaryNot`, I guess
-            let binding_mode = if mode.binding_mode.is_always_binding() {
-                // if it is binding, we demote it to only locally binding (only relevant in the negation)
-                BindingMode::LocallyBindingInChild
-            } else {
-                mode.binding_mode
-            };
-            let negated_mode = Self {
-                binding_mode,
-                assignment: mode.assignment,
-                optional_safety: mode.optional_safety,
-                optionality_status: OptionalityStatus::IntactInSomePaths,
-            };
-            (var, negated_mode)
-        }).collect()
-    }
-
-    fn for_optional(optional: &OptionalBuilder) -> HashMap<Variable, Self> {
-        Self::for_conjunction(optional.conjunction()).into_iter().map(|(var, mode)| {
-            let binding_mode = if mode.binding_mode.is_always_binding() {
-                BindingMode::BoundInTry
-            } else {
-                mode.binding_mode
-            };
-            let negated_mode = Self {
-                binding_mode: binding_mode,
-                assignment: mode.assignment,
-                optional_safety: mode.optional_safety, // Unless `try` implicitly `isset`s
-                optionality_status: OptionalityStatus::IntactInSomePaths,
-            };
-            (var, negated_mode)
-        }).collect()
-    }
-
-    pub(crate) fn regular_reference(location: LocationNote) -> Self {
+    pub(crate) fn absent() -> Self {
         Self {
-            binding_mode: BindingMode::AlwaysBinding,
+            binding_mode: VariableBindingMode::Absent,
+            assignment: AssignmentStatus::NotAssigned,
+            optional_safety: OptionalReferenceSafety::AbsentOrSafe,
+            optionality_status: OptionalityStatus::IntactInSomePaths,
+        }
+    }
+
+    pub(crate) fn regular_binding(location: LocationNote) -> Self {
+        Self  {
+            binding_mode: VariableBindingMode::AlwaysBinding,
+            assignment: AssignmentStatus::NotAssigned,
+            optional_safety: OptionalReferenceSafety::UnwrappingReference(location),
+            optionality_status: OptionalityStatus::UnwrappedInAllPaths,
+        }
+    }
+
+    pub(crate) fn regular_input(location: LocationNote) -> Self {
+        Self  {
+            binding_mode: VariableBindingMode::RequirePrebound,
             assignment: AssignmentStatus::NotAssigned,
             optional_safety: OptionalReferenceSafety::UnwrappingReference(location),
             optionality_status: OptionalityStatus::UnwrappedInAllPaths,
@@ -193,15 +111,21 @@ impl VariableUsageMode {
     }
 
     pub(crate) fn assigned(return_optionality: VariableOptionality, location: LocationNote) -> Self {
-        let optionality_safety = match return_optionality {
-            VariableOptionality::Optional => OptionalReferenceSafety::AssignedOrStageInput(location),
-            VariableOptionality::Required => OptionalReferenceSafety::UnwrappingReference(location),
+        let (optional_safety, optionality_status) = match return_optionality {
+            VariableOptionality::Optional => (
+                OptionalReferenceSafety::AssignedOrStageInput(location), // TODO: I had AbsentOrSafe down.
+                OptionalityStatus::IntactInSomePaths
+            ),
+            VariableOptionality::Required => (
+                OptionalReferenceSafety::UnwrappingReference(location),
+                OptionalityStatus::UnwrappedInAllPaths
+            ),
         };
-        Self {
-            binding_mode: BindingMode::AlwaysBinding,
+        Self  {
+            binding_mode: VariableBindingMode::AlwaysBinding,
             assignment: AssignmentStatus::AtMostOncePerBranch(location),
-            optional_safety: optionality_safety,
-            optionality_status: OptionalityStatus::UnwrappedInAllPaths,
+            optional_safety,
+            optionality_status,
         }
     }
 }
@@ -227,7 +151,7 @@ impl BitOr for VariableUsageMode {
             assignment: self.assignment | rhs.assignment,
             binding_mode: self.binding_mode | rhs.binding_mode,
             optional_safety: self.optional_safety | rhs.optional_safety,
-            optionality_status: self.optionality_status | rhs.optional_safety,
+            optionality_status: self.optionality_status | rhs.optionality_status,
         }
     }
 }
@@ -245,7 +169,7 @@ impl BitOrAssign for VariableUsageMode {
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
-pub enum BindingMode {
+pub enum VariableBindingMode {
     RequirePrebound,
     AlwaysBinding,
     LocallyBindingInChild, // Bound in some, but not all branches
@@ -254,25 +178,25 @@ pub enum BindingMode {
     Absent,
 }
 
-impl BindingMode {
+impl VariableBindingMode {
     pub fn is_require_prebound(&self) -> bool {
-        *self == BindingMode::RequirePrebound
+        *self == VariableBindingMode::RequirePrebound
     }
 
     pub fn is_always_binding(&self) -> bool {
-        *self == BindingMode::AlwaysBinding
+        *self == VariableBindingMode::AlwaysBinding
     }
 
     pub fn is_locally_binding_in_child(&self) -> bool {
-        *self == BindingMode::LocallyBindingInChild
+        *self == VariableBindingMode::LocallyBindingInChild
     }
 
     pub fn is_optionally_binding(&self) -> bool {
-        *self == BindingMode::BoundInTry
+        *self == VariableBindingMode::BoundInTry
     }
 }
 
-impl BitAnd for BindingMode {
+impl BitAnd for VariableBindingMode {
     type Output = Self;
 
     fn bitand(self, rhs: Self) -> Self {
@@ -287,13 +211,13 @@ impl BitAnd for BindingMode {
     }
 }
 
-impl BitAndAssign for BindingMode {
+impl BitAndAssign for VariableBindingMode {
     fn bitand_assign(&mut self, rhs: Self) {
         *self = *self & rhs;
     }
 }
 
-impl BitOr for BindingMode {
+impl BitOr for VariableBindingMode {
     type Output = Self;
     fn bitor(self, rhs: Self) -> Self {
         match (self, rhs) {

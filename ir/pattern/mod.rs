@@ -94,7 +94,9 @@ macro_rules! impl_pattern_from_pattern_variables {
     };
 }
 pub(self) use impl_pattern_from_pattern_variables;
-use mode_inference::BindingMode;
+use mode_inference::VariableUsageMode;
+use crate::pattern::mode_inference::VariableBindingMode;
+
 // TODO: rename to 'Identifier' in lieu of a better name
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Vertex<ID> {
@@ -380,22 +382,22 @@ impl fmt::Display for ValueType {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct ContextualisedBindingMode(HashMap<Variable, BindingMode>);
+pub(crate) struct ContextualisedBindingMode(HashMap<Variable, VariableUsageMode>);
 
 impl ContextualisedBindingMode {
-    pub(crate) fn for_block(block_binding_modes: HashMap<Variable, BindingMode>) -> ContextualisedBindingMode {
+    pub(crate) fn for_block(block_binding_modes: HashMap<Variable, VariableUsageMode>) -> ContextualisedBindingMode {
         Self(block_binding_modes)
     }
 
     pub(crate) fn from(
-        mut pattern_modes: HashMap<Variable, BindingMode>,
+        mut pattern_modes: HashMap<Variable, VariableUsageMode>,
         parent_modes: &ContextualisedBindingMode,
     ) -> ContextualisedBindingMode {
         pattern_modes.iter_mut().for_each(|(var, mode)| {
-            *mode = match (*mode, parent_modes.0.get(var).copied().unwrap_or(BindingMode::Absent)) {
-                (_, BindingMode::RequirePrebound) => BindingMode::RequirePrebound,
-                (BindingMode::LocallyBindingInChild, BindingMode::AlwaysBinding)
-                | (BindingMode::BoundInTry, BindingMode::AlwaysBinding) => BindingMode::RequirePrebound,
+            *mode = match (*mode, parent_modes.0.get(var).copied().unwrap_or(VariableBindingMode::Absent)) {
+                (_, VariableBindingMode::RequirePrebound) => VariableBindingMode::RequirePrebound,
+                (VariableBindingMode::LocallyBindingInChild, VariableBindingMode::AlwaysBinding)
+                | (VariableBindingMode::BoundInTry, VariableBindingMode::AlwaysBinding) => VariableBindingMode::RequirePrebound,
                 (mode, _) => mode,
             };
         });
@@ -418,11 +420,11 @@ impl PatternVariables {
                 .0
                 .iter()
                 .filter_map(|(var, mode)| match mode {
-                    BindingMode::RequirePrebound => Some((*var, IsRequired::Required)),
-                    BindingMode::AlwaysBinding | BindingMode::BoundInTry => {
+                    VariableBindingMode::RequirePrebound => Some((*var, IsRequired::Required)),
+                    VariableBindingMode::AlwaysBinding | VariableBindingMode::BoundInTry => {
                         Some((*var, IsRequired::NotRequired))
                     }
-                    BindingMode::LocallyBindingInChild | BindingMode::Absent => None,
+                    VariableBindingMode::LocallyBindingInChild | VariableBindingMode::Absent => None,
                 })
                 .collect(),
         )

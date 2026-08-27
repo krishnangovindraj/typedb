@@ -16,7 +16,7 @@ use crate::pattern::{
     Scope,
     ScopeId,
 };
-use crate::pattern::mode_inference::BindingMode;
+use crate::pattern::mode_inference::{OptionalityStatus, VariableBindingMode, VariableUsageMode};
 
 #[derive(Debug, Clone)]
 pub struct Optional {
@@ -83,7 +83,7 @@ impl OptionalBuilder {
 
     pub(crate) fn finish(self, parent_modes: &ContextualisedBindingMode) -> NestedPattern {
         let source_span = self.source_span;
-        let binding_modes = ContextualisedBindingMode::from(self.variable_binding_modes(), parent_modes);
+        let binding_modes = ContextualisedBindingMode::from(self.variable_usage_modes(), parent_modes);
         let branch_id = self.branch_id;
         let conjunction = self.conjunction.finish(&binding_modes);
         let pattern_variables = PatternVariables::from(&binding_modes);
@@ -98,11 +98,15 @@ impl OptionalBuilder {
         &mut self.conjunction
     }
 
-    pub(crate) fn variable_binding_modes(&self) -> HashMap<Variable, BindingMode> {
-        self.conjunction
-            .variable_binding_modes()
-            .into_iter()
-            .map(|(v, mode)| if mode.is_always_binding() { (v, BindingMode::BoundInTry) } else { (v, mode) })
-            .collect()
+    pub(crate) fn variable_usage_modes(&self) -> HashMap<Variable, VariableUsageMode> {
+        let mut inner_modes = self.conjunction.variable_usage_modes();
+        inner_modes.iter_mut().for_each(|(var, mode)| {
+            if mode.binding_mode.is_always_binding() {
+                mode.binding_mode = VariableBindingMode::BoundInTry
+            }
+            mode.optionality_status = OptionalityStatus::IntactInSomePaths;
+            // mode.optional_safety = mode.optional_safety; // Unless `try` implicitly `isset`s
+        });
+        inner_modes
     }
 }
