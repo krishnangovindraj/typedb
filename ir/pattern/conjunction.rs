@@ -196,6 +196,8 @@ impl ConjunctionBuilder {
                 *binding_modes.entry(var).or_default() &= mode;
             }
         }
+        // Reset the ones which are isset
+        compile_error!("Reset the ones which are isset");
         binding_modes
     }
 }

@@ -14,10 +14,7 @@ use itertools::Itertools;
 use structural_equality::StructuralEquality;
 use typeql::common::Span;
 
-use crate::pattern::{
-    AssignmentStatus,
-    mode_inference::{OptionalSafety, OptionalSafetyError},
-};
+use crate::pattern::{AssignmentStatus, mode_inference::{OptionalSafety, OptionalSafetyError}, AnyBranchAssignsOptionally};
 use crate::{
     RepresentationError,
     pattern::{
@@ -28,7 +25,6 @@ use crate::{
         ScopeId,
         conjunction::{Conjunction, ConjunctionBuilder, ConjunctionBuilderWithContext, NestedPatternBuilder},
         constraint::Constraint,
-        // mode_inference::{AssignmentStatus, OptionalReferenceSafety, VariableUsageMode},
         nested_pattern::NestedPattern,
         variable_category::{VariableCategory, VariableOptionality},
     },
@@ -97,7 +93,7 @@ impl<'reg> BlockBuilder<'reg> {
             .retain(|_, var| block_binding_modes.get(var) != Some(&BindingMode::LocallyBindingInChild));
 
         let mut conjunction =
-            self.conjunction.finish(&PatternVariables::for_block(block_binding_modes, self.context.input_variables()));
+            self.conjunction.finish(&PatternVariables::for_block(block_binding_modes, self.context.input_variable_optionalities()));
 
         let optional_modes = validate_all_optional_dereferences_are_safe(&mut conjunction, &self.context)?;
 
@@ -138,7 +134,7 @@ impl<'reg> BlockBuilder<'reg> {
         let mut variable_usage_modes = self.conjunction.variable_binding_modes();
         for (id, optionality) in self.context.input_variable_optionalities() {
             let mode = variable_usage_modes.entry(id).or_default();
-            *mode = BindingMode::AlwaysBinding;
+            *mode = BindingMode::AlwaysBinding(optionality.into());
         }
         variable_usage_modes
     }

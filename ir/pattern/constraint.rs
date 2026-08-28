@@ -33,6 +33,7 @@ use crate::{
         ParameterRegistry, VariableRegistry, block::BlockBuilderContext, function_signature::FunctionSignature,
     },
 };
+use crate::pattern::AnyBranchAssignsOptionally;
 
 #[derive(Debug, Clone)]
 pub struct Constraints {
@@ -98,7 +99,7 @@ impl Constraints {
                     Is::new(old_var, *var, None).into()
                 };
                 variable_mapping.insert(*var, old_var);
-                pattern_variables.0.insert(*var, PatternVariableMode::Binding);
+                pattern_variables.0.insert(*var, PatternVariableMode::Binding(VariableOptionality::Required));
                 check_collector.push(check);
             }
             Ok::<(), Box<RepresentationError>>(())
@@ -736,7 +737,7 @@ impl<ID: IrID> Constraint<ID> {
         fn _all_binding<'a, ID1>(
             it: impl Iterator<Item = ID1> + 'a,
         ) -> Box<dyn Iterator<Item = (ID1, BindingMode)> + 'a> {
-            Box::new(it.map(move |id| (id, BindingMode::AlwaysBinding)))
+            Box::new(it.map(move |id| (id, BindingMode::AlwaysBinding(AnyBranchAssignsOptionally(false)))))
         }
         fn _all_required<'a, ID1>(
             it: impl Iterator<Item = ID1> + 'a,
@@ -2204,7 +2205,7 @@ impl<ID: IrID> ExpressionBinding<ID> {
 
     pub(crate) fn binding_modes(&self) -> impl Iterator<Item = (ID, BindingMode)> + '_ {
         self.ids_assigned()
-            .map(|id| (id, BindingMode::AlwaysBinding))
+            .map(|id| (id, BindingMode::AlwaysBinding(AnyBranchAssignsOptionally(false))))
             .chain(self.expression_ids().map(|id| (id, BindingMode::RequirePrebound)))
     }
 
@@ -2333,9 +2334,9 @@ impl<ID: IrID> FunctionCallBinding<ID> {
     }
 
     pub(crate) fn binding_modes(&self) -> impl Iterator<Item = (ID, BindingMode)> + '_ {
-        self.ids_assigned()
-            .filter(|id| !self.function_call.arguments().contains(id))
-            .map(|id| (id, BindingMode::AlwaysBinding))
+        self.assigned_optionalities()
+            .filter(|(id, _)| !self.function_call.arguments().contains(id))
+            .map(|(id, optionality)| (id, BindingMode::AlwaysBinding(optionality.into())))
             .chain(self.function_call_arg_ids().map(|id| (id, BindingMode::RequirePrebound)))
     }
 
