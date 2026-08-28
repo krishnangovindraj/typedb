@@ -207,6 +207,7 @@ fn add_connection_deletes(
                 connection_deletes.push(ConnectionInstruction::Links(Links { relation, player, role }));
             }
             Constraint::LinksDeduplication(_) | Constraint::RoleName(_) => (), // Ignore. It will have done its job during type-inference
+            Constraint::IsSet(_) => (),                                        // TODO: Do we want these or not?
             Constraint::Iid(_)
             | Constraint::Isa(_)
             | Constraint::Kind(_)
@@ -216,7 +217,6 @@ fn add_connection_deletes(
             | Constraint::Plays(_)
             | Constraint::ExpressionBinding(_)
             | Constraint::Is(_)
-            | Constraint::IsSet(_)
             | Constraint::Comparison(_)
             | Constraint::Sub(_)
             | Constraint::Value(_)

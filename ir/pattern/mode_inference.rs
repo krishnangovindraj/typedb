@@ -69,7 +69,8 @@ impl OptionalSafety {
         let is_sets = conjunction.constraints().iter().filter_map(|constraint| constraint.as_is_set());
         let reset_variables = is_sets.flat_map(|is_set| is_set.ids());
         Self::reset_unwrapped_variables(&mut modes, reset_variables);
-        Self::check_bad_unwraps(&modes)?;
+        Self::tmp__check_bad_unwraps_and_fix(conjunction, &mut modes)?;
+        Self::tmp__inject_checks_for_inputs_and_reset_unwrap(conjunction, &mut modes);
         Ok(modes)
     }
 
@@ -142,6 +143,23 @@ impl OptionalSafety {
         }
         Ok(())
     }
+
+    fn tmp__inject_checks_for_inputs_and_reset_unwrap(
+        optional_or_negation_inner: &mut Conjunction,
+        modes: &mut HashMap<Variable, OptionalSafety>,
+    ) {
+        // Unwrapping inputs earlier than we should causes a change in behaviour, so we have to unwrap at the deepest level.
+        // Temporarily, We have to reset the unwrap so we don't inject checks above.
+        let mut unwrapped_input_variables = Vec::new();
+        for id in optional_or_negation_inner.required_inputs() {
+            let entry = modes.entry(id).or_default();
+            if entry.unwrapping.is_some() {
+                entry.unwrapping = None;
+                unwrapped_input_variables.push(id);
+            }
+        }
+        optional_or_negation_inner.tmp__inject_isset(unwrapped_input_variables);
+    }
 }
 
 // May still be useful if we auto-unwrap in writes.
@@ -151,7 +169,9 @@ fn tmp__inject_issets(conjunction: &mut Conjunction, modes: &mut HashMap<Variabl
     for (&id, mode) in bad_unwraps {
         vars.push(id);
         mode.unwrapping = None;
-        mode.optionality = None;
+        // Don't reset the optionality so we inject checks excessively. Only the first check will be needed.
+        // This could also have been inside a try. Maybe I'm doing it wrong in the main one as well.
+        // mode.optionality = None;
     }
     conjunction.tmp__inject_isset(vars);
 }
