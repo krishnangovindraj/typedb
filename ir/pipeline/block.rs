@@ -332,28 +332,11 @@ fn validate_all_optional_dereferences_are_safe(
     conjunction: &mut Conjunction,
     context: &BlockBuilderContext<'_>,
 ) -> Result<HashMap<Variable, OptionalSafety>, Box<RepresentationError>> {
-
-    // TMP: Fix up any unwraps so we don't break
-    let root_mode_results = OptionalSafety::for_conjunction(conjunction, false).map_err(|safety_error| {
+    let mut root_modes = OptionalSafety::for_conjunction(conjunction).map_err(|safety_error| {
         let OptionalSafetyError { variable, optionality: origin_span, unwrapping: source_span } = safety_error;
         let variable = context.get_variable_name_or_unnamed(variable).to_owned();
         Box::new(RepresentationError::UnsafeOptionalDereferenceBlockOrigin { variable, source_span, origin_span })
-    });
-
-    // TMP: We don't need to fix up in the proper version
-    let mut root_modes = match root_mode_results {
-        Err(err) => {
-            let fixed_result = OptionalSafety::for_conjunction(conjunction, true);
-            // Just in case
-            debug_assert!(fixed_result.is_ok());
-            fixed_result.map_err(|safety_error| {
-                let OptionalSafetyError { variable, optionality: origin_span, unwrapping: source_span } = safety_error;
-                let variable = context.get_variable_name_or_unnamed(variable).to_owned();
-                Box::new(RepresentationError::UnsafeOptionalDereferenceBlockOrigin { variable, source_span, origin_span })
-            })?
-        },
-        Ok(root_modes) => root_modes,
-    };
+    })?;
 
     // This we need to always do
     let new_optionals = context
@@ -364,18 +347,9 @@ fn validate_all_optional_dereferences_are_safe(
     let reset_variables = is_sets.flat_map(|is_set| is_set.ids());
     OptionalSafety::reset_unwrapped_variables(&mut root_modes, reset_variables);
 
-    let result = if context.is_write_stage {
-        // Don't fix write stages. They already error.
-        OptionalSafety::check_bad_unwraps(&mut root_modes)
-    } else {
-        // Fix it up.
-        let result = OptionalSafety::tmp__check_bad_unwraps_and_fix(conjunction, &mut root_modes);
-        debug_assert!(result.is_ok());
-        result
-    };
-    result.map_err(|safety_error| {
+    OptionalSafety::check_bad_unwraps(&mut root_modes).map_err(|safety_error| {
         let OptionalSafetyError { variable, optionality: origin_span, unwrapping: source_span } = safety_error;
-        debug_assert!(origin_span.is_none()); // Just to use it.
+        debug_assert!(origin_span.is_none()); // use it + it should have been flagged earlier
         let variable = context.get_variable_name_or_unnamed(variable).to_owned();
         Box::new(RepresentationError::UnsafeOptionalDereferenceInputOrigin { variable, source_span })
     })?;

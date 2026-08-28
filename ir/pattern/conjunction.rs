@@ -90,10 +90,6 @@ impl Conjunction {
         }
         Ok((new_checks, constraint_mapping, variable_mapping))
     }
-
-    pub(crate) fn tmp__inject_isset(&mut self, variables: Vec<Variable>) {
-        self.constraints.constraints_mut().push(Constraint::IsSet(IsSet::new(variables, None)));
-    }
 }
 
 impl_pattern_from_pattern_variables!(Conjunction);
