@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use answer::variable::Variable;
-use error::needs_update_when_feature_is_implemented;
+use error::{needs_update_when_feature_is_implemented, optional_usage_error};
 
 use crate::pattern::{
     LocationNote, Pattern, conjunction::Conjunction, constraint::Constraint, disjunction::Disjunction,
@@ -27,10 +27,13 @@ pub(crate) struct OptionalSafety {
 }
 
 impl OptionalSafety {
-    pub(crate) fn for_conjunction(conjunction: &Conjunction) -> Result<HashMap<Variable, Self>, OptionalSafetyError> {
+    // TODO: Make conjunction non_optional
+    pub(crate) fn for_conjunction(
+        conjunction: &mut Conjunction,
+    ) -> Result<HashMap<Variable, Self>, OptionalSafetyError> {
         let mut modes: HashMap<Variable, Self> = HashMap::new();
-        for nested in conjunction.nested_patterns().iter() {
-            let nested_modes = match &nested {
+        for nested in conjunction.nested_patterns_mut().iter_mut() {
+            let nested_modes = match nested {
                 NestedPattern::Disjunction(disjunction) => Self::for_disjunction(disjunction),
                 NestedPattern::Optional(optional) => Self::for_optional(optional),
                 NestedPattern::Negation(negation) => Self::for_negation(negation),
@@ -70,9 +73,9 @@ impl OptionalSafety {
         Ok(modes)
     }
 
-    fn for_disjunction(disjunction: &Disjunction) -> Result<HashMap<Variable, Self>, OptionalSafetyError> {
+    fn for_disjunction(disjunction: &mut Disjunction) -> Result<HashMap<Variable, Self>, OptionalSafetyError> {
         let mut modes: HashMap<Variable, Self> = HashMap::new();
-        for branch in disjunction.conjunctions() {
+        for branch in disjunction.conjunctions_mut() {
             for (id, branch_mode) in Self::for_conjunction(branch)? {
                 modes.entry(id).or_default().may_update(branch_mode);
             }
@@ -80,8 +83,8 @@ impl OptionalSafety {
         Ok(modes)
     }
 
-    fn for_optional(optional: &Optional) -> Result<HashMap<Variable, Self>, OptionalSafetyError> {
-        let mut modes = Self::for_conjunction(optional.conjunction())?;
+    fn for_optional(optional: &mut Optional) -> Result<HashMap<Variable, Self>, OptionalSafetyError> {
+        let mut modes = Self::for_conjunction(optional.conjunction_mut())?;
         for id in optional.optionally_bound_by_pattern() {
             let entry = modes.entry(id).or_default();
             entry.optionality = entry.optionality.or(Some(optional.source_span())); // Prefer deeper optional
@@ -90,8 +93,8 @@ impl OptionalSafety {
         Ok(modes)
     }
 
-    fn for_negation(negation: &Negation) -> Result<HashMap<Variable, Self>, OptionalSafetyError> {
-        Self::for_conjunction(negation.conjunction())
+    fn for_negation(negation: &mut Negation) -> Result<HashMap<Variable, Self>, OptionalSafetyError> {
+        Self::for_conjunction(negation.conjunction_mut())
     }
 
     fn may_update(&mut self, other: Self) {
@@ -117,6 +120,16 @@ impl OptionalSafety {
         }
     }
 
+    pub(crate) fn tmp__check_bad_unwraps_and_fix(
+        conjunction: &mut Conjunction,
+        modes: &mut HashMap<Variable, OptionalSafety>,
+    ) -> Result<(), OptionalSafetyError> {
+        if let Err(_err) = Self::check_bad_unwraps(modes) {
+            tmp__inject_issets(conjunction, modes);
+        }
+        Ok(())
+    }
+
     pub(crate) fn check_bad_unwraps(modes: &HashMap<Variable, OptionalSafety>) -> Result<(), OptionalSafetyError> {
         for (&variable, mode) in modes {
             if let Self { optionality: Some(optionality), unwrapping: Some(unwrapping) } = mode {
@@ -129,4 +142,16 @@ impl OptionalSafety {
         }
         Ok(())
     }
+}
+
+// May still be useful if we auto-unwrap in writes.
+fn tmp__inject_issets(conjunction: &mut Conjunction, modes: &mut HashMap<Variable, OptionalSafety>) {
+    let bad_unwraps = modes.iter_mut().filter(|(_, mode)| mode.optionality.is_some() && mode.unwrapping.is_some());
+    let mut vars = Vec::new();
+    for (&id, mode) in bad_unwraps {
+        vars.push(id);
+        mode.unwrapping = None;
+        mode.optionality = None;
+    }
+    conjunction.tmp__inject_isset(vars);
 }

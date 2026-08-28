@@ -19,7 +19,7 @@ use crate::{
     RepresentationError,
     pattern::{
         BindingMode, Pattern, PatternVariables, Scope, ScopeId,
-        constraint::{Constraint, Constraints, ConstraintsBuilder, Unsatisfiable},
+        constraint::{Constraint, Constraints, ConstraintsBuilder, IsSet, Unsatisfiable},
         disjunction::{DisjunctionBuilder, DisjunctionBuilderWithContext},
         impl_pattern_from_pattern_variables,
         negation::NegationBuilder,
@@ -89,6 +89,10 @@ impl Conjunction {
             };
         }
         Ok((new_checks, constraint_mapping, variable_mapping))
+    }
+
+    pub(crate) fn tmp__inject_isset(&mut self, variables: Vec<Variable>) {
+        self.constraints.constraints_mut().push(Constraint::IsSet(IsSet::new(variables, None)));
     }
 }
 

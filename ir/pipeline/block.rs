@@ -96,10 +96,10 @@ impl<'reg> BlockBuilder<'reg> {
             .variable_names_index
             .retain(|_, var| block_binding_modes.get(var) != Some(&BindingMode::LocallyBindingInChild));
 
-        let conjunction =
+        let mut conjunction =
             self.conjunction.finish(&PatternVariables::for_block(block_binding_modes, self.context.input_variables()));
 
-        let optional_modes = validate_all_optional_dereferences_are_safe(&conjunction, &self.context)?;
+        let optional_modes = validate_all_optional_dereferences_are_safe(&mut conjunction, &self.context)?;
 
         validate_is_plannable(
             &conjunction,
@@ -329,7 +329,7 @@ fn validate_optional_returns_recursive(
 }
 
 fn validate_all_optional_dereferences_are_safe(
-    conjunction: &Conjunction,
+    conjunction: &mut Conjunction,
     context: &BlockBuilderContext<'_>,
 ) -> Result<HashMap<Variable, OptionalSafety>, Box<RepresentationError>> {
     let mut root_modes = OptionalSafety::for_conjunction(conjunction).map_err(|safety_error| {
@@ -346,7 +346,7 @@ fn validate_all_optional_dereferences_are_safe(
     let is_sets = conjunction.constraints().iter().filter_map(|constraint| constraint.as_is_set());
     let reset_variables = is_sets.flat_map(|is_set| is_set.ids());
     OptionalSafety::reset_unwrapped_variables(&mut root_modes, reset_variables);
-    OptionalSafety::check_bad_unwraps(&root_modes).map_err(|safety_error| {
+    OptionalSafety::tmp__check_bad_unwraps_and_fix(conjunction, &mut root_modes).map_err(|safety_error| {
         let OptionalSafetyError { variable, optionality: origin_span, unwrapping: source_span } = safety_error;
         debug_assert!(origin_span.is_none()); // Just to use it.
         let variable = context.get_variable_name_or_unnamed(variable).to_owned();
