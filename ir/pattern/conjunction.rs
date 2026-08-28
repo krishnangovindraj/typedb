@@ -146,17 +146,11 @@ impl NestedPatternBuilder {
 
 impl NestedPatternBuilder {
     fn variable_binding_modes(&self) -> HashMap<Variable, BindingMode> {
-        let mut modes = match self {
+        match self {
             NestedPatternBuilder::Disjunction(inner) => inner.variable_binding_modes(),
             NestedPatternBuilder::Negation(inner) => inner.variable_binding_modes(),
             NestedPatternBuilder::Optional(inner) => inner.variable_binding_modes(),
-        };
-        for (_, mode) in &mut modes {
-            if *mode == BindingMode::AlwaysBinding(PatternVariableOptionality::UnwrappedInThisPattern) {
-                *mode = BindingMode::AlwaysBinding(PatternVariableOptionality::NotNone)
-            }
         }
-        modes
     }
 }
 
@@ -173,7 +167,8 @@ impl ConjunctionBuilder {
     }
 
     pub(crate) fn finish(self, parent_modes: &PatternVariables) -> Conjunction {
-        let pattern_variables = PatternVariables::build(self.variable_binding_modes(), parent_modes);
+        let pattern_variables =
+            PatternVariables::build(self.variable_binding_modes(), parent_modes, self.unwrapped_variables());
         let Self { scope_id, constraints, nested_patterns } = self;
         let nested_patterns = nested_patterns.into_iter().map(|builder| builder.finish(&pattern_variables)).collect();
         Conjunction { scope_id, constraints, nested_patterns, pattern_variables }
@@ -202,7 +197,17 @@ impl ConjunctionBuilder {
                 *binding_modes.entry(var).or_default() &= mode;
             }
         }
+        self.unwrapped_variables().for_each(|id| {
+            let mode = binding_modes.get_mut(&id).expect("set");
+            if matches!(mode, BindingMode::AlwaysBinding(_)) {
+                *mode = BindingMode::AlwaysBinding(PatternVariableOptionality::NotNone)
+            }
+        });
         binding_modes
+    }
+
+    pub(crate) fn unwrapped_variables(&self) -> impl Iterator<Item = Variable> {
+        self.constraints.iter().filter_map(|c| c.as_is_set()).flat_map(|is_set| is_set.ids())
     }
 }
 

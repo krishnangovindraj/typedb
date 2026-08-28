@@ -6,7 +6,7 @@
 
 use std::{
     cmp::{Ordering, PartialEq},
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt,
     hash::{Hash, Hasher},
     mem,
@@ -136,7 +136,7 @@ pub(self) use impl_pattern_from_pattern_variables;
 use crate::pattern::{
     conjunction::{ConjunctionBuilder, NestedPatternBuilder},
     constraint::Constraint,
-    disjunction::{DisjunctionBuilder},
+    disjunction::DisjunctionBuilder,
 };
 
 // TODO: rename to 'Identifier' in lieu of a better name
@@ -437,18 +437,20 @@ impl PatternVariables {
     pub(crate) fn for_block(
         block_binding_modes: HashMap<Variable, BindingMode>,
         input_variables: impl Iterator<Item = (Variable, VariableOptionality)>,
+        root_unwrapped_vars: impl Iterator<Item = Variable>,
     ) -> Self {
         let input_modes = input_variables
             .map(|(variable, optionality)| (variable, PatternVariableMode::RequiredInput(optionality)))
             .collect();
-        PatternVariables::build(block_binding_modes, &PatternVariables(input_modes))
+        PatternVariables::build(block_binding_modes, &PatternVariables(input_modes), root_unwrapped_vars)
     }
 
     pub(crate) fn build(
-        mut pattern_modes: HashMap<Variable, BindingMode>,
+        pattern_modes: HashMap<Variable, BindingMode>,
         parent_pattern_variables: &PatternVariables,
+        unwrapped_vars: impl IntoIterator<Item = Variable>,
     ) -> Self {
-        let pattern_variables = pattern_modes
+        let mut pattern_variables: HashMap<Variable, PatternVariableMode> = pattern_modes
             .into_iter()
             .filter_map(|(var, mode)| {
                 let mode = if let Some(parent_mode) = parent_pattern_variables.0.get(&var).copied() {
@@ -464,10 +466,6 @@ impl PatternVariables {
                         }
                         (PatternVariableMode::Binding(o1), BindingMode::AlwaysBinding(o2)) => {
                             let o = match (o1, o2) {
-                                (_, PatternVariableOptionality::UnwrappedInThisPattern) => {
-                                    VariableOptionality::Required
-                                }
-
                                 (VariableOptionality::Optional, _) | (_, PatternVariableOptionality::MaybeNone) => {
                                     VariableOptionality::Optional
                                 }
@@ -509,6 +507,17 @@ impl PatternVariables {
                 Some((var, mode))
             })
             .collect();
+        unwrapped_vars.into_iter().for_each(|id| {
+            if let Some(mode) = pattern_variables.get_mut(&id) {
+                match mode {
+                    PatternVariableMode::Binding(o) => *o = VariableOptionality::Required,
+                    PatternVariableMode::RequiredInput(o) => *o = VariableOptionality::Required,
+                    PatternVariableMode::BoundByTry => {
+                        debug_assert!(false, "A try-bound variable can't be referenced in the same stage")
+                    }
+                }
+            }
+        });
         Self(pattern_variables)
     }
 
@@ -568,14 +577,12 @@ impl PatternVariables {
 pub enum PatternVariableOptionality {
     NotNone, // InAtleastOneBranch
     MaybeNone,
-    UnwrappedInThisPattern,
 }
 
 impl BitOr for PatternVariableOptionality {
     type Output = Self;
     fn bitor(self, other: Self) -> Self {
         match (self, other) {
-            (Self::UnwrappedInThisPattern, _) | (_, Self::UnwrappedInThisPattern) => Self::UnwrappedInThisPattern,
             (Self::MaybeNone, _) | (_, Self::MaybeNone) => Self::MaybeNone,
             (Self::NotNone, Self::NotNone) => Self::NotNone,
         }
@@ -595,7 +602,7 @@ impl Into<VariableOptionality> for PatternVariableOptionality {
     fn into(self) -> VariableOptionality {
         match self {
             Self::MaybeNone => VariableOptionality::Optional,
-            Self::NotNone | Self::UnwrappedInThisPattern => VariableOptionality::Required,
+            Self::NotNone => VariableOptionality::Required,
         }
     }
 }

@@ -17,7 +17,7 @@ use typeql::common::Span;
 use crate::{
     RepresentationError,
     pattern::{
-        AssignmentStatus, BindingMode, BranchID, Pattern, PatternVariables, ScopeId,
+        AssignmentStatus, BindingMode, BranchID, Pattern, PatternVariableOptionality, PatternVariables, ScopeId,
         conjunction::{Conjunction, ConjunctionBuilder, ConjunctionBuilderWithContext, NestedPatternBuilder},
         constraint::Constraint,
         nested_pattern::NestedPattern,
@@ -86,8 +86,11 @@ impl<'reg> BlockBuilder<'reg> {
         self.context
             .variable_names_index
             .retain(|_, var| block_binding_modes.get(var) != Some(&BindingMode::LocallyBindingInChild));
-        let block_pattern_variables =
-            PatternVariables::for_block(block_binding_modes, self.context.input_variable_optionalities());
+        let block_pattern_variables = PatternVariables::for_block(
+            block_binding_modes,
+            self.context.input_variable_optionalities(),
+            self.conjunction.unwrapped_variables(),
+        );
 
         let mut conjunction = self.conjunction.finish(&block_pattern_variables);
 
@@ -314,26 +317,26 @@ fn validate_all_optional_dereferences_are_safe(
     context: &BlockBuilderContext<'_>,
 ) -> Result<(), Box<RepresentationError>> {
     let bad_unwrap = conjunction.constraints().iter().find_map(|constraint| {
-        let id = constraint.ids().find(|id| conjunction.optionality(id) == VariableOptionality::Optional)?;
+        let (id, _) = constraint
+            .variable_binding_modes()
+            .filter(|(_, mode)| mode != &BindingMode::AlwaysBinding(PatternVariableOptionality::MaybeNone))
+            .find(|(id, _)| (conjunction.optionality(id) == VariableOptionality::Optional))?;
         Some((id, constraint.source_span()))
     });
     if let Some((id, source_span)) = bad_unwrap {
         let variable = context.get_variable_name_or_unnamed(id).to_owned();
         return Err(Box::new(RepresentationError::UnsafeOptionalDereference { variable, source_span }));
     }
-    conjunction.nested_patterns().iter().try_for_each(|nested| {
-        match nested {
-            NestedPattern::Disjunction(disjunction) => {
-                disjunction.conjunctions().iter().try_for_each(|branch| {
-                    validate_all_optional_dereferences_are_safe(branch, context)
-                })
-            },
-            NestedPattern::Negation(negation) => {
-                validate_all_optional_dereferences_are_safe(negation.conjunction(), context)
-            }
-            NestedPattern::Optional(optional) => {
-                validate_all_optional_dereferences_are_safe(optional.conjunction(), context)
-            }
+    conjunction.nested_patterns().iter().try_for_each(|nested| match nested {
+        NestedPattern::Disjunction(disjunction) => disjunction
+            .conjunctions()
+            .iter()
+            .try_for_each(|branch| validate_all_optional_dereferences_are_safe(branch, context)),
+        NestedPattern::Negation(negation) => {
+            validate_all_optional_dereferences_are_safe(negation.conjunction(), context)
+        }
+        NestedPattern::Optional(optional) => {
+            validate_all_optional_dereferences_are_safe(optional.conjunction(), context)
         }
     })?;
     Ok(())
