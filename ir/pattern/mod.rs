@@ -497,7 +497,7 @@ pub enum BindingMode {
     RequirePrebound,
     AlwaysBinding,
     LocallyBindingInChild, // Bound in some, but not all branches
-    BoundInTry,            // Try blocks, but not assignments. Assignments are always binding regardless.
+    BoundInTry,            // Try blocks, but not assignments. Assignments are AlwaysBinding regardless.
     #[default]
     Absent,
 }

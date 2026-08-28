@@ -90,6 +90,8 @@ impl<'reg> BlockBuilder<'reg> {
         validate_expressions_assignments_are_unique(&self.conjunction, &self.context)?;
 
         // Update names, optionalities get updated later.
+        // TODO: Try to move this down and use the pattern variables for the block.
+        // TODO: Actually, shouldn't the LocallyBinding be kept?
         self.context
             .variable_names_index
             .retain(|_, var| block_binding_modes.get(var) != Some(&BindingMode::LocallyBindingInChild));
@@ -97,7 +99,6 @@ impl<'reg> BlockBuilder<'reg> {
         let conjunction =
             self.conjunction.finish(&PatternVariables::for_block(block_binding_modes, self.context.input_variables()));
 
-        // let variable_usage_modes = todo_must_implement!("TODO");
         let optional_modes = validate_all_optional_dereferences_are_safe(&conjunction, &self.context)?;
 
         validate_is_plannable(
@@ -138,9 +139,6 @@ impl<'reg> BlockBuilder<'reg> {
         for (id, optionality) in self.context.input_variable_optionalities() {
             let mode = variable_usage_modes.entry(id).or_default();
             *mode = BindingMode::AlwaysBinding;
-            // if optionality == VariableOptionality::Optional {
-            //     mode.optional_safety = mode.optional_safety & OptionalReferenceSafety::AssignedOrStageInput(None);
-            // }
         }
         variable_usage_modes
     }
