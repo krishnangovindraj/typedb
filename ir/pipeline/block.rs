@@ -5,7 +5,7 @@
  */
 
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     fmt,
 };
 
@@ -14,21 +14,12 @@ use itertools::Itertools;
 use structural_equality::StructuralEquality;
 use typeql::common::Span;
 
-use crate::pattern::{
-    AssignmentStatus,
-    mode_inference::{OptionalSafety, OptionalSafetyError},
-};
 use crate::{
     RepresentationError,
     pattern::{
-        BindingMode,
-        BranchID,
-        Pattern,
-        PatternVariables,
-        ScopeId,
+        AssignmentStatus, BindingMode, BranchID, Pattern, PatternVariables, ScopeId,
         conjunction::{Conjunction, ConjunctionBuilder, ConjunctionBuilderWithContext, NestedPatternBuilder},
         constraint::Constraint,
-        // mode_inference::{AssignmentStatus, OptionalReferenceSafety, VariableUsageMode},
         nested_pattern::NestedPattern,
         variable_category::{VariableCategory, VariableOptionality},
     },
@@ -95,11 +86,12 @@ impl<'reg> BlockBuilder<'reg> {
         self.context
             .variable_names_index
             .retain(|_, var| block_binding_modes.get(var) != Some(&BindingMode::LocallyBindingInChild));
+        let block_pattern_variables =
+            PatternVariables::for_block(block_binding_modes, self.context.input_variable_optionalities());
 
-        let mut conjunction =
-            self.conjunction.finish(&PatternVariables::for_block(block_binding_modes, self.context.input_variables()));
+        let mut conjunction = self.conjunction.finish(&block_pattern_variables);
 
-        let optional_modes = validate_all_optional_dereferences_are_safe(&mut conjunction, &self.context)?;
+        validate_all_optional_dereferences_are_safe(&mut conjunction, &self.context)?;
 
         validate_is_plannable(
             &conjunction,
@@ -108,19 +100,8 @@ impl<'reg> BlockBuilder<'reg> {
         )?;
 
         // Update
-        for (v, mode) in optional_modes {
-            debug_assert!({
-                if let Some(VariableOptionality::Required) = self.context.variable_optionalities.get(&v) {
-                    mode.optionality.is_none() // i.e. is optional
-                } else {
-                    true
-                }
-            });
-            let optionality = match mode.optionality {
-                Some(_) => VariableOptionality::Optional,
-                None => VariableOptionality::Required,
-            };
-            self.context.variable_optionalities.insert(v, optionality);
+        for id in block_pattern_variables.visible_referenced_variables() {
+            self.context.variable_optionalities.insert(id, block_pattern_variables.optionality(&id));
         }
 
         Ok(Block { conjunction, block_context: self.context.block_context })
@@ -138,7 +119,7 @@ impl<'reg> BlockBuilder<'reg> {
         let mut variable_usage_modes = self.conjunction.variable_binding_modes();
         for (id, optionality) in self.context.input_variable_optionalities() {
             let mode = variable_usage_modes.entry(id).or_default();
-            *mode = BindingMode::AlwaysBinding;
+            *mode = BindingMode::AlwaysBinding(optionality.into());
         }
         variable_usage_modes
     }
@@ -329,31 +310,33 @@ fn validate_optional_returns_recursive(
 }
 
 fn validate_all_optional_dereferences_are_safe(
-    conjunction: &mut Conjunction,
+    conjunction: &Conjunction,
     context: &BlockBuilderContext<'_>,
-) -> Result<HashMap<Variable, OptionalSafety>, Box<RepresentationError>> {
-    let mut root_modes = OptionalSafety::for_conjunction(conjunction).map_err(|safety_error| {
-        let OptionalSafetyError { variable, optionality: origin_span, unwrapping: source_span } = safety_error;
-        let variable = context.get_variable_name_or_unnamed(variable).to_owned();
-        Box::new(RepresentationError::UnsafeOptionalDereferenceBlockOrigin { variable, source_span, origin_span })
+) -> Result<(), Box<RepresentationError>> {
+    let bad_unwrap = conjunction.constraints().iter().find_map(|constraint| {
+        let id = constraint.ids().find(|id| conjunction.optionality(id) == VariableOptionality::Optional)?;
+        Some((id, constraint.source_span()))
+    });
+    if let Some((id, source_span)) = bad_unwrap {
+        let variable = context.get_variable_name_or_unnamed(id).to_owned();
+        return Err(Box::new(RepresentationError::UnsafeOptionalDereference { variable, source_span }));
+    }
+    conjunction.nested_patterns().iter().try_for_each(|nested| {
+        match nested {
+            NestedPattern::Disjunction(disjunction) => {
+                disjunction.conjunctions().iter().try_for_each(|branch| {
+                    validate_all_optional_dereferences_are_safe(branch, context)
+                })
+            },
+            NestedPattern::Negation(negation) => {
+                validate_all_optional_dereferences_are_safe(negation.conjunction(), context)
+            }
+            NestedPattern::Optional(optional) => {
+                validate_all_optional_dereferences_are_safe(optional.conjunction(), context)
+            }
+        }
     })?;
-
-    // This we need to always do
-    let new_optionals = context
-        .input_variable_optionalities()
-        .filter_map(|(id, o)| (o == VariableOptionality::Optional).then_some((id, None)));
-    OptionalSafety::update_with_new_optionals(&mut root_modes, new_optionals);
-    let is_sets = conjunction.constraints().iter().filter_map(|constraint| constraint.as_is_set());
-    let reset_variables = is_sets.flat_map(|is_set| is_set.ids());
-    OptionalSafety::reset_unwrapped_variables(&mut root_modes, reset_variables);
-
-    OptionalSafety::check_bad_unwraps(&mut root_modes).map_err(|safety_error| {
-        let OptionalSafetyError { variable, optionality: origin_span, unwrapping: source_span } = safety_error;
-        debug_assert!(origin_span.is_none()); // use it + it should have been flagged earlier
-        let variable = context.get_variable_name_or_unnamed(variable).to_owned();
-        Box::new(RepresentationError::UnsafeOptionalDereferenceInputOrigin { variable, source_span })
-    })?;
-    Ok(root_modes)
+    Ok(())
 }
 
 fn validate_expressions_assignments_are_unique(

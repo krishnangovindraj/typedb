@@ -18,7 +18,7 @@ use typeql::common::Span;
 use crate::{
     RepresentationError,
     pattern::{
-        BindingMode, Pattern, PatternVariables, Scope, ScopeId,
+        BindingMode, Pattern, PatternVariableOptionality, PatternVariables, Scope, ScopeId,
         constraint::{Constraint, Constraints, ConstraintsBuilder, IsSet, Unsatisfiable},
         disjunction::{DisjunctionBuilder, DisjunctionBuilderWithContext},
         impl_pattern_from_pattern_variables,
@@ -146,11 +146,17 @@ impl NestedPatternBuilder {
 
 impl NestedPatternBuilder {
     fn variable_binding_modes(&self) -> HashMap<Variable, BindingMode> {
-        match self {
+        let mut modes = match self {
             NestedPatternBuilder::Disjunction(inner) => inner.variable_binding_modes(),
             NestedPatternBuilder::Negation(inner) => inner.variable_binding_modes(),
             NestedPatternBuilder::Optional(inner) => inner.variable_binding_modes(),
+        };
+        for (_, mode) in &mut modes {
+            if *mode == BindingMode::AlwaysBinding(PatternVariableOptionality::UnwrappedInThisPattern) {
+                *mode = BindingMode::AlwaysBinding(PatternVariableOptionality::NotNone)
+            }
         }
+        modes
     }
 }
 
