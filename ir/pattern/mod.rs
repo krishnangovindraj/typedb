@@ -608,7 +608,7 @@ impl Into<VariableOptionality> for PatternVariableOptionality {
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
-pub enum BindingMode {
+pub(super) enum BindingMode {
     RequirePrebound,
     AlwaysBinding(PatternVariableOptionality),
     LocallyBindingInChild, // Bound in some, but not all branches
@@ -618,19 +618,19 @@ pub enum BindingMode {
 }
 
 impl BindingMode {
-    pub fn is_require_prebound(&self) -> bool {
+    pub(super) fn is_require_prebound(&self) -> bool {
         *self == BindingMode::RequirePrebound
     }
 
-    pub fn is_always_binding(&self) -> bool {
+    pub(super) fn is_always_binding(&self) -> bool {
         matches!(self, BindingMode::AlwaysBinding(_))
     }
 
-    pub fn is_locally_binding_in_child(&self) -> bool {
+    pub(super) fn is_locally_binding_in_child(&self) -> bool {
         *self == BindingMode::LocallyBindingInChild
     }
 
-    pub fn is_optionally_binding(&self) -> bool {
+    pub(super) fn is_optionally_binding(&self) -> bool {
         *self == BindingMode::BoundInTry
     }
 }
