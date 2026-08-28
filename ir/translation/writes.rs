@@ -34,7 +34,7 @@ pub fn translate_insert(
     insert: &typeql::query::stage::Insert,
 ) -> Result<Block, Box<RepresentationError>> {
     validate_insert_patterns(&insert.patterns)?;
-    let mut builder = Block::builder(context.new_block_builder_context(value_parameters));
+    let mut builder = Block::builder(context.new_block_builder_context_for_writes(value_parameters));
     let function_index = HashMapFunctionSignatureIndex::empty();
     let mut conjunction = builder.conjunction_mut();
     add_patterns(&function_index, &mut conjunction, &insert.patterns)?;
@@ -90,7 +90,7 @@ pub fn translate_update(
     update: &typeql::query::stage::Update,
 ) -> Result<Block, Box<RepresentationError>> {
     validate_update_patterns(context, &update.patterns)?;
-    let mut builder = Block::builder(context.new_block_builder_context(value_parameters));
+    let mut builder = Block::builder(context.new_block_builder_context_for_writes(value_parameters));
     let function_index = HashMapFunctionSignatureIndex::empty();
     let mut conjunction = builder.conjunction_mut();
     add_patterns(&function_index, &mut conjunction, &update.patterns)?;
@@ -103,7 +103,7 @@ pub fn translate_put(
     put: &Put,
 ) -> Result<Block, Box<RepresentationError>> {
     validate_insert_patterns(&put.patterns)?;
-    let mut builder = Block::builder(context.new_block_builder_context(value_parameters));
+    let mut builder = Block::builder(context.new_block_builder_context_for_writes(value_parameters));
     let function_index = HashMapFunctionSignatureIndex::empty();
     let mut conjunction = builder.conjunction_mut();
     add_patterns(&function_index, &mut conjunction, &put.patterns)?;
@@ -135,7 +135,7 @@ pub fn translate_delete(
 ) -> Result<(Block, Vec<Variable>), Box<RepresentationError>> {
     validate_delete(delete)?;
     validate_deleted_variables_availability(context, delete)?;
-    let mut builder = Block::builder(context.new_block_builder_context(value_parameters));
+    let mut builder = Block::builder(context.new_block_builder_context_for_writes(value_parameters));
     let mut deleted_concepts = Vec::new();
     let mut conjunction = builder.conjunction_mut();
     add_deletables(&delete.deletables, &mut conjunction, &mut deleted_concepts)?;

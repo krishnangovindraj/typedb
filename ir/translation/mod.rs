@@ -86,6 +86,15 @@ impl PipelineTranslationContext {
         BlockBuilderContext::new(variable_registry, last_stage_visible_variables, variable_optionality, parameters)
     }
 
+    pub fn new_block_builder_context_for_writes<'a>(
+        &'a mut self,
+        parameters: &'a mut ParameterRegistry,
+    ) -> BlockBuilderContext<'a> {
+        let mut new_context = Self::new_block_builder_context(self, parameters);
+        new_context.is_write_stage = true;
+        new_context
+    }
+
     pub(crate) fn register_reduced_variable(
         &mut self,
         name: &str,

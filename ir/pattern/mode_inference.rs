@@ -30,13 +30,14 @@ impl OptionalSafety {
     // TODO: Make conjunction non_optional
     pub(crate) fn for_conjunction(
         conjunction: &mut Conjunction,
+        tmp__fix_unwraps: bool,
     ) -> Result<HashMap<Variable, Self>, OptionalSafetyError> {
         let mut modes: HashMap<Variable, Self> = HashMap::new();
         for nested in conjunction.nested_patterns_mut().iter_mut() {
             let nested_modes = match nested {
-                NestedPattern::Disjunction(disjunction) => Self::for_disjunction(disjunction),
-                NestedPattern::Optional(optional) => Self::for_optional(optional),
-                NestedPattern::Negation(negation) => Self::for_negation(negation),
+                NestedPattern::Disjunction(disjunction) => Self::for_disjunction(disjunction, tmp__fix_unwraps),
+                NestedPattern::Optional(optional) => Self::for_optional(optional, tmp__fix_unwraps),
+                NestedPattern::Negation(negation) => Self::for_negation(negation, tmp__fix_unwraps),
             }?;
             for (id, mode) in nested_modes {
                 modes.entry(id).or_default().may_update(mode)
@@ -69,23 +70,27 @@ impl OptionalSafety {
         let is_sets = conjunction.constraints().iter().filter_map(|constraint| constraint.as_is_set());
         let reset_variables = is_sets.flat_map(|is_set| is_set.ids());
         Self::reset_unwrapped_variables(&mut modes, reset_variables);
-        Self::tmp__check_bad_unwraps_and_fix(conjunction, &mut modes)?;
-        Self::tmp__inject_checks_for_inputs_and_reset_unwrap(conjunction, &mut modes);
+        if tmp__fix_unwraps {
+            Self::tmp__check_bad_unwraps_and_fix(conjunction, &mut modes)?;
+            Self::tmp__inject_checks_for_inputs_and_reset_unwrap(conjunction, &mut modes);
+        } else {
+            Self::check_bad_unwraps(&modes)?;
+        }
         Ok(modes)
     }
 
-    fn for_disjunction(disjunction: &mut Disjunction) -> Result<HashMap<Variable, Self>, OptionalSafetyError> {
+    fn for_disjunction(disjunction: &mut Disjunction, tmp__fix_unwraps: bool) -> Result<HashMap<Variable, Self>, OptionalSafetyError> {
         let mut modes: HashMap<Variable, Self> = HashMap::new();
         for branch in disjunction.conjunctions_mut() {
-            for (id, branch_mode) in Self::for_conjunction(branch)? {
+            for (id, branch_mode) in Self::for_conjunction(branch, tmp__fix_unwraps)? {
                 modes.entry(id).or_default().may_update(branch_mode);
             }
         }
         Ok(modes)
     }
 
-    fn for_optional(optional: &mut Optional) -> Result<HashMap<Variable, Self>, OptionalSafetyError> {
-        let mut modes = Self::for_conjunction(optional.conjunction_mut())?;
+    fn for_optional(optional: &mut Optional, tmp__fix_unwraps: bool) -> Result<HashMap<Variable, Self>, OptionalSafetyError> {
+        let mut modes = Self::for_conjunction(optional.conjunction_mut(), tmp__fix_unwraps)?;
         for id in optional.optionally_bound_by_pattern() {
             let entry = modes.entry(id).or_default();
             entry.optionality = entry.optionality.or(Some(optional.source_span())); // Prefer deeper optional
@@ -94,8 +99,8 @@ impl OptionalSafety {
         Ok(modes)
     }
 
-    fn for_negation(negation: &mut Negation) -> Result<HashMap<Variable, Self>, OptionalSafetyError> {
-        Self::for_conjunction(negation.conjunction_mut())
+    fn for_negation(negation: &mut Negation, tmp__fix_unwraps: bool) -> Result<HashMap<Variable, Self>, OptionalSafetyError> {
+        Self::for_conjunction(negation.conjunction_mut(), tmp__fix_unwraps)
     }
 
     fn may_update(&mut self, other: Self) {
