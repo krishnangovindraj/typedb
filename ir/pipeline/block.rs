@@ -310,7 +310,7 @@ fn validate_optional_returns_recursive(
     })?;
     conjunction.constraints().iter().filter_map(|c| c.as_function_call_binding()).for_each(|call| {
         for (var, mode) in call.binding_modes() {
-            if mode == BindingMode::OptionallyBinding {
+            if mode == BindingMode::BoundInTry {
                 acc.insert(var, call.source_span());
             }
         }
@@ -319,7 +319,7 @@ fn validate_optional_returns_recursive(
     let conjunction_binding_modes = conjunction.variable_binding_modes();
     let reused_optional_return_opt = acc.iter().find(|(var, _)| match conjunction_binding_modes.get(var) {
         None => false,
-        Some(mode) => *mode != BindingMode::OptionallyBinding,
+        Some(mode) => *mode != BindingMode::BoundInTry,
     });
     if let Some((var, &source_span)) = reused_optional_return_opt {
         let variable = context.get_variable_name_or_unnamed(*var).to_owned();

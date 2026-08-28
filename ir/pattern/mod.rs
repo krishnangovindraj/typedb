@@ -433,9 +433,7 @@ impl PatternVariables {
                         (_, BindingMode::Absent) => None?,
                         (PatternVariableMode::RequiredInput, _) => PatternVariableMode::RequiredInput,
                         (PatternVariableMode::Binding, BindingMode::LocallyBindingInChild)
-                        | (PatternVariableMode::Binding, BindingMode::OptionallyBinding) => {
-                            PatternVariableMode::RequiredInput
-                        }
+                        | (PatternVariableMode::Binding, BindingMode::BoundInTry) => PatternVariableMode::RequiredInput,
                         (PatternVariableMode::Binding, BindingMode::RequirePrebound) => {
                             PatternVariableMode::RequiredInput
                         }
@@ -449,7 +447,7 @@ impl PatternVariables {
                             // Happens in the transition from optional to inner
                             PatternVariableMode::Binding
                         }
-                        (PatternVariableMode::OptionallyBinding, BindingMode::OptionallyBinding) => {
+                        (PatternVariableMode::OptionallyBinding, BindingMode::BoundInTry) => {
                             // There's a nested optional even deeper.
                             PatternVariableMode::OptionallyBinding
                         }
@@ -461,7 +459,7 @@ impl PatternVariables {
                     );
                     match mode {
                         BindingMode::RequirePrebound => PatternVariableMode::RequiredInput,
-                        BindingMode::OptionallyBinding => PatternVariableMode::OptionallyBinding,
+                        BindingMode::BoundInTry => PatternVariableMode::OptionallyBinding,
                         BindingMode::AlwaysBinding => PatternVariableMode::Binding,
                         BindingMode::LocallyBindingInChild => None?,
                         BindingMode::Absent => None?,
@@ -499,7 +497,7 @@ pub enum BindingMode {
     RequirePrebound,
     AlwaysBinding,
     LocallyBindingInChild, // Bound in some, but not all branches
-    OptionallyBinding,     // Try blocks & assignments.
+    BoundInTry,            // Try blocks, but not assignments. Assignments are always binding regardless.
     #[default]
     Absent,
 }
@@ -518,7 +516,7 @@ impl BindingMode {
     }
 
     pub fn is_optionally_binding(&self) -> bool {
-        *self == BindingMode::OptionallyBinding
+        *self == BindingMode::BoundInTry
     }
 }
 
@@ -532,7 +530,7 @@ impl BitAnd for BindingMode {
             (Self::AlwaysBinding, _) | (_, Self::AlwaysBinding) => Self::AlwaysBinding,
             (Self::RequirePrebound, _) | (_, Self::RequirePrebound) => Self::RequirePrebound,
             (Self::LocallyBindingInChild, _) | (_, Self::LocallyBindingInChild) => Self::RequirePrebound,
-            (Self::OptionallyBinding, Self::OptionallyBinding) => Self::RequirePrebound,
+            (Self::BoundInTry, Self::BoundInTry) => Self::RequirePrebound,
         }
     }
 }
@@ -541,7 +539,7 @@ impl BitOr for BindingMode {
     type Output = Self;
     fn bitor(self, rhs: Self) -> Self {
         match (self, rhs) {
-            (Self::OptionallyBinding, Self::OptionallyBinding) => Self::OptionallyBinding,
+            (Self::BoundInTry, Self::BoundInTry) => Self::BoundInTry,
             (Self::AlwaysBinding, Self::AlwaysBinding) => Self::AlwaysBinding,
             (Self::Absent, Self::Absent) => Self::Absent,
             (Self::Absent, Self::AlwaysBinding) | (Self::AlwaysBinding, Self::Absent) => Self::LocallyBindingInChild,
@@ -549,7 +547,7 @@ impl BitOr for BindingMode {
                 Self::LocallyBindingInChild
             }
             (Self::RequirePrebound, _) | (_, Self::RequirePrebound) => Self::RequirePrebound,
-            (Self::OptionallyBinding, _) | (_, Self::OptionallyBinding) => Self::RequirePrebound,
+            (Self::BoundInTry, _) | (_, Self::BoundInTry) => Self::RequirePrebound,
             (Self::LocallyBindingInChild, _) | (_, Self::LocallyBindingInChild) => {
                 // This preserves associativity, but doesn't correctly escalate to RequirePrebound.
                 // ((AlwaysBinding | AlwaysBinding) | Absent) should be required
