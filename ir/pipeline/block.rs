@@ -145,17 +145,9 @@ fn validate_no_unbound_variable_categories(
             source_span: context.variable_registry.source_span(variable),
         }))
     } else {
-        conjunction.nested_patterns().iter().try_for_each(|nested| match nested {
-            NestedPatternBuilder::Disjunction(disjunction) => {
-                disjunction.conjunctions().try_for_each(|c| validate_no_unbound_variable_categories(c, context))
-            }
-            NestedPatternBuilder::Negation(negation) => {
-                validate_no_unbound_variable_categories(negation.conjunction(), context)
-            }
-            NestedPatternBuilder::Optional(optional) => {
-                validate_no_unbound_variable_categories(optional.conjunction(), context)
-            }
-        })?;
+        conjunction
+            .nested_patterns_flattened()
+            .try_for_each(|inner_conjunction| validate_no_unbound_variable_categories(inner_conjunction, context))?;
         Ok(())
     }
 }
@@ -165,26 +157,12 @@ fn validate_no_optionals_in_negations(
     this_conjunction_in_negation: bool,
 ) -> Result<(), Box<RepresentationError>> {
     if this_conjunction_in_negation {
-        if let Some(optional) = conjunction
-            .nested_patterns()
-            .iter()
-            .filter_map(|nested| match nested {
-                NestedPatternBuilder::Optional(optional) => Some(optional),
-                _ => None,
-            })
-            .next()
-        {
+        if let Some(optional) = conjunction.nested_patterns().iter().find_map(|nested| nested.as_optional()) {
             return Err(Box::new(RepresentationError::OptionalInNegation {}));
         }
     }
-    conjunction.nested_patterns().iter().try_for_each(|nested| match nested {
-        NestedPatternBuilder::Disjunction(disjunction) => disjunction
-            .conjunctions()
-            .try_for_each(|c| validate_no_optionals_in_negations(c, this_conjunction_in_negation)),
-        NestedPatternBuilder::Negation(negation) => validate_no_optionals_in_negations(negation.conjunction(), true),
-        NestedPatternBuilder::Optional(optional) => {
-            validate_no_optionals_in_negations(optional.conjunction(), this_conjunction_in_negation)
-        }
+    conjunction.nested_patterns_flattened().try_for_each(|inner_conjunction| {
+        validate_no_optionals_in_negations(inner_conjunction, this_conjunction_in_negation)
     })
 }
 
@@ -212,19 +190,9 @@ fn validate_is_variables_have_same_category(
             source_span: is.source_span(),
         }));
     }
-
-    conjunction.nested_patterns().iter().try_for_each(|nested| match nested {
-        NestedPatternBuilder::Disjunction(disjunction) => disjunction
-            .conjunctions()
-            .try_for_each(|inner| validate_is_variables_have_same_category(inner, variable_registry)),
-        NestedPatternBuilder::Negation(negation) => {
-            validate_is_variables_have_same_category(negation.conjunction(), variable_registry)
-        }
-        NestedPatternBuilder::Optional(optional) => {
-            validate_is_variables_have_same_category(optional.conjunction(), variable_registry)
-        }
+    conjunction.nested_patterns_flattened().try_for_each(|inner_conjunction| {
+        validate_is_variables_have_same_category(inner_conjunction, variable_registry)
     })?;
-
     Ok(())
 }
 
@@ -253,17 +221,9 @@ fn find_constraints_referencing_variable(conjunction: &ConjunctionBuilder, varia
     spans.extend(
         conjunction.constraints().iter().filter(|c| c.ids().contains(&variable)).filter_map(|c| c.source_span()),
     );
-    conjunction.nested_patterns().iter().for_each(|nested| match nested {
-        NestedPatternBuilder::Disjunction(disjunction) => {
-            disjunction.conjunctions().for_each(|c| find_constraints_referencing_variable(c, variable, spans));
-        }
-        NestedPatternBuilder::Negation(negation) => {
-            find_constraints_referencing_variable(negation.conjunction(), variable, spans)
-        }
-        NestedPatternBuilder::Optional(optional) => {
-            find_constraints_referencing_variable(optional.conjunction(), variable, spans)
-        }
-    })
+    conjunction
+        .nested_patterns_flattened()
+        .for_each(|inner_conjunction| find_constraints_referencing_variable(inner_conjunction, variable, spans))
 }
 
 fn validate_optional_returns(
@@ -279,17 +239,9 @@ fn validate_optional_returns_recursive(
     conjunction: &ConjunctionBuilder,
     acc: &mut HashMap<Variable, Option<Span>>,
 ) -> Result<(), Box<RepresentationError>> {
-    conjunction.nested_patterns().iter().try_for_each(|nested| match nested {
-        NestedPatternBuilder::Disjunction(disjunction) => {
-            disjunction.conjunctions().try_for_each(|branch| validate_optional_returns_recursive(context, branch, acc))
-        }
-        NestedPatternBuilder::Negation(negation) => {
-            validate_optional_returns_recursive(context, negation.conjunction(), acc)
-        }
-        NestedPatternBuilder::Optional(optional) => {
-            validate_optional_returns_recursive(context, optional.conjunction(), acc)
-        }
-    })?;
+    conjunction
+        .nested_patterns_flattened()
+        .try_for_each(|inner_conjunction| validate_optional_returns_recursive(context, inner_conjunction, acc))?;
     conjunction.constraints().iter().filter_map(|c| c.as_function_call_binding()).for_each(|call| {
         for (var, mode) in call.binding_modes() {
             if mode == BindingMode::BoundInTry {
@@ -320,25 +272,16 @@ fn validate_all_optional_dereferences_are_safe(
         let (id, _) = constraint
             .variable_binding_modes()
             .filter(|(_, mode)| mode != &BindingMode::AlwaysBinding(PatternVariableOptionality::MaybeNone))
-            .find(|(id, _)| (conjunction.optionality(id) == VariableOptionality::Optional))?;
+            .find(|(id, _)| conjunction.optionality(id) == VariableOptionality::Optional)?;
         Some((id, constraint.source_span()))
     });
     if let Some((id, source_span)) = bad_unwrap {
         let variable = context.get_variable_name_or_unnamed(id).to_owned();
         return Err(Box::new(RepresentationError::UnsafeOptionalDereference { variable, source_span }));
     }
-    conjunction.nested_patterns().iter().try_for_each(|nested| match nested {
-        NestedPattern::Disjunction(disjunction) => disjunction
-            .conjunctions()
-            .iter()
-            .try_for_each(|branch| validate_all_optional_dereferences_are_safe(branch, context)),
-        NestedPattern::Negation(negation) => {
-            validate_all_optional_dereferences_are_safe(negation.conjunction(), context)
-        }
-        NestedPattern::Optional(optional) => {
-            validate_all_optional_dereferences_are_safe(optional.conjunction(), context)
-        }
-    })?;
+    conjunction
+        .nested_patterns_flattened()
+        .try_for_each(|nested| validate_all_optional_dereferences_are_safe(nested, context))?;
     Ok(())
 }
 

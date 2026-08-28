@@ -19,7 +19,7 @@ use crate::{
     RepresentationError,
     pattern::{
         BindingMode, Pattern, PatternVariableOptionality, PatternVariables, Scope, ScopeId,
-        constraint::{Constraint, Constraints, ConstraintsBuilder, IsSet, Unsatisfiable},
+        constraint::{Constraint, Constraints, ConstraintsBuilder, Unsatisfiable},
         disjunction::{DisjunctionBuilder, DisjunctionBuilderWithContext},
         impl_pattern_from_pattern_variables,
         negation::NegationBuilder,
@@ -52,6 +52,14 @@ impl Conjunction {
 
     pub fn nested_patterns_mut(&mut self) -> &mut [NestedPattern] {
         &mut self.nested_patterns
+    }
+
+    pub(crate) fn nested_patterns_flattened(&self) -> impl Iterator<Item = &Conjunction> + '_ {
+        let negations = self.nested_patterns().iter().filter_map(|n| n.as_negation()).map(|n| n.conjunction());
+        let optionals = self.nested_patterns().iter().filter_map(|n| n.as_optional()).map(|n| n.conjunction());
+        let disjunctions =
+            self.nested_patterns().iter().filter_map(|n| n.as_disjunction()).flat_map(|d| d.conjunctions().iter());
+        negations.chain(optionals).chain(disjunctions)
     }
 
     pub fn set_unsatisfiable(&mut self) {
@@ -142,14 +150,33 @@ impl NestedPatternBuilder {
             NestedPatternBuilder::Optional(optional) => optional.finish(parent_modes),
         }
     }
-}
 
-impl NestedPatternBuilder {
     fn variable_binding_modes(&self) -> HashMap<Variable, BindingMode> {
         match self {
             NestedPatternBuilder::Disjunction(inner) => inner.variable_binding_modes(),
             NestedPatternBuilder::Negation(inner) => inner.variable_binding_modes(),
             NestedPatternBuilder::Optional(inner) => inner.variable_binding_modes(),
+        }
+    }
+
+    pub fn as_disjunction(&self) -> Option<&DisjunctionBuilder> {
+        match self {
+            Self::Disjunction(disjunction) => Some(disjunction),
+            _ => None,
+        }
+    }
+
+    pub fn as_negation(&self) -> Option<&NegationBuilder> {
+        match self {
+            Self::Negation(negation) => Some(negation),
+            _ => None,
+        }
+    }
+
+    pub fn as_optional(&self) -> Option<&OptionalBuilder> {
+        match self {
+            Self::Optional(optional) => Some(optional),
+            _ => None,
         }
     }
 }
@@ -208,6 +235,14 @@ impl ConjunctionBuilder {
 
     pub(crate) fn unwrapped_variables(&self) -> impl Iterator<Item = Variable> {
         self.constraints.iter().filter_map(|c| c.as_is_set()).flat_map(|is_set| is_set.ids())
+    }
+
+    pub(crate) fn nested_patterns_flattened(&self) -> impl Iterator<Item = &ConjunctionBuilder> + '_ {
+        let negations = self.nested_patterns().iter().filter_map(|n| n.as_negation()).map(|n| n.conjunction());
+        let optionals = self.nested_patterns().iter().filter_map(|n| n.as_optional()).map(|n| n.conjunction());
+        let disjunctions =
+            self.nested_patterns().iter().filter_map(|n| n.as_disjunction()).flat_map(|d| d.conjunctions());
+        negations.chain(optionals).chain(disjunctions)
     }
 }
 
