@@ -89,23 +89,16 @@ impl<'reg> BlockBuilder<'reg> {
         validate_is_variables_have_same_category(&self.conjunction, &self.context.variable_registry)?;
         validate_expressions_assignments_are_unique(&self.conjunction, &self.context)?;
 
-        // Update
-        block_binding_modes.iter().for_each(|(v, mode)| {
-            let optionality = if mode.is_optionally_binding() {
-                VariableOptionality::Optional
-            } else {
-                VariableOptionality::Required
-            };
-            self.context.variable_optionalities.insert(*v, optionality);
-        });
+        // Update names, optionalities get updated later.
         self.context
             .variable_names_index
             .retain(|_, var| block_binding_modes.get(var) != Some(&BindingMode::LocallyBindingInChild));
+
         let conjunction =
             self.conjunction.finish(&PatternVariables::for_block(block_binding_modes, self.context.input_variables()));
 
         // let variable_usage_modes = todo_must_implement!("TODO");
-        validate_all_optional_dereferences_are_safe(&conjunction, &self.context)?;
+        let optional_modes = validate_all_optional_dereferences_are_safe(&conjunction, &self.context)?;
 
         validate_is_plannable(
             &conjunction,
@@ -113,8 +106,23 @@ impl<'reg> BlockBuilder<'reg> {
             &self.context.variable_registry,
         )?;
 
-        let block_context = self.context.block_context;
-        Ok(Block { conjunction, block_context })
+        // Update
+        for (v, mode) in optional_modes {
+            debug_assert!({
+                if let Some(VariableOptionality::Required) = self.context.variable_optionalities.get(&v) {
+                    mode.optionality.is_none() // i.e. is optional
+                } else {
+                    true
+                }
+            });
+            let optionality = match mode.optionality {
+                Some(_) => VariableOptionality::Optional,
+                None => VariableOptionality::Required,
+            };
+            self.context.variable_optionalities.insert(v, optionality);
+        }
+
+        Ok(Block { conjunction, block_context: self.context.block_context })
     }
 
     pub fn conjunction_mut<'ctx>(&'ctx mut self) -> ConjunctionBuilderWithContext<'ctx, 'reg> {

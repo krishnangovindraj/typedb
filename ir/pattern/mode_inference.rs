@@ -82,9 +82,10 @@ impl OptionalSafety {
 
     fn for_optional(optional: &Optional) -> Result<HashMap<Variable, Self>, OptionalSafetyError> {
         let mut modes = Self::for_conjunction(optional.conjunction())?;
-        for id in optional.conjunction().optionally_bound_by_pattern() {
+        for id in optional.optionally_bound_by_pattern() {
             let entry = modes.entry(id).or_default();
             entry.optionality = entry.optionality.or(Some(optional.source_span())); // Prefer deeper optional
+            entry.unwrapping = None;
         }
         Ok(modes)
     }

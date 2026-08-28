@@ -607,7 +607,7 @@ impl AssignmentStatus {
             for (id, status) in nested_statuses {
                 *assignment_statuses.entry(id).or_default() &= status;
             }
-        };
+        }
         assignment_statuses
     }
 

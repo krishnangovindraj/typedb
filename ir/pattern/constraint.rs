@@ -2336,9 +2336,10 @@ impl<ID: IrID> FunctionCallBinding<ID> {
         self.ids_assigned()
             .filter(|id| !self.function_call.arguments().contains(id))
             .map(|id| match self.optionally_assigned.contains(&id) {
-                true => (id, BindingMode::OptionallyBinding),
+                true => (id, BindingMode::OptionallyBinding), //
                 false => (id, BindingMode::AlwaysBinding),
             })
+            // .map(|id| (id, BindingMode::AlwaysBinding))
             .chain(self.function_call_arg_ids().map(|id| (id, BindingMode::RequirePrebound)))
     }
 
