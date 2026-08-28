@@ -761,9 +761,9 @@ impl<ID: IrID> Constraint<ID> {
             Constraint::Comparison(comparison) => _all_required(comparison.ids()),
             Constraint::Is(is) => _all_binding(is.ids()),
             Constraint::Unsatisfiable(inner) => _all_binding(inner.ids()),
-            Constraint::IsSet(inner) => _all_required(inner.ids()),
             Constraint::LinksDeduplication(_) => Box::new(iter::empty()),
 
+            Constraint::IsSet(is_set) => Box::new(is_set.binding_modes()),
             Constraint::ExpressionBinding(binding) => Box::new(binding.binding_modes()),
             Constraint::FunctionCallBinding(binding) => Box::new(binding.binding_modes()),
         }
@@ -2980,6 +2980,12 @@ impl<ID: IrID> IsSet<ID> {
         let variables = self.variables.iter().map(|v| v.clone().map(mapping)).collect();
         let source_span = self.source_span;
         IsSet { variables, source_span }
+    }
+
+    fn binding_modes(&self) -> impl Iterator<Item=(ID, BindingMode)> {
+        self.ids().map(|id| {
+            (id, BindingMode::AlwaysBinding(PatternVariableOptionality::UnwrappedInThisPattern))
+        })
     }
 }
 
