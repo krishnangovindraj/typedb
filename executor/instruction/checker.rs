@@ -40,7 +40,6 @@ use crate::{instruction::FilterFn, pipeline::stage::ExecutionContext, row::Maybe
 pub(crate) struct Checker<T: 'static> {
     extractors: HashMap<ExecutorVariable, fn(&T) -> VariableValue<'_>>,
     pub checks: Vec<CheckInstruction<ExecutorVariable>>,
-    _phantom_data: PhantomData<T>,
 }
 
 type BoxExtractor<T> = Box<dyn for<'a> Fn(&'a T) -> VariableValue<'a>>;
@@ -64,7 +63,7 @@ impl<T> Checker<T> {
         checks: Vec<CheckInstruction<ExecutorVariable>>,
         extractors: HashMap<ExecutorVariable, fn(&T) -> VariableValue<'_>>,
     ) -> Self {
-        Self { extractors, checks, _phantom_data: PhantomData }
+        Self { extractors, checks }
     }
 
     pub(crate) fn value_range_for(

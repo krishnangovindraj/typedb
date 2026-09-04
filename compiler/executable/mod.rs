@@ -6,6 +6,8 @@
 
 use std::{
     collections::{HashMap, HashSet},
+    fmt,
+    fmt::Formatter,
     sync::atomic::{AtomicU64, Ordering},
 };
 
@@ -47,12 +49,6 @@ pub struct WritePatternCondition(pub Vec<CheckInstruction<ExecutorVariable>>);
 impl WritePatternCondition {
     pub fn build(conjunction: &Conjunction, variable_positions: &HashMap<Variable, VariablePosition>) -> Self {
         let required_variables = conjunction.constraints().iter().filter_map(|c| c.as_is_set()).flat_map(|c| c.ids());
-        // let without_is_set = conjunction // Probably not needed
-        //     .constraints()
-        //     .iter()
-        //     .flat_map(|constraint| constraint.ids())
-        //     .filter(|id| conjunction.is_input(id) && conjunction.optionality(id) == VariableOptionality::Optional);
-        // let required_variables = required_variables.chain(without_is_set);
         let required_variable_positions = required_variables.map(|v| variable_positions[&v]);
         let is_set_checks = required_variable_positions
             .map(|pos| CheckInstruction::NotNone { variable: ExecutorVariable::RowPosition(pos) });
@@ -67,6 +63,17 @@ impl std::ops::Deref for WritePatternCondition {
     type Target = Vec<CheckInstruction<ExecutorVariable>>;
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl fmt::Display for WritePatternCondition {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[")?;
+        for check in &self.0 {
+            write!(f, "{check}, ")?;
+        }
+        writeln!(f, "]")?;
+        Ok(())
     }
 }
 

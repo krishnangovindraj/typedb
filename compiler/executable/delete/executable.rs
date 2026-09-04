@@ -86,7 +86,7 @@ pub fn compile(
 pub struct ConditionalDelete {
     pub concept_instructions: Vec<ThingInstruction>,
     pub connection_instructions: Vec<ConnectionInstruction>,
-    pub required_input_variables: WritePatternCondition,
+    pub condition: WritePatternCondition,
 }
 
 impl ConditionalDelete {
@@ -114,7 +114,7 @@ impl ConditionalDelete {
         // We can't just use required_inputs because that's recursive and we only want those at this level.
         let required_input_variables = WritePatternCondition::build(conjunction, input_variables);
 
-        Ok(Self { concept_instructions, connection_instructions, required_input_variables })
+        Ok(Self { concept_instructions, connection_instructions, condition: required_input_variables })
     }
 }
 

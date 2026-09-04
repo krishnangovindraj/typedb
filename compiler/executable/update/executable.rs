@@ -89,7 +89,7 @@ pub fn compile(
 pub struct ConditionalUpdate {
     pub concept_instructions: Vec<ConceptInstruction>,
     pub connection_instructions: Vec<ConnectionInstruction>,
-    pub required_input_variables: WritePatternCondition,
+    pub condition: WritePatternCondition,
 }
 
 impl ConditionalUpdate {
@@ -115,7 +115,7 @@ impl ConditionalUpdate {
 
         let concept_instructions = concept_instructions_map_to_vec(concept_instruction_map);
 
-        Ok(Self { concept_instructions, connection_instructions, required_input_variables })
+        Ok(Self { concept_instructions, connection_instructions, condition: required_input_variables })
     }
 }
 

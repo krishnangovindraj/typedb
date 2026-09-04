@@ -103,7 +103,7 @@ pub fn compile(
 pub struct ConditionalInsert {
     pub concept_instructions: Vec<ConceptInstruction>,
     pub connection_instructions: Vec<ConnectionInstruction>,
-    pub required_input_variables: WritePatternCondition,
+    pub condition: WritePatternCondition,
 }
 
 impl ConditionalInsert {
@@ -129,7 +129,7 @@ impl ConditionalInsert {
         let required_input_variables = WritePatternCondition::build(conjunction, variable_positions);
 
         let concept_instructions = concept_instructions_map_to_vec(concept_instructions_map);
-        Ok(Self { concept_instructions, connection_instructions, required_input_variables })
+        Ok(Self { concept_instructions, connection_instructions, condition: required_input_variables })
     }
 }
 
