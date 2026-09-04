@@ -29,8 +29,8 @@ use crate::{
     pipeline::{
         PipelineExecutionError, WrittenRowsIterator,
         insert::prepare_output_rows,
-        required_inputs_satisfied,
         stage::{ExecutionContext, StageAPI, StageIterator},
+        write_condition_satisfied,
     },
     row::Row,
     write::{WriteError, write_instruction::AsWriteInstruction},
@@ -192,7 +192,7 @@ fn may_execute_concept_instructions(
     parameters: &ParameterRegistry,
     row: &mut Row<'_>,
 ) -> Result<(), Box<WriteError>> {
-    if !required_inputs_satisfied(&update.required_input_variables, row) {
+    if !write_condition_satisfied(&update.required_input_variables, row) {
         return Ok(());
     }
 
@@ -220,7 +220,7 @@ fn may_execute_connection_instructions(
     parameters: &ParameterRegistry,
     row: &mut Row<'_>,
 ) -> Result<(), Box<WriteError>> {
-    if !required_inputs_satisfied(&update.required_input_variables, row) {
+    if !write_condition_satisfied(&update.required_input_variables, row) {
         return Ok(());
     }
 

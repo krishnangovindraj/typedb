@@ -26,8 +26,9 @@ use crate::{
     ExecutionInterrupt,
     batch::Batch,
     pipeline::{
-        PipelineExecutionError, StageIterator, WrittenRowsIterator, required_inputs_satisfied,
+        PipelineExecutionError, StageIterator, WrittenRowsIterator,
         stage::{ExecutionContext, StageAPI},
+        write_condition_satisfied,
     },
     row::{MaybeOwnedRow, Row},
     write::{WriteError, write_instruction::AsWriteInstruction},
@@ -223,7 +224,7 @@ fn may_execute_concept_instructions(
     parameters: &ParameterRegistry,
     row: &mut Row<'_>,
 ) -> Result<(), Box<WriteError>> {
-    if !required_inputs_satisfied(&insert.required_input_variables, row) {
+    if !write_condition_satisfied(&insert.required_input_variables, row) {
         return Ok(());
     }
 
@@ -251,7 +252,7 @@ fn may_execute_connection_instructions(
     parameters: &ParameterRegistry,
     row: &mut Row<'_>,
 ) -> Result<(), Box<WriteError>> {
-    if !required_inputs_satisfied(&insert.required_input_variables, row) {
+    if !write_condition_satisfied(&insert.required_input_variables, row) {
         return Ok(());
     }
 

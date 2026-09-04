@@ -4,7 +4,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use compiler::executable::RequiredVariablesForWrite;
+use compiler::{
+    ExecutorVariable,
+    executable::{WritePatternCondition, match_::instructions::CheckInstruction},
+};
 use concept::error::ConceptReadError;
 use error::typedb_error;
 use lending_iterator::LendingIterator;
@@ -57,8 +60,12 @@ impl LendingIterator for WrittenRowsIterator {
     }
 }
 
-fn required_inputs_satisfied(required_variables: &RequiredVariablesForWrite, row: &Row<'_>) -> bool {
-    required_variables.iter().all(|position| position.as_usize() < row.len() && !row.get(*position).is_none())
+fn write_condition_satisfied(condition: &WritePatternCondition, row: &Row<'_>) -> bool {
+    condition.iter().all(|check| {
+        let CheckInstruction::NotNone { variable } = check else { unreachable!() };
+        let ExecutorVariable::RowPosition(pos) = variable else { unreachable!() };
+        !row.get(*pos).is_none()
+    })
 }
 
 impl StageIterator for WrittenRowsIterator {

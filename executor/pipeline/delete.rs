@@ -20,8 +20,9 @@ use storage::snapshot::WritableSnapshot;
 use crate::{
     ExecutionInterrupt,
     pipeline::{
-        PipelineExecutionError, StageIterator, WrittenRowsIterator, required_inputs_satisfied,
+        PipelineExecutionError, StageIterator, WrittenRowsIterator,
         stage::{ExecutionContext, StageAPI},
+        write_condition_satisfied,
     },
     row::Row,
     write::{WriteError, write_instruction::AsWriteInstruction},
@@ -162,7 +163,7 @@ pub fn may_execute_delete_connections(
     parameters: &ParameterRegistry,
     input_output_row: &mut Row<'_>,
 ) -> Result<(), Box<WriteError>> {
-    if !required_inputs_satisfied(&delete.required_input_variables, input_output_row) {
+    if !write_condition_satisfied(&delete.required_input_variables, input_output_row) {
         return Ok(());
     }
 
@@ -192,7 +193,7 @@ pub fn may_execute_delete_concepts(
     parameters: &ParameterRegistry,
     input_output_row: &mut Row<'_>,
 ) -> Result<(), Box<WriteError>> {
-    if !required_inputs_satisfied(&delete.required_input_variables, input_output_row) {
+    if !write_condition_satisfied(&delete.required_input_variables, input_output_row) {
         return Ok(());
     }
 

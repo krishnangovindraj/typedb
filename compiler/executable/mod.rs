@@ -11,13 +11,16 @@ use std::{
 
 use answer::variable::Variable;
 use error::typedb_error;
-use ir::pattern::{Pattern, conjunction::Conjunction, constraint::Comparator, variable_category::VariableOptionality};
+use ir::pattern::{Pattern, conjunction::Conjunction, constraint::Comparator};
+use itertools::Itertools;
 use typeql::common::Span;
 
 use crate::{
-    VariablePosition,
+    ExecutorVariable, VariablePosition,
     executable::{
-        fetch::executable::FetchCompilationError, insert::TypeSource, match_::planner::ConjunctionCompilationError,
+        fetch::executable::FetchCompilationError,
+        insert::TypeSource,
+        match_::{instructions::CheckInstruction, planner::ConjunctionCompilationError},
     },
 };
 
@@ -39,9 +42,9 @@ pub fn next_executable_id() -> u64 {
 }
 
 #[derive(Debug)]
-pub struct RequiredVariablesForWrite(HashSet<VariablePosition>);
+pub struct WritePatternCondition(pub Vec<CheckInstruction<ExecutorVariable>>);
 
-impl RequiredVariablesForWrite {
+impl WritePatternCondition {
     pub fn build(conjunction: &Conjunction, variable_positions: &HashMap<Variable, VariablePosition>) -> Self {
         let required_variables = conjunction.constraints().iter().filter_map(|c| c.as_is_set()).flat_map(|c| c.ids());
         // let without_is_set = conjunction // Probably not needed
@@ -50,12 +53,18 @@ impl RequiredVariablesForWrite {
         //     .flat_map(|constraint| constraint.ids())
         //     .filter(|id| conjunction.is_input(id) && conjunction.optionality(id) == VariableOptionality::Optional);
         // let required_variables = required_variables.chain(without_is_set);
-        Self(required_variables.filter_map(|id| variable_positions.get(&id).copied()).collect())
+        let required_variable_positions = required_variables.map(|v| variable_positions[&v]);
+        let is_set_checks = required_variable_positions
+            .map(|pos| CheckInstruction::NotNone { variable: ExecutorVariable::RowPosition(pos) });
+
+        let mut checks = Vec::new();
+        checks.extend(is_set_checks);
+        Self(checks)
     }
 }
 
-impl std::ops::Deref for RequiredVariablesForWrite {
-    type Target = HashSet<VariablePosition>;
+impl std::ops::Deref for WritePatternCondition {
+    type Target = Vec<CheckInstruction<ExecutorVariable>>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }

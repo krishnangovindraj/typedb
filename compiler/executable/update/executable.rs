@@ -17,7 +17,7 @@ use crate::{
     VariablePosition,
     annotation::type_annotations::{BlockAnnotations, TypeAnnotations},
     executable::{
-        RequiredVariablesForWrite, WriteCompilationError,
+        WriteCompilationError, WritePatternCondition,
         insert::{
             VariableSource,
             executable::{
@@ -89,7 +89,7 @@ pub fn compile(
 pub struct ConditionalUpdate {
     pub concept_instructions: Vec<ConceptInstruction>,
     pub connection_instructions: Vec<ConnectionInstruction>,
-    pub required_input_variables: RequiredVariablesForWrite,
+    pub required_input_variables: WritePatternCondition,
 }
 
 impl ConditionalUpdate {
@@ -111,7 +111,7 @@ impl ConditionalUpdate {
         let connection_instructions =
             add_connections(conjunction, block_annotations, variable_positions, variable_registry)?;
 
-        let required_input_variables = RequiredVariablesForWrite::build(conjunction, variable_positions);
+        let required_input_variables = WritePatternCondition::build(conjunction, variable_positions);
 
         let concept_instructions = concept_instructions_map_to_vec(concept_instruction_map);
 
