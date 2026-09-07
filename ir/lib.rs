@@ -241,6 +241,12 @@ typedb_error! {
             source_span: Option<Span>,
             other_span: Option<Span>,
         ),
+        IfConditionVariableUnavailable(
+            38,
+            "The variable '{variable}' referenced in an 'if' condition in a write stage is unavailable. It should be bound in the previous stage.",
+            variable: String,
+            source_span: Option<Span>,
+        ),
         UpdateVariableUnavailable(
             39,
             "The variable '{variable}' referenced in the update stage is unavailable. It should be bound in the previous stage.",
@@ -265,7 +271,7 @@ typedb_error! {
         ),
         IllegalStatementForPut(
             43,
-            "Illegal statement '{constraint_type}' provided for a put stage. Only 'has', 'links', 'isa' and 'isset' constraints are allowed.",
+            "Illegal statement '{constraint_type}' provided for a put stage. Only 'has', 'links' and 'isa' constraints are allowed.",
             constraint_type: String,
             source_span: Option<Span>,
         ),
@@ -278,7 +284,7 @@ typedb_error! {
         ),
         IllegalStatementForInsert(
             45,
-            "Illegal statement provided for an insert stage. Only 'has', 'links', 'isa' and 'isset' constraints are allowed.",
+            "Illegal statement provided for an insert stage. Only 'has', 'links' and 'isa' constraints are allowed.",
             source_span: Option<Span>,
         ),
         IllegalNestedPatternForInsert(
