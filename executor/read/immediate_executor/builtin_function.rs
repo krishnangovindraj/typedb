@@ -117,7 +117,6 @@ pub(crate) fn get_owns_doc(
             row.copy_selected_from_row(input_row.as_reference(), selected_variables);
             row.set(return_position, doc_value);
         });
-        todo_must_implement!("Does the early-return has to be inside here?");
     }
     Ok(())
 }
@@ -146,7 +145,6 @@ pub(crate) fn get_plays_doc(
             row.copy_selected_from_row(input_row.as_reference(), selected_variables);
             row.set(return_position, doc_value);
         });
-        todo_must_implement!("Does the early-return has to be inside here?");
     }
     Ok(())
 }
