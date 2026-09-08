@@ -169,7 +169,7 @@ impl InlinedCallExecutor {
             let returned_row = batch.get_row(return_index);
             if check_indices.iter().all(|(src, dst)| returned_row.get(*src) == input.get(*dst)) {
                 output_batch.append(|mut output_row| {
-                    output_row.copy_mapped(input.as_reference(), self.selected_variables.iter().map(|&p| (p, p)));
+                    output_row.copy_selected_from_row(input.as_reference(), &self.selected_variables);
                     output_row.copy_mapped(
                         returned_row.as_reference(),
                         self.assignment_positions

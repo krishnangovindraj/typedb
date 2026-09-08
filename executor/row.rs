@@ -59,11 +59,8 @@ impl<'a> Row<'a> {
         *self.provenance = row.provenance()
     }
 
-    pub(crate) fn copy_from(&mut self, row: &[VariableValue<'static>], multiplicity: u64, provenance: Provenance) {
-        debug_assert!(self.len() == row.len());
-        self.row.clone_from_slice(row);
-        *self.multiplicity = multiplicity;
-        *self.provenance = provenance
+    pub(crate) fn copy_selected_from_row(&mut self, row: MaybeOwnedRow<'_>, selected: &[VariablePosition]) {
+        self.copy_mapped(row, selected.iter().map(|&p| (p, p)))
     }
 
     pub(crate) fn copy_mapped(
