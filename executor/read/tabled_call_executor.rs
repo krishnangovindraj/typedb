@@ -28,6 +28,7 @@ pub(crate) struct TabledCallExecutor {
     argument_positions: Vec<VariablePosition>,
     assignment_positions: Vec<Option<VariablePosition>>,
     output_width: u32,
+    selected_variables: Vec<VariablePosition>,
     active_executor: Option<TabledCallExecutorState>,
 }
 
@@ -54,9 +55,17 @@ impl TabledCallExecutor {
         function_id: FunctionID,
         argument_positions: Vec<VariablePosition>,
         assignment_positions: Vec<Option<VariablePosition>>,
+        selected_variables: Vec<VariablePosition>,
         output_width: u32,
     ) -> Self {
-        Self { function_id, argument_positions, assignment_positions, output_width, active_executor: None }
+        Self {
+            function_id,
+            argument_positions,
+            assignment_positions,
+            output_width,
+            selected_variables,
+            active_executor: None,
+        }
     }
 
     pub(crate) fn output_width(&self) -> u32 {

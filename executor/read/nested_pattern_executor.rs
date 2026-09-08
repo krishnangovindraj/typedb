@@ -127,6 +127,7 @@ pub struct InlinedCallExecutor {
     pub inner: PatternExecutor,
     pub arg_mapping: Vec<VariablePosition>,
     pub assignment_positions: Vec<Option<VariablePosition>>,
+    pub selected_variables: Vec<VariablePosition>,
     pub output_width: u32,
     pub parameter_registry: Arc<ParameterRegistry>,
 }
@@ -141,6 +142,7 @@ impl InlinedCallExecutor {
             inner,
             arg_mapping: function_call.arguments.clone(),
             assignment_positions: function_call.assigned.clone(),
+            selected_variables: function_call.selected_variables.clone(),
             output_width: function_call.output_width,
             parameter_registry,
         }
@@ -167,7 +169,7 @@ impl InlinedCallExecutor {
             let returned_row = batch.get_row(return_index);
             if check_indices.iter().all(|(src, dst)| returned_row.get(*src) == input.get(*dst)) {
                 output_batch.append(|mut output_row| {
-                    output_row.copy_from_row(input.as_reference());
+                    output_row.copy_mapped(input.as_reference(), self.selected_variables.iter().map(|&p| (p, p)));
                     output_row.copy_mapped(
                         returned_row.as_reference(),
                         self.assignment_positions
