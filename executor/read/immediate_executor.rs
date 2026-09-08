@@ -885,7 +885,7 @@ impl AssignExecutor {
 }
 
 pub(crate) struct CheckExecutor {
-    checker: Checker<()>,
+    checks: Vec<CheckInstruction<ExecutorVariable>>,
     selected_variables: Vec<VariablePosition>,
     output_width: u32,
     input: Option<FixedBatch>,
@@ -894,7 +894,7 @@ pub(crate) struct CheckExecutor {
 
 impl fmt::Debug for CheckExecutor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "CheckExecutor (with checks {:?})", self.checker.checks)
+        write!(f, "CheckExecutor (with checks {:?})", self.checks)
     }
 }
 
@@ -905,8 +905,7 @@ impl CheckExecutor {
         output_width: u32,
         profile: Arc<StepProfile>,
     ) -> Self {
-        let checker = Checker::new(checks, HashMap::new());
-        Self { checker, selected_variables, output_width, input: None, profile }
+        Self { checks, selected_variables, output_width, input: None, profile }
     }
 
     fn reset(&mut self) {
@@ -938,9 +937,7 @@ impl CheckExecutor {
 
         while let Some(row) = input.next() {
             let input_row = row.map_err(|err| err.clone())?;
-            if self
-                .checker
-                .filter(context, &input_row, (), self.profile.storage_counters())
+            if Checker::filter(&self.checks, context, &input_row, self.profile.storage_counters())
                 .map_err(|err| ReadExecutionError::ConceptRead { typedb_source: err })?
             {
                 output.append(|mut row| {
