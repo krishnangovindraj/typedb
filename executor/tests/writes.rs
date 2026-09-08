@@ -195,9 +195,12 @@ fn execute_insert<Snapshot: WritableSnapshot + 'static>(
     )
     .unwrap();
 
-    println!("Insert Vertex:\n{:?}", &insert_plan.concept_instructions);
-    println!("Insert Edges:\n{:?}", &insert_plan.connection_instructions);
-
+    println!("Insert plans:\n");
+    for (i, plan) in insert_plan.inserts.iter().enumerate() {
+        print!("-- Plan[{i}] --\n");
+        println!("{plan}\n");
+    }
+    println!("-- end plans --\n");
     println!("Insert output row schema: {:?}", &insert_plan.output_row_schema);
 
     let snapshot = Arc::new(snapshot);

@@ -4,7 +4,11 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    fmt,
+    fmt::Formatter,
+};
 
 use answer::{Type, variable::Variable};
 use encoding::graph::type_::Kind;
@@ -142,6 +146,15 @@ impl ConditionalInsert {
 
         let concept_instructions = concept_instructions_map_to_vec(concept_instructions_map);
         Ok(Self { concept_instructions, connection_instructions, required_input_variables })
+    }
+}
+
+impl fmt::Display for ConditionalInsert {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Required variables: [{}]", self.required_input_variables.0.iter().join(", "))?;
+        writeln!(f, "Insert Vertex: [{}]", &self.concept_instructions.iter().join(", "))?;
+        writeln!(f, "Insert Edges: [{}]", &self.connection_instructions.iter().join(", "))?;
+        Ok(())
     }
 }
 
