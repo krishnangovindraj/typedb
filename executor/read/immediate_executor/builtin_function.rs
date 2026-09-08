@@ -565,17 +565,6 @@ pub(crate) fn put_all_metas_into_batch(
     Ok(())
 }
 
-pub(crate) fn row_into_parts_widened(
-    input_row: &MaybeOwnedRow<'_>,
-    index: VariablePosition,
-) -> (Vec<VariableValue<'static>>, u64, Provenance) {
-    let (mut row, multiplicity, provenance) = input_row.clone().into_owned_parts();
-    if row.len() <= index.as_usize() {
-        row.resize(index.as_usize() + 1, VariableValue::None);
-    }
-    (row, multiplicity, provenance)
-}
-
 pub(crate) fn get_owns(
     context: &ExecutionContext<impl ReadableSnapshot>,
     owner: &VariableValue<'_>,
