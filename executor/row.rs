@@ -59,8 +59,21 @@ impl<'a> Row<'a> {
         *self.provenance = row.provenance()
     }
 
-    pub(crate) fn copy_selected_from_row(&mut self, row: MaybeOwnedRow<'_>, selected: &[VariablePosition]) {
-        self.copy_mapped(row, selected.iter().map(|&p| (p, p)))
+    pub(crate) fn copy_input_and_extend(
+        &mut self,
+        input: MaybeOwnedRow<'_>,
+        selected: &[VariablePosition],
+        extension: impl IntoIterator<Item = (VariablePosition, VariableValue<'static>)>,
+        extension_multiplicity: u64,
+    ) {
+        self.copy_mapped(input, selected.iter().map(|&p| (p, p)));
+        for (pos, value) in extension {
+            // TODO: Should this check `selected.contains(pos)` instead?
+            if pos.as_usize() < self.len() {
+                self.set(pos, value);
+            }
+        }
+        *self.multiplicity *= extension_multiplicity;
     }
 
     pub(crate) fn copy_mapped(
