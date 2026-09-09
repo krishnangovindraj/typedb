@@ -489,10 +489,22 @@ fn query_structure_constraint(
                 )?),
             })),
         }),
+        Constraint::DeleteConcepts(delete_concepts) => {
+            let variables = delete_concepts
+                .vertices()
+                .map(|v| encode_structure_vertex_variable(v.into()))
+                .collect::<Result<Vec<_>, _>>()?;
+            constraints.push(conjunction_proto::Constraint {
+                span,
+                constraint: Some(structure_constraint::Constraint::DeleteConcepts(
+                    structure_constraint::DeleteConcepts { variables },
+                )),
+            })
+        }
         // Constraints that probably don't need to be handled
         Constraint::RoleName(_) => {} // Handled separately via resolved_role_names
         // Optimisations don't represent the structure
-        Constraint::DeleteConcepts(_) | Constraint::LinksDeduplication(_) | Constraint::Unsatisfiable(_) => {}
+        Constraint::LinksDeduplication(_) | Constraint::Unsatisfiable(_) => {}
     };
     Ok(())
 }
