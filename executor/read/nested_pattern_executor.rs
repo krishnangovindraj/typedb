@@ -47,7 +47,7 @@ impl DisjunctionExecutor {
         let mut uniform_batch = FixedBatch::new(self.output_width);
         unmapped.into_iter().for_each(|row| {
             uniform_batch.append(|mut output_row| {
-                output_row.copy_input_and_extend(row, &self.selected_variables, [], 1);
+                output_row.merge_selected(&self.selected_variables, row, [], 1);
                 output_row.set_branch_id_in_provenance(self.branch_ids[*source_branch_index]);
             })
         });
@@ -95,7 +95,7 @@ impl OptionalExecutor {
     pub(crate) fn map_as_failed_output(&self, unmapped_input: MaybeOwnedRow<'_>) -> FixedBatch {
         let mut output = FixedBatch::new(self.output_width);
         output.append(|mut output_row| {
-            output_row.copy_input_and_extend(unmapped_input.as_reference(), &self.selected_variables, [], 1);
+            output_row.merge_selected(&self.selected_variables, unmapped_input.as_reference(), [], 1);
         });
         output
     }
@@ -172,9 +172,9 @@ impl InlinedCallExecutor {
                         .iter()
                         .enumerate()
                         .filter_map(|(index, &dst)| Some((dst?, returned_row[index].clone())));
-                    output_row.copy_input_and_extend(
-                        input.as_reference(),
+                    output_row.merge_selected(
                         &self.selected_variables,
+                        input.as_reference(),
                         extension,
                         returned_row.multiplicity(),
                     );

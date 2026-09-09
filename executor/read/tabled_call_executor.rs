@@ -106,22 +106,17 @@ impl TabledCallExecutor {
         for return_index in 0..returned_batch.len() {
             // TODO: Deduplicate?
             let returned_row = returned_batch.get_row(return_index);
-            eprintln!(
-                "Assignment positions is: {:?}; Returns width is {}",
-                self.assignment_positions,
-                returned_row.row().len()
-            );
             if check_indices.iter().all(|(src, dst)| returned_row.get(*src) == input.get(*dst)) {
                 output_batch.append(|mut output_row| {
-                    let extension = self
+                    let assignments = self
                         .assignment_positions
                         .iter()
                         .enumerate()
                         .filter_map(|(index, &dst)| Some((dst?, returned_row[index].clone())));
-                    output_row.copy_input_and_extend(
-                        input.as_reference(),
+                    output_row.merge_selected(
                         &self.selected_variables,
-                        extension,
+                        input.as_reference(),
+                        assignments,
                         returned_row.multiplicity(),
                     );
                 });

@@ -944,7 +944,7 @@ impl CheckExecutor {
                 .map_err(|err| ReadExecutionError::ConceptRead { typedb_source: err })?
             {
                 output.append(|mut row| {
-                    row.copy_input_and_extend(input_row, &self.selected_variables, [], 1);
+                    row.merge_selected(&self.selected_variables, input_row, [], 1);
                 })
             }
         }

@@ -38,13 +38,13 @@ pub(crate) fn iid(
     output: &mut FixedBatch,
 ) -> Result<(), Box<ConceptReadError>> {
     let Some(return_position) = assignment_positions[0] else {
-        output.append(|mut row| row.copy_input_and_extend(input_row.as_reference(), selected_variables, [], 1));
+        output.append(|mut row| row.merge_selected(selected_variables, input_row.as_reference(), [], 1));
         return Ok(()); // all concepts have IIDs
     };
     let iid = input_row[argument_positions[0].as_usize()].as_thing().iid();
     let iid_value = VariableValue::Value(Value::String(Cow::Owned(format!("{iid:x}"))));
     output.append(|mut row| {
-        row.copy_input_and_extend(input_row.as_reference(), selected_variables, [(return_position, iid_value)], 1);
+        row.merge_selected(selected_variables, input_row.as_reference(), [(return_position, iid_value)], 1);
     });
     Ok(())
 }
@@ -58,14 +58,14 @@ pub(crate) fn label(
     output: &mut FixedBatch,
 ) -> Result<(), Box<ConceptReadError>> {
     let Some(return_position) = assignment_positions[0] else {
-        output.append(|mut row| row.copy_input_and_extend(input_row.as_reference(), selected_variables, [], 1));
+        output.append(|mut row| row.merge_selected(selected_variables, input_row.as_reference(), [], 1));
         return Ok(()); // all types have labels
     };
     let ty = input_row[argument_positions[0].as_usize()].as_type();
     let label = ty.get_label(&**context.snapshot(), context.type_manager())?;
     let label_value = VariableValue::Value(Value::String(Cow::Owned(label.to_string())));
     output.append(|mut row| {
-        row.copy_input_and_extend(input_row.as_reference(), selected_variables, [(return_position, label_value)], 1);
+        row.merge_selected(selected_variables, input_row.as_reference(), [(return_position, label_value)], 1);
     });
     Ok(())
 }
@@ -79,12 +79,12 @@ pub(crate) fn get_doc(
     output: &mut FixedBatch,
 ) -> Result<(), Box<ConceptReadError>> {
     let Some(return_position) = assignment_positions[0] else {
-        output.append(|mut row| row.copy_input_and_extend(input_row.as_reference(), selected_variables, [], 1));
+        output.append(|mut row| row.merge_selected(selected_variables, input_row.as_reference(), [], 1));
         return Ok(()); // a missing doc is equivalent to @doc("")
     };
     let doc_value = get_type_doc(context, &input_row[argument_positions[0].as_usize()])?;
     output.append(|mut row| {
-        row.copy_input_and_extend(input_row.as_reference(), selected_variables, [(return_position, doc_value)], 1);
+        row.merge_selected(selected_variables, input_row.as_reference(), [(return_position, doc_value)], 1);
     });
     Ok(())
 }
@@ -98,7 +98,7 @@ pub(crate) fn get_owns_doc(
     output: &mut FixedBatch,
 ) -> Result<(), Box<ConceptReadError>> {
     let Some(return_position) = assignment_positions[0] else {
-        output.append(|mut row| row.copy_input_and_extend(input_row.as_reference(), selected_variables, [], 1));
+        output.append(|mut row| row.merge_selected(selected_variables, input_row.as_reference(), [], 1));
         return Ok(()); // a missing doc is equivalent to @doc("")
     };
     let owner = &input_row[argument_positions[0].as_usize()];
@@ -110,7 +110,7 @@ pub(crate) fn get_owns_doc(
             &AnnotationCategory::Doc,
         )?);
         output.append(|mut row| {
-            row.copy_input_and_extend(input_row.as_reference(), selected_variables, [(return_position, doc_value)], 1);
+            row.merge_selected(selected_variables, input_row.as_reference(), [(return_position, doc_value)], 1);
         });
     }
     Ok(())
@@ -125,7 +125,7 @@ pub(crate) fn get_plays_doc(
     output: &mut FixedBatch,
 ) -> Result<(), Box<ConceptReadError>> {
     let Some(return_position) = assignment_positions[0] else {
-        output.append(|mut row| row.copy_input_and_extend(input_row.as_reference(), selected_variables, [], 1));
+        output.append(|mut row| row.merge_selected(selected_variables, input_row.as_reference(), [], 1));
         return Ok(()); // a missing doc is equivalent to @doc("")
     };
     let player = &input_row[argument_positions[0].as_usize()];
@@ -137,7 +137,7 @@ pub(crate) fn get_plays_doc(
             &AnnotationCategory::Doc,
         )?);
         output.append(|mut row| {
-            row.copy_input_and_extend(input_row.as_reference(), selected_variables, [(return_position, doc_value)], 1);
+            row.merge_selected(selected_variables, input_row.as_reference(), [(return_position, doc_value)], 1);
         });
     }
     Ok(())
@@ -152,7 +152,7 @@ pub(crate) fn get_relates_doc(
     output: &mut FixedBatch,
 ) -> Result<(), Box<ConceptReadError>> {
     let Some(return_position) = assignment_positions[0] else {
-        output.append(|mut row| row.copy_input_and_extend(input_row.as_reference(), selected_variables, [], 1));
+        output.append(|mut row| row.merge_selected(selected_variables, input_row.as_reference(), [], 1));
         return Ok(()); // a missing doc is equivalent to @doc("")
     };
     let relation = &input_row[argument_positions[0].as_usize()];
@@ -164,7 +164,7 @@ pub(crate) fn get_relates_doc(
             &AnnotationCategory::Doc,
         )?);
         output.append(|mut row| {
-            row.copy_input_and_extend(input_row.as_reference(), selected_variables, [(return_position, doc_value)], 1);
+            row.merge_selected(selected_variables, input_row.as_reference(), [(return_position, doc_value)], 1);
         });
     }
     Ok(())
@@ -179,14 +179,14 @@ pub(crate) fn get_sub_doc(
     output: &mut FixedBatch,
 ) -> Result<(), Box<ConceptReadError>> {
     let Some(return_position) = assignment_positions[0] else {
-        output.append(|mut row| row.copy_input_and_extend(input_row.as_reference(), selected_variables, [], 1));
+        output.append(|mut row| row.merge_selected(selected_variables, input_row.as_reference(), [], 1));
         return Ok(()); // a missing doc is equivalent to @doc("")
     };
     let subtype = &input_row[argument_positions[0].as_usize()];
     let supertype = &input_row[argument_positions[1].as_usize()];
     if let Some(doc_value) = get_subtype_doc(context, subtype, supertype)? {
         output.append(|mut row| {
-            row.copy_input_and_extend(input_row.as_reference(), selected_variables, [(return_position, doc_value)], 1);
+            row.merge_selected(selected_variables, input_row.as_reference(), [(return_position, doc_value)], 1);
         });
     }
     Ok(())
@@ -201,7 +201,7 @@ pub(crate) fn get_meta(
     output: &mut FixedBatch,
 ) -> Result<(), Box<ConceptReadError>> {
     let Some(return_position) = assignment_positions[0] else {
-        output.append(|mut row| row.copy_input_and_extend(input_row.as_reference(), selected_variables, [], 1));
+        output.append(|mut row| row.merge_selected(selected_variables, input_row.as_reference(), [], 1));
         return Ok(()); // a missing metadata annotation for a key is treated as @meta("key", "")
     };
     let meta_value = get_type_meta(
@@ -210,7 +210,7 @@ pub(crate) fn get_meta(
         &input_row[argument_positions[1].as_usize()],
     )?;
     output.append(|mut row| {
-        row.copy_input_and_extend(input_row.as_reference(), selected_variables, [(return_position, meta_value)], 1);
+        row.merge_selected(selected_variables, input_row.as_reference(), [(return_position, meta_value)], 1);
     });
     Ok(())
 }
@@ -224,7 +224,7 @@ pub(crate) fn get_owns_meta(
     output: &mut FixedBatch,
 ) -> Result<(), Box<ConceptReadError>> {
     let Some(return_position) = assignment_positions[0] else {
-        output.append(|mut row| row.copy_input_and_extend(input_row.as_reference(), selected_variables, [], 1));
+        output.append(|mut row| row.merge_selected(selected_variables, input_row.as_reference(), [], 1));
         return Ok(()); // a missing metadata annotation for a key is treated as @meta("key", "")
     };
     let key = input_row[argument_positions[0].as_usize()].as_value().unwrap_string_ref().to_owned();
@@ -238,7 +238,7 @@ pub(crate) fn get_owns_meta(
             category,
         )?);
         output.append(|mut row| {
-            row.copy_input_and_extend(input_row.as_reference(), selected_variables, [(return_position, meta_value)], 1);
+            row.merge_selected(selected_variables, input_row.as_reference(), [(return_position, meta_value)], 1);
         });
     }
     Ok(())
@@ -253,7 +253,7 @@ pub(crate) fn get_plays_meta(
     output: &mut FixedBatch,
 ) -> Result<(), Box<ConceptReadError>> {
     let Some(return_position) = assignment_positions[0] else {
-        output.append(|mut row| row.copy_input_and_extend(input_row.as_reference(), selected_variables, [], 1));
+        output.append(|mut row| row.merge_selected(selected_variables, input_row.as_reference(), [], 1));
         return Ok(()); // a missing metadata annotation for a key is treated as @meta("key", "")
     };
     let key = input_row[argument_positions[0].as_usize()].as_value().unwrap_string_ref().to_owned();
@@ -267,7 +267,7 @@ pub(crate) fn get_plays_meta(
             category,
         )?);
         output.append(|mut row| {
-            row.copy_input_and_extend(input_row.as_reference(), selected_variables, [(return_position, meta_value)], 1);
+            row.merge_selected(selected_variables, input_row.as_reference(), [(return_position, meta_value)], 1);
         });
     }
     Ok(())
@@ -282,7 +282,7 @@ pub(crate) fn get_relates_meta(
     output: &mut FixedBatch,
 ) -> Result<(), Box<ConceptReadError>> {
     let Some(return_position) = assignment_positions[0] else {
-        output.append(|mut row| row.copy_input_and_extend(input_row.as_reference(), selected_variables, [], 1));
+        output.append(|mut row| row.merge_selected(selected_variables, input_row.as_reference(), [], 1));
         return Ok(()); // a missing metadata annotation for a key is treated as @meta("key", "")
     };
     let key = input_row[argument_positions[0].as_usize()].as_value().unwrap_string_ref().to_owned();
@@ -296,7 +296,7 @@ pub(crate) fn get_relates_meta(
             category,
         )?);
         output.append(|mut row| {
-            row.copy_input_and_extend(input_row.as_reference(), selected_variables, [(return_position, meta_value)], 1);
+            row.merge_selected(selected_variables, input_row.as_reference(), [(return_position, meta_value)], 1);
         });
     }
     Ok(())
@@ -311,7 +311,7 @@ pub(crate) fn get_sub_meta(
     output: &mut FixedBatch,
 ) -> Result<(), Box<ConceptReadError>> {
     let Some(return_position) = assignment_positions[0] else {
-        output.append(|mut row| row.copy_input_and_extend(input_row.as_reference(), selected_variables, [], 1));
+        output.append(|mut row| row.merge_selected(selected_variables, input_row.as_reference(), [], 1));
         return Ok(()); // a missing metadata annotation for a key is treated as @meta("key", "")
     };
     let key = &input_row[argument_positions[0].as_usize()];
@@ -319,7 +319,7 @@ pub(crate) fn get_sub_meta(
     let supertype = &input_row[argument_positions[2].as_usize()];
     if let Some(meta_value) = get_subtype_meta(context, key, subtype, supertype)? {
         output.append(|mut row| {
-            row.copy_input_and_extend(input_row.as_reference(), selected_variables, [(return_position, meta_value)], 1);
+            row.merge_selected(selected_variables, input_row.as_reference(), [(return_position, meta_value)], 1);
         });
     }
     Ok(())
@@ -442,7 +442,7 @@ pub(crate) fn get_fun_doc(
     output: &mut FixedBatch,
 ) -> Result<(), Box<ConceptReadError>> {
     let Some(return_position) = assignment_positions[0] else {
-        output.append(|mut row| row.copy_input_and_extend(input_row.as_reference(), selected_variables, [], 1));
+        output.append(|mut row| row.merge_selected(selected_variables, input_row.as_reference(), [], 1));
         return Ok(()); // a missing doc is equivalent to @doc("")
     };
     let function_name = input_row[argument_positions[0].as_usize()].as_value().unwrap_string_ref();
@@ -456,7 +456,7 @@ pub(crate) fn get_fun_doc(
         &AnnotationCategory::Doc,
     )?);
     output.append(|mut row| {
-        row.copy_input_and_extend(input_row.as_reference(), selected_variables, [(return_position, doc_value)], 1);
+        row.merge_selected(selected_variables, input_row.as_reference(), [(return_position, doc_value)], 1);
     });
     Ok(())
 }
@@ -470,7 +470,7 @@ pub(crate) fn get_fun_meta(
     output: &mut FixedBatch,
 ) -> Result<(), Box<ConceptReadError>> {
     let Some(return_position) = assignment_positions[0] else {
-        output.append(|mut row| row.copy_input_and_extend(input_row.as_reference(), selected_variables, [], 1));
+        output.append(|mut row| row.merge_selected(selected_variables, input_row.as_reference(), [], 1));
         return Ok(()); // a missing metadata annotation for a key is treated as @meta("key", "")
     };
     let key = input_row[argument_positions[0].as_usize()].as_value().unwrap_string_ref().to_owned();
@@ -486,7 +486,7 @@ pub(crate) fn get_fun_meta(
         category,
     )?);
     output.append(|mut row| {
-        row.copy_input_and_extend(input_row.as_reference(), selected_variables, [(return_position, meta_value)], 1);
+        row.merge_selected(selected_variables, input_row.as_reference(), [(return_position, meta_value)], 1);
     });
     Ok(())
 }
@@ -529,17 +529,17 @@ pub(crate) fn put_all_metas_into_batch(
     if metas.is_empty() {
         return Ok(());
     } else if key_return_position.is_none() && value_return_position.is_none() {
-        output.append(|mut row| row.copy_input_and_extend(input_row.as_reference(), selected_variables, [], 1));
+        output.append(|mut row| row.merge_selected(selected_variables, input_row.as_reference(), [], 1));
         return Ok(());
     }
 
     for anno in metas {
         let (key, value) = meta_to_tuple(anno);
         output.append(|mut row| {
-            let extension = [(key_return_position, key), (value_return_position, value)]
+            let meta_key_and_value = [(key_return_position, key), (value_return_position, value)]
                 .into_iter()
                 .filter_map(|(pos, value)| Some((pos?, value)));
-            row.copy_input_and_extend(input_row.as_reference(), selected_variables, extension, 1);
+            row.merge_selected(selected_variables, input_row.as_reference(), meta_key_and_value, 1);
         });
     }
     Ok(())
