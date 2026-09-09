@@ -18,7 +18,7 @@ use typeql::common::Span;
 use crate::{
     RepresentationError,
     pattern::{
-        BindingMode, Pattern, PatternVariables, Scope, ScopeId,
+        BindingMode, Pattern, PatternVariableModes, Scope, ScopeId,
         constraint::{Constraint, Constraints, ConstraintsBuilder, Unsatisfiable},
         disjunction::{DisjunctionBuilder, DisjunctionBuilderWithContext},
         impl_pattern_from_pattern_variables,
@@ -34,7 +34,7 @@ pub struct Conjunction {
     scope_id: ScopeId,
     constraints: Constraints,
     nested_patterns: Vec<NestedPattern>,
-    pattern_variables: PatternVariables,
+    pattern_variables: PatternVariableModes,
 }
 
 impl Conjunction {
@@ -135,7 +135,7 @@ pub(crate) enum NestedPatternBuilder {
 }
 
 impl NestedPatternBuilder {
-    pub(crate) fn finish(self, parent_modes: &PatternVariables) -> NestedPattern {
+    pub(crate) fn finish(self, parent_modes: &PatternVariableModes) -> NestedPattern {
         match self {
             NestedPatternBuilder::Disjunction(disjunction) => disjunction.finish(parent_modes),
             NestedPatternBuilder::Negation(negation) => negation.finish(parent_modes),
@@ -166,8 +166,8 @@ impl ConjunctionBuilder {
         Self { constraints: Constraints::new(scope_id), scope_id, nested_patterns: Vec::new() }
     }
 
-    pub(crate) fn finish(self, parent_modes: &PatternVariables) -> Conjunction {
-        let pattern_variables = PatternVariables::build(self.variable_binding_modes(), parent_modes);
+    pub(crate) fn finish(self, parent_modes: &PatternVariableModes) -> Conjunction {
+        let pattern_variables = PatternVariableModes::build(self.variable_binding_modes(), parent_modes);
         let Self { scope_id, constraints, nested_patterns } = self;
         let nested_patterns = nested_patterns.into_iter().map(|builder| builder.finish(&pattern_variables)).collect();
         Conjunction { scope_id, constraints, nested_patterns, pattern_variables }

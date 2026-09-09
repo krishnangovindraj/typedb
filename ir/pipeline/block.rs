@@ -17,7 +17,7 @@ use typeql::common::Span;
 use crate::{
     RepresentationError,
     pattern::{
-        BindingMode, BranchID, Pattern, PatternVariables, ScopeId,
+        BindingMode, BranchID, Pattern, PatternVariableModes, ScopeId,
         conjunction::{Conjunction, ConjunctionBuilder, ConjunctionBuilderWithContext, NestedPatternBuilder},
         constraint::Constraint,
         nested_pattern::NestedPattern,
@@ -87,8 +87,9 @@ impl<'reg> BlockBuilder<'reg> {
         self.context
             .variable_names_index
             .retain(|_, var| block_binding_modes.get(var).copied() != Some(BindingMode::LocallyBindingInChild));
-        let conjunction =
-            self.conjunction.finish(&PatternVariables::for_block(block_binding_modes, self.context.input_variables()));
+        let conjunction = self
+            .conjunction
+            .finish(&PatternVariableModes::for_block(block_binding_modes, self.context.input_variables()));
 
         validate_is_plannable(
             &conjunction,

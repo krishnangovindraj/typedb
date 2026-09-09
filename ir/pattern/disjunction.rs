@@ -13,7 +13,7 @@ use typeql::common::Span;
 
 use crate::{
     pattern::{
-        BindingMode, BranchID, Pattern, PatternVariables, Scope, ScopeId,
+        BindingMode, BranchID, Pattern, PatternVariableModes, Scope, ScopeId,
         conjunction::{Conjunction, ConjunctionBuilder, ConjunctionBuilderWithContext},
         impl_pattern_from_pattern_variables,
         nested_pattern::NestedPattern,
@@ -26,7 +26,7 @@ pub struct Disjunction {
     conjunctions: Vec<Conjunction>,
     branch_ids: Vec<BranchID>,
     scope_id: ScopeId,
-    pattern_variables: PatternVariables,
+    pattern_variables: PatternVariableModes,
     source_span: Option<Span>,
 }
 
@@ -94,9 +94,9 @@ impl DisjunctionBuilder {
         Self { scope_id, conjunctions: Vec::new(), source_span }
     }
 
-    pub(crate) fn finish(self, parent_modes: &PatternVariables) -> NestedPattern {
+    pub(crate) fn finish(self, parent_modes: &PatternVariableModes) -> NestedPattern {
         let source_span = self.source_span;
-        let pattern_variables = PatternVariables::build(self.variable_binding_modes(), parent_modes);
+        let pattern_variables = PatternVariableModes::build(self.variable_binding_modes(), parent_modes);
         let scope_id = self.scope_id;
         let branch_ids = self.conjunctions.iter().map(|(bid, _)| *bid).collect();
         let conjunctions =

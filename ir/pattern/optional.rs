@@ -11,7 +11,7 @@ use structural_equality::StructuralEquality;
 use typeql::common::Span;
 
 use crate::pattern::{
-    BindingMode, BranchID, Pattern, PatternVariables, Scope, ScopeId,
+    BindingMode, BranchID, Pattern, PatternVariableModes, Scope, ScopeId,
     conjunction::{Conjunction, ConjunctionBuilder},
     impl_pattern_from_pattern_variables,
     nested_pattern::NestedPattern,
@@ -21,7 +21,7 @@ use crate::pattern::{
 pub struct Optional {
     conjunction: Conjunction,
     branch_id: BranchID,
-    pattern_variables: PatternVariables,
+    pattern_variables: PatternVariableModes,
     source_span: Option<Span>,
 }
 
@@ -80,9 +80,9 @@ impl OptionalBuilder {
         Self { conjunction, branch_id, source_span }
     }
 
-    pub(crate) fn finish(self, parent_modes: &PatternVariables) -> NestedPattern {
+    pub(crate) fn finish(self, parent_modes: &PatternVariableModes) -> NestedPattern {
         let source_span = self.source_span;
-        let pattern_variables = PatternVariables::build(self.variable_binding_modes(), parent_modes);
+        let pattern_variables = PatternVariableModes::build(self.variable_binding_modes(), parent_modes);
         let branch_id = self.branch_id;
         let conjunction = self.conjunction.finish(&pattern_variables);
         NestedPattern::Optional(Optional { branch_id, conjunction, pattern_variables, source_span })

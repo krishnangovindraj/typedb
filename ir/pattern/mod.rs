@@ -458,20 +458,20 @@ pub(crate) enum PatternVariableMode {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct PatternVariables(HashMap<Variable, PatternVariableMode>);
+pub(crate) struct PatternVariableModes(HashMap<Variable, PatternVariableMode>);
 
-impl PatternVariables {
+impl PatternVariableModes {
     pub(crate) fn for_block(
         block_binding_modes: HashMap<Variable, BindingMode>,
         input_variables: impl Iterator<Item = Variable>,
     ) -> Self {
         let input_modes = input_variables.map(|variable| (variable, PatternVariableMode::RequiredInput)).collect();
-        PatternVariables::build(block_binding_modes, &PatternVariables(input_modes))
+        PatternVariableModes::build(block_binding_modes, &PatternVariableModes(input_modes))
     }
 
     pub(crate) fn build(
         mut pattern_modes: HashMap<Variable, BindingMode>,
-        parent_pattern_variables: &PatternVariables,
+        parent_pattern_variables: &PatternVariableModes,
     ) -> Self {
         let pattern_variables = pattern_modes
             .into_iter()
