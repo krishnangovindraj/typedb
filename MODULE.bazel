@@ -192,8 +192,8 @@ git_override(
 bazel_dep(name = "typedb_behaviour", version = "0.0.0")
 git_override(
     module_name = "typedb_behaviour",
-    remote = "https://github.com/krishnangovindraj/typedb-behaviour",
-    commit = "84ef85d25fe604d2fc0074308cccdb6cae8c5366",
+    remote = "https://github.com/typedb/typedb-behaviour",
+    commit = "888359942ccd234e64809215c0ff7c74343ff7ee",
 )
 
 http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
