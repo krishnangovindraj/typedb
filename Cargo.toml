@@ -222,8 +222,8 @@ features = {}
 
 		[workspace.dependencies.typeql]
 			features = []
+			rev = "5485e04a51c79ad1d29477db7532003c84983751"
 			git = "https://github.com/typedb/typeql"
-			tag = "3.13.0"
 			default-features = false
 
 		[workspace.dependencies.cache]
