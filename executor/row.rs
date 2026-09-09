@@ -66,9 +66,10 @@ impl<'a> Row<'a> {
         extension: impl IntoIterator<Item = (VariablePosition, VariableValue<'static>)>,
         extension_multiplicity: u64,
     ) {
-        self.copy_mapped(input, selected.iter().map(|&p| (p, p)));
+        self.copy_mapped(input, selected.iter().map(|&pos| (pos, pos)));
         for (pos, value) in extension {
             // TODO: Should this check `selected.contains(pos)` instead?
+            debug_assert!(pos.as_usize() < self.len() || !selected.contains(&pos));
             if pos.as_usize() < self.len() {
                 self.set(pos, value);
             }
