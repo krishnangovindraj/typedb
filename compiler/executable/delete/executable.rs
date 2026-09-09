@@ -16,7 +16,10 @@ use typeql::common::Span;
 
 use crate::{
     VariablePosition,
-    annotation::type_annotations::{BlockAnnotations, TypeAnnotations},
+    annotation::{
+        pipeline::collect_deleted_variables,
+        type_annotations::{BlockAnnotations, TypeAnnotations},
+    },
     executable::{
         RequiredVariablesForWrite, WriteCompilationError,
         delete::instructions::{ConnectionInstruction, Has, Links, ThingInstruction},
@@ -43,16 +46,10 @@ pub fn compile(
     block: &Block,
     source_span: Option<Span>,
 ) -> Result<DeleteExecutable, Box<WriteCompilationError>> {
-    let mut deleted_variables_recursive = HashSet::new();
     let mut deletes = Vec::with_capacity(1 + block.conjunction().nested_patterns().len());
 
-    let root_delete = ConditionalDelete::new(
-        block.conjunction(),
-        block_annotations,
-        variable_registry,
-        input_variables,
-        &mut deleted_variables_recursive,
-    )?;
+    let root_delete =
+        ConditionalDelete::new(block.conjunction(), block_annotations, variable_registry, input_variables)?;
     deletes.push(root_delete);
 
     let unsafely_used_optional_variable = block
@@ -76,11 +73,11 @@ pub fn compile(
             block_annotations,
             variable_registry,
             input_variables,
-            &mut deleted_variables_recursive,
         )?);
     }
 
     // To produce the output stream, we remove the deleted concepts from each map in the stream.
+    let deleted_variables_recursive = collect_deleted_variables(block);
     let mut output_row_schema = Vec::new();
     for (&variable, position) in input_variables {
         if deleted_variables_recursive.contains(&variable) {
@@ -109,18 +106,12 @@ impl ConditionalDelete {
         block_annotations: &BlockAnnotations,
         variable_registry: &VariableRegistry,
         input_variables: &HashMap<Variable, VariablePosition>,
-        deleted_variables_recursive: &mut HashSet<Variable>,
     ) -> Result<Self, Box<WriteCompilationError>> {
         let conjunction_annotations =
             block_annotations.type_annotations_of(conjunction).expect("delete conjunction must have type annotations");
 
-        let concept_instructions = add_concept_deletes(
-            conjunction,
-            conjunction_annotations,
-            input_variables,
-            variable_registry,
-            deleted_variables_recursive,
-        )?;
+        let concept_instructions =
+            add_concept_deletes(conjunction, conjunction_annotations, input_variables, variable_registry)?;
 
         let connection_instructions =
             add_connection_deletes(conjunction, conjunction_annotations, input_variables, variable_registry)?;
@@ -138,7 +129,6 @@ fn add_concept_deletes(
     conjunction_annotations: &TypeAnnotations,
     input_variables: &HashMap<Variable, VariablePosition>,
     variable_registry: &VariableRegistry,
-    deleted_variables_recursive: &mut HashSet<Variable>,
 ) -> Result<Vec<ThingInstruction>, Box<WriteCompilationError>> {
     let mut concept_instructions = Vec::new();
     for constraint in conjunction.constraints().iter().filter_map(|c| c.as_delete_concepts()) {
@@ -159,7 +149,6 @@ fn add_concept_deletes(
                     source_span: constraint.source_span(),
                 }));
             } else {
-                deleted_variables_recursive.insert(variable);
                 concept_instructions.push(ThingInstruction { thing: ThingPosition(*input_position) });
             };
         }

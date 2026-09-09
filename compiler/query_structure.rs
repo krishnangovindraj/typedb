@@ -31,7 +31,7 @@ use serde::{Deserialize, Serialize, Serializer};
 
 use crate::annotation::{
     function::{AnnotatedFunction, AnnotatedFunctionReturn},
-    pipeline::{AnnotatedGiven, AnnotatedPipeline, AnnotatedStage},
+    pipeline::{AnnotatedGiven, AnnotatedPipeline, AnnotatedStage, collect_deleted_variables},
     type_annotations::{BlockAnnotations, TypeAnnotations},
 };
 
@@ -561,20 +561,6 @@ impl From<&AssignedReduction> for StructureReduceAssign {
         let reducer = StructureReducer { reducer: value.reduction.name().to_owned(), arguments };
         StructureReduceAssign { assigned: value.assigned.into(), reducer }
     }
-}
-
-pub fn collect_deleted_variables(block: &Block) -> BTreeSet<Variable> {
-    fn collect_recursive(conjunction: &Conjunction, deleted_variables: &mut BTreeSet<Variable>) {
-        for delete_concepts in conjunction.constraints().iter().filter_map(|c| c.as_delete_concepts()) {
-            deleted_variables.extend(delete_concepts.ids())
-        }
-        for nested in conjunction.nested_patterns() {
-            collect_recursive(nested.as_optional().unwrap().conjunction(), deleted_variables);
-        }
-    }
-    let mut deleted_variables = BTreeSet::new();
-    collect_recursive(block.conjunction(), &mut deleted_variables);
-    deleted_variables
 }
 
 // utils
