@@ -329,7 +329,8 @@ impl ConjunctionExecutableBuilder {
         constraint_variables: HashSet<Variable>,
         planner_statistics: PlannerStatistics,
     ) -> Self {
-        let index = assigned_positions.clone();
+        let mut index = assigned_positions.clone();
+        index.retain(|variable, position| !matches!(position, ExecutorVariable::Internal(_)));
         let produced_so_far = HashSet::from_iter(input_variables.iter().copied());
         let current_outputs = produced_so_far.clone();
         let reverse_index = index.iter().map(|(&var, &pos)| (pos, var)).collect();
