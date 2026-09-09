@@ -103,7 +103,6 @@ impl TabledCallExecutor {
             .filter_map(|(src, &dst)| Some((VariablePosition::new(src as u32), dst?)))
             .filter(|(_, dst)| dst.as_usize() < input.len() && input.get(*dst) != &VariableValue::None)
             .collect(); // TODO: Can we move this to compilation?
-        eprintln!("Selected positions is: {:?}; Input width is: {}", self.assignment_positions, input.row().len());
         for return_index in 0..returned_batch.len() {
             // TODO: Deduplicate?
             let returned_row = returned_batch.get_row(return_index);
