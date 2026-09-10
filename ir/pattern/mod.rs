@@ -575,14 +575,14 @@ impl PatternVariableModes {
     }
 }
 
-pub(crate) type LocationNote = Option<Span>;
+type Source = Option<Span>;
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) enum AssignmentStatus {
     #[default]
     NotAssigned,
-    AtMostOncePerBranch(LocationNote),
-    ErrorMultipleAssignments(LocationNote, LocationNote),
+    AtMostOncePerBranch(Source),
+    MultipleAssignmentsInBranch(Source, Source),
 }
 
 impl AssignmentStatus {
@@ -631,10 +631,10 @@ impl BitAnd for AssignmentStatus {
     fn bitand(self, rhs: Self) -> Self {
         match (self, rhs) {
             (Self::NotAssigned, x) | (x, Self::NotAssigned) => x,
-            (Self::ErrorMultipleAssignments(s1, s2), _) | (_, Self::ErrorMultipleAssignments(s1, s2)) => {
-                Self::ErrorMultipleAssignments(s1, s2)
+            (Self::MultipleAssignmentsInBranch(s1, s2), _) | (_, Self::MultipleAssignmentsInBranch(s1, s2)) => {
+                Self::MultipleAssignmentsInBranch(s1, s2)
             }
-            (Self::AtMostOncePerBranch(s1), Self::AtMostOncePerBranch(s2)) => Self::ErrorMultipleAssignments(s1, s2),
+            (Self::AtMostOncePerBranch(s1), Self::AtMostOncePerBranch(s2)) => Self::MultipleAssignmentsInBranch(s1, s2),
         }
     }
 }
@@ -645,8 +645,8 @@ impl BitOr for AssignmentStatus {
     fn bitor(self, rhs: Self) -> Self {
         match (self, rhs) {
             (Self::NotAssigned, x) | (x, Self::NotAssigned) => x,
-            (Self::ErrorMultipleAssignments(s1, s2), _) | (_, Self::ErrorMultipleAssignments(s1, s2)) => {
-                Self::ErrorMultipleAssignments(s1, s2)
+            (Self::MultipleAssignmentsInBranch(s1, s2), _) | (_, Self::MultipleAssignmentsInBranch(s1, s2)) => {
+                Self::MultipleAssignmentsInBranch(s1, s2)
             }
             (Self::AtMostOncePerBranch(s), Self::AtMostOncePerBranch(_)) => Self::AtMostOncePerBranch(s),
         }

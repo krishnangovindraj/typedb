@@ -305,7 +305,7 @@ fn validate_expressions_assignments_are_unique(
     }
 
     for (id, mode) in assignment_statuses {
-        if let AssignmentStatus::ErrorMultipleAssignments(source_span, other_span) = mode {
+        if let AssignmentStatus::MultipleAssignmentsInBranch(source_span, other_span) = mode {
             let variable = context.get_variable_name_or_unnamed(id).to_owned();
             return Err(Box::new(RepresentationError::MultipleAssignmentsForVariable {
                 variable,
