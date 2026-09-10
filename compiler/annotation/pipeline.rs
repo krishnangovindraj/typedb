@@ -14,7 +14,10 @@ use concept::type_::type_manager::TypeManager;
 use encoding::value::value_type::{ValueType, ValueTypeCategory};
 use error::needs_update_when_feature_is_implemented;
 use ir::{
-    pattern::{Vertex, constraint::Constraint, nested_pattern::NestedPattern, variable_category::VariableOptionality},
+    pattern::{
+        Vertex, conjunction::Conjunction, constraint::Constraint, nested_pattern::NestedPattern,
+        variable_category::VariableOptionality,
+    },
     pipeline::{
         ParameterRegistry, VariableRegistry,
         block::Block,
@@ -565,6 +568,20 @@ fn resolve_reduce_instruction_by_value_type(
 
         ValueTypeCategory::Boolean | ValueTypeCategory::Duration | ValueTypeCategory::Struct => err(),
     }
+}
+
+pub fn collect_deleted_variables(block: &Block) -> BTreeSet<Variable> {
+    fn collect_recursive(conjunction: &Conjunction, deleted_variables: &mut BTreeSet<Variable>) {
+        for delete_concepts in conjunction.constraints().iter().filter_map(|c| c.as_delete_concepts()) {
+            deleted_variables.extend(delete_concepts.ids())
+        }
+        for nested in conjunction.nested_patterns() {
+            collect_recursive(nested.as_optional().unwrap().conjunction(), deleted_variables);
+        }
+    }
+    let mut deleted_variables = BTreeSet::new();
+    collect_recursive(block.conjunction(), &mut deleted_variables);
+    deleted_variables
 }
 
 #[derive(Debug, Clone)]
