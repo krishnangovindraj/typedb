@@ -298,9 +298,13 @@ fn validate_expressions_assignments_are_unique(
 ) -> Result<(), Box<RepresentationError>> {
     let assignment_statuses = AssignmentStatus::for_conjunction(conjunction);
     for id in context.input_variables() {
-        if let Some(AssignmentStatus::AtMostOncePerBranch(source_span)) = assignment_statuses.get(&id).copied() {
-            let variable = context.get_variable_name_or_unnamed(id).to_owned();
-            return Err(Box::new(RepresentationError::AssigningToInputVariable { variable, source_span }));
+        match assignment_statuses.get(&id).copied() {
+            Some(AssignmentStatus::AtMostOncePerBranch(source_span))
+            | Some(AssignmentStatus::MultipleAssignmentsInBranch(source_span, _)) => {
+                let variable = context.get_variable_name_or_unnamed(id).to_owned();
+                return Err(Box::new(RepresentationError::AssigningToInputVariable { variable, source_span }));
+            }
+            Some(AssignmentStatus::NotAssigned) | None => (),
         }
     }
 
