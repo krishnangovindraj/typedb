@@ -11,7 +11,7 @@ use structural_equality::StructuralEquality;
 use typeql::common::Span;
 
 use crate::pattern::{
-    BindingMode, ContextualisedBindingMode, Pattern, PatternVariables, Scope, ScopeId,
+    BindingMode, Pattern, PatternVariableModes, Scope, ScopeId,
     conjunction::{Conjunction, ConjunctionBuilder},
     impl_pattern_from_pattern_variables,
     nested_pattern::NestedPattern,
@@ -20,7 +20,7 @@ use crate::pattern::{
 #[derive(Debug, Clone)]
 pub struct Negation {
     conjunction: Conjunction,
-    pattern_variables: PatternVariables,
+    pattern_variables: PatternVariableModes,
     source_span: Option<Span>,
 }
 
@@ -73,11 +73,10 @@ impl NegationBuilder {
         Self { conjunction: ConjunctionBuilder::new(scope_id), source_span }
     }
 
-    pub(crate) fn finish(self, parent_modes: &ContextualisedBindingMode) -> NestedPattern {
+    pub(crate) fn finish(self, parent_modes: &PatternVariableModes) -> NestedPattern {
         let source_span = self.source_span;
-        let binding_modes = ContextualisedBindingMode::from(self.variable_binding_modes(), parent_modes);
-        let conjunction = self.conjunction.finish(&binding_modes);
-        let pattern_variables = PatternVariables::from(&binding_modes);
+        let pattern_variables = PatternVariableModes::build(self.variable_binding_modes(), parent_modes);
+        let conjunction = self.conjunction.finish(&pattern_variables);
         NestedPattern::Negation(Negation { conjunction, pattern_variables, source_span })
     }
 
