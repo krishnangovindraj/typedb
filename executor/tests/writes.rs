@@ -195,9 +195,12 @@ fn execute_insert<Snapshot: WritableSnapshot + 'static>(
     )
     .unwrap();
 
-    println!("Insert Vertex:\n{:?}", &insert_plan.concept_instructions);
-    println!("Insert Edges:\n{:?}", &insert_plan.connection_instructions);
-
+    println!("Insert plans:\n");
+    for (i, plan) in insert_plan.inserts.iter().enumerate() {
+        print!("-- Plan[{i}] --\n");
+        println!("{plan}\n");
+    }
+    println!("-- end plans --\n");
     println!("Insert output row schema: {:?}", &insert_plan.output_row_schema);
 
     let snapshot = Arc::new(snapshot);
@@ -271,7 +274,7 @@ fn execute_delete<Snapshot: WritableSnapshot + 'static>(
 
     let typeql_delete =
         typeql::parse_query(delete_str).unwrap().into_structure().into_pipeline().stages.pop().unwrap().into_delete();
-    let (block, deleted_concepts) =
+    let block =
         ir::translation::writes::translate_delete(&mut translation_context, &mut value_parameters, &typeql_delete)
             .unwrap();
     let input_row_format = input_row_var_names
@@ -285,7 +288,6 @@ fn execute_delete<Snapshot: WritableSnapshot + 'static>(
         &block_annotations,
         &translation_context.variable_registry,
         &block,
-        &deleted_concepts,
         None,
     )
     .unwrap();

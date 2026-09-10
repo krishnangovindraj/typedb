@@ -155,6 +155,9 @@ pub enum StructureConstraint {
         #[serde(rename = "valueType")]
         value_type: String,
     },
+    DeleteConcepts {
+        variables: Vec<StructureVertex>,
+    },
 
     // Nested patterns are now constraints too
     Or {
@@ -446,6 +449,13 @@ fn encode_structure_constraint(
                 },
             });
         }
+        Constraint::DeleteConcepts(delete_concepts) => {
+            let variables = delete_concepts
+                .vertices()
+                .map(|v| encode_structure_vertex(context, &v))
+                .collect::<Result<Vec<_>, _>>()?;
+            push(StructureConstraint::DeleteConcepts { variables });
+        }
         // Constraints that probably don't need to be handled
         Constraint::RoleName(_) => {} // Handled separately via resolved_role_names
         // Optimisations don't represent the structure
@@ -591,6 +601,7 @@ pub mod bdd {
         Kind { kind, r#type, } |
         Label { r#type, label, } |
         Value { attribute_type, value_type, } |
+        DeleteConcepts { variables, } |
         Or { branches, } |
         Not { conjunction, } |
         Try { conjunction, } |
