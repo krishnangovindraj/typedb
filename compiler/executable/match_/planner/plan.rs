@@ -1297,7 +1297,7 @@ impl ConjunctionPlan<'_> {
             match index {
                 VertexId::Variable(var) => {
                     self.may_make_variable_producing_step(&mut conjunction_builder, var, variable_registry)?;
-                    self.may_make_not_none_check(&mut conjunction_builder, self.graph.index_to_variable[&var]);
+                    self.may_make_is_set_check(&mut conjunction_builder, self.graph.index_to_variable[&var]);
                 }
                 VertexId::Pattern(pattern) => {
                     for input in self.inputs_of_pattern(pattern) {
@@ -1988,10 +1988,10 @@ impl ConjunctionPlan<'_> {
         }
     }
 
-    fn may_make_not_none_check(&self, conjunction_builder: &mut ConjunctionExecutableBuilder, variable: Variable) {
+    fn may_make_is_set_check(&self, conjunction_builder: &mut ConjunctionExecutableBuilder, variable: Variable) {
         if conjunction_builder.unwrapped_variables.contains(&variable) {
             let variable = conjunction_builder.position(variable);
-            conjunction_builder.push_check(CheckInstruction::NotNone { variable });
+            conjunction_builder.push_check(CheckInstruction::IsSet { variable });
         }
     }
 }

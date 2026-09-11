@@ -608,7 +608,7 @@ pub enum CheckInstruction<ID> {
         role2: ID,
         player2: ID,
     },
-    NotNone {
+    IsSet {
         variable: ID,
     },
     Comparison {
@@ -668,7 +668,7 @@ impl<ID: IrID> CheckInstruction<ID> {
                 role2: mapping[&role2],
                 player2: mapping[&player2],
             },
-            Self::NotNone { variable } => CheckInstruction::NotNone { variable: variable.map(mapping) },
+            Self::IsSet { variable } => CheckInstruction::IsSet { variable: variable.map(mapping) },
             Self::Comparison { lhs, rhs, comparator } => {
                 CheckInstruction::Comparison { lhs: lhs.map(mapping), rhs: rhs.map(mapping), comparator }
             }
@@ -719,7 +719,7 @@ impl<ID: IrID> CheckInstruction<ID> {
             CheckInstruction::LinksDeduplication { role1, player1, role2, player2 } => {
                 Box::new([*role1, *player1, *role2, *player2].into_iter())
             }
-            CheckInstruction::NotNone { variable } => Box::new([*variable].into_iter()),
+            CheckInstruction::IsSet { variable } => Box::new([*variable].into_iter()),
             CheckInstruction::Comparison { lhs, rhs, .. } => {
                 Box::new(lhs.as_variable().into_iter().chain(rhs.as_variable().into_iter()))
             }
@@ -776,7 +776,7 @@ impl<ID: IrID> fmt::Display for CheckInstruction<ID> {
                     "{start_player} indexed_relation(role {start_role}->{relation}->role {end_role}) {end_player}",
                 )?;
             }
-            Self::NotNone { variable } => {
+            Self::IsSet { variable } => {
                 write!(f, "isset ({variable:?})")?;
             }
             Self::Is { lhs, rhs } => {

@@ -271,7 +271,7 @@ impl<T> Checker<T> {
                 &CheckInstruction::LinksDeduplication { role1, player1, role2, player2 } => {
                     self.filter_links_dedup_fn(row, role1, player1, role2, player2)
                 }
-                CheckInstruction::NotNone { variable } => self.filter_not_none_fn(context, row, *variable),
+                CheckInstruction::IsSet { variable } => self.filter_is_set_fn(context, row, *variable),
                 &CheckInstruction::Is { lhs, rhs } => self.filter_is_fn(row, lhs, rhs),
                 CheckInstruction::Comparison { lhs, rhs, comparator } => {
                     self.filter_comparison_fn(context, row, lhs, rhs, *comparator, storage_counters.clone())
@@ -618,7 +618,7 @@ impl<T> Checker<T> {
         Box::new(move |value: &T| Ok(!(role1(value) == role2(value) && player1(value) == player2(value))))
     }
 
-    fn filter_not_none_fn(
+    fn filter_is_set_fn(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: &MaybeOwnedRow<'_>,
@@ -744,7 +744,7 @@ impl Checker<()> {
                 CheckInstruction::Comparison { lhs, rhs, comparator } => {
                     Self::filter_comparison(context, row, lhs, rhs, *comparator, storage_counters.clone())?
                 }
-                CheckInstruction::NotNone { variable } => Self::filter_not_none(row, *variable),
+                CheckInstruction::IsSet { variable } => Self::filter_is_set(row, *variable),
                 CheckInstruction::Unsatisfiable => false,
             };
             if !passes {
@@ -960,7 +960,7 @@ impl Checker<()> {
         !(role1 == role2 && player1 == player2)
     }
 
-    fn filter_not_none(row: &MaybeOwnedRow<'_>, variable: ExecutorVariable) -> bool {
+    fn filter_is_set(row: &MaybeOwnedRow<'_>, variable: ExecutorVariable) -> bool {
         let ExecutorVariable::RowPosition(pos) = variable else { unreachable!() };
         let value = row.get(pos);
         !value.is_none()
