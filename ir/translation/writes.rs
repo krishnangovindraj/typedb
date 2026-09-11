@@ -158,11 +158,17 @@ fn add_write_condition(
         }
         WriteCondition::Comparison(cmp) => {
             add_statement(function_index, conjunction, &typeql::Statement::Comparison(cmp.clone()))?;
+            return Err(Box::new(RepresentationError::UnimplementedLanguageFeature {
+                feature: UnimplementedFeature::ComparisonInIfStatements,
+            }));
         }
         WriteCondition::Isa { variable, isa } => {
             let mut constraints = conjunction.constraints_mut();
             let ir_var = register_typeql_var(&mut constraints, variable)?;
             add_typeql_isa(function_index, &mut constraints, ir_var, isa)?;
+            return Err(Box::new(RepresentationError::UnimplementedLanguageFeature {
+                feature: UnimplementedFeature::IsaInIfStatements,
+            }));
         }
     }
     Ok(())
