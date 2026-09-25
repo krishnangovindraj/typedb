@@ -66,7 +66,10 @@ use resource::{
 use storage::{
     key_range::{KeyRange, RangeEnd, RangeStart},
     key_value::{StorageKey, StorageKeyArray, StorageKeyReference},
-    snapshot::{ReadableSnapshot, WritableSnapshot, write::Write},
+    snapshot::{
+        ReadableSnapshot, WritableSnapshot,
+        write::{KnownToExist, Write},
+    },
 };
 use tracing::trace;
 
@@ -1462,7 +1465,7 @@ impl ThingManager {
         let keyrange = KeyRange::new_within(prefix, ThingEdgeLinks::FIXED_WIDTH_ENCODING);
 
         let iter: Box<dyn Iterator<Item = Result<(Links, u64), Box<ConceptReadError>>>> =
-            if self.is_newly_inserted_object(snapshot, Object::Relation(relation)) {
+            if self.is_newly_inserted_object(snapshot, relation) {
                 Box::new(
                     snapshot
                         .iterate_writes_range(&keyrange)
@@ -1684,7 +1687,7 @@ impl ThingManager {
             })
     }
 
-    pub(crate) fn is_newly_inserted_object(&self, snapshot: &impl ReadableSnapshot, object: Object) -> bool {
+    pub(crate) fn is_newly_inserted_object(&self, snapshot: &impl ReadableSnapshot, object: impl ObjectAPI) -> bool {
         let key = object.vertex().into_storage_key();
         snapshot.get_write(key.as_reference()).map_or(false, |write| match write {
             Write::Insert { .. } => true,
@@ -2867,10 +2870,22 @@ impl ThingManager {
             let has = ThingEdgeHas::new(owner.vertex(), attribute.vertex());
             let has_reverse = ThingEdgeHasReverse::new(attribute.vertex(), owner.vertex());
 
-            owner.set_required(snapshot, self, storage_counters.clone())?;
+            let owner_is_newly_inserted = self.is_newly_inserted_object(snapshot, owner);
+            let edge_is_known_to_exist = edges_known_to_exist_if_newly_inserted(owner_is_newly_inserted);
+            if !owner_is_newly_inserted {
+                owner.set_required(snapshot, self, storage_counters.clone())?;
+            }
             attribute.set_required(snapshot, self, storage_counters.clone())?;
-            snapshot.put_val(has.into_storage_key().into_owned_array(), ByteArray::copy(&encode_u64(count)));
-            snapshot.put_val(has_reverse.into_storage_key().into_owned_array(), ByteArray::copy(&encode_u64(count)));
+            snapshot.put_val_with(
+                has.into_storage_key().into_owned_array(),
+                ByteArray::copy(&encode_u64(count)),
+                edge_is_known_to_exist,
+            );
+            snapshot.put_val_with(
+                has_reverse.into_storage_key().into_owned_array(),
+                ByteArray::copy(&encode_u64(count)),
+                edge_is_known_to_exist,
+            );
             Ok(())
         }
     }
@@ -2921,10 +2936,15 @@ impl ThingManager {
             attribute_value_type.category(),
             attributes.iter().map(|attr| attr.vertex().attribute_id()),
         );
-        snapshot.put_val(storage_key.clone(), value);
+        let owner_is_newly_inserted = self.is_newly_inserted_object(snapshot, owner);
+        let edge_is_known_to_exist = edges_known_to_exist_if_newly_inserted(owner_is_newly_inserted);
+
+        snapshot.put_val_with(storage_key.clone(), value, edge_is_known_to_exist);
 
         // must lock to fail concurrent transactions updating the same counters
-        snapshot.exclusive_lock_add(storage_key.into_byte_array());
+        if !owner_is_newly_inserted {
+            snapshot.exclusive_lock_add(storage_key.into_byte_array());
+        }
         Ok(())
     }
 
@@ -2948,16 +2968,29 @@ impl ThingManager {
         storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptWriteError>> {
         let count: u64 = 1;
-        relation.set_required(snapshot, self, storage_counters.clone())?;
+
+        let relation_is_newly_inserted = self.is_newly_inserted_object(snapshot, relation);
+        let edge_known_to_exist = edges_known_to_exist_if_newly_inserted(relation_is_newly_inserted);
+
+        if !relation_is_newly_inserted {
+            relation.set_required(snapshot, self, storage_counters.clone())?;
+        }
         player.set_required(snapshot, self, storage_counters.clone())?;
 
         // must be idempotent, so no lock required -- cannot fail
         let links = ThingEdgeLinks::new(relation.vertex(), player.vertex(), role_type.vertex());
-        snapshot.put_val(links.into_storage_key().into_owned_array(), ByteArray::copy(&encode_u64(count)));
-
+        snapshot.put_val_with(
+            links.into_storage_key().into_owned_array(),
+            ByteArray::copy(&encode_u64(count)),
+            edge_known_to_exist,
+        );
         let links_reverse =
             ThingEdgeLinks::new_reverse(player.clone().vertex(), relation.clone().vertex(), role_type.vertex());
-        snapshot.put_val(links_reverse.into_storage_key().into_owned_array(), ByteArray::copy(&encode_u64(count)));
+        snapshot.put_val_with(
+            links_reverse.into_storage_key().into_owned_array(),
+            ByteArray::copy(&encode_u64(count)),
+            edge_known_to_exist,
+        );
 
         if relation.type_().relation_index_available(snapshot, self.type_manager())? {
             self.relation_index_player_regenerate(
@@ -2982,7 +3015,11 @@ impl ThingManager {
         let key = build_object_vertex_property_links_order(relation.vertex(), role_type.into_vertex());
         let storage_key = key.into_storage_key().into_owned_array();
         let value = encode_role_players(players.iter().map(|player| player.vertex()));
-        snapshot.put_val(storage_key.clone(), value);
+
+        let relation_is_newly_inserted = self.is_newly_inserted_object(snapshot, relation);
+        let edge_known_to_exist = edges_known_to_exist_if_newly_inserted(relation_is_newly_inserted);
+
+        snapshot.put_val_with(storage_key.clone(), value, edge_known_to_exist);
 
         // must lock to fail concurrent transactions updating the same counters
         snapshot.exclusive_lock_add(storage_key.into_byte_array());
@@ -3002,14 +3039,25 @@ impl ThingManager {
         if count == 0 {
             self.unset_links(snapshot, relation, player, role_type, storage_counters)
         } else {
+            let relation_is_newly_inserted = self.is_newly_inserted_object(snapshot, relation);
+            let edge_known_to_exist = edges_known_to_exist_if_newly_inserted(relation_is_newly_inserted);
             let links = ThingEdgeLinks::new(relation.vertex(), player.vertex(), role_type.vertex());
             let links_reverse = ThingEdgeLinks::new_reverse(player.vertex(), relation.vertex(), role_type.vertex());
 
-            relation.set_required(snapshot, self, storage_counters.clone())?;
+            if !relation_is_newly_inserted {
+                relation.set_required(snapshot, self, storage_counters.clone())?;
+            }
             player.set_required(snapshot, self, storage_counters.clone())?;
-
-            snapshot.put_val(links.into_storage_key().into_owned_array(), ByteArray::copy(&encode_u64(count)));
-            snapshot.put_val(links_reverse.into_storage_key().into_owned_array(), ByteArray::copy(&encode_u64(count)));
+            snapshot.put_val_with(
+                links.into_storage_key().into_owned_array(),
+                ByteArray::copy(&encode_u64(count)),
+                edge_known_to_exist,
+            );
+            snapshot.put_val_with(
+                links_reverse.into_storage_key().into_owned_array(),
+                ByteArray::copy(&encode_u64(count)),
+                edge_known_to_exist,
+            );
 
             if relation.type_().relation_index_available(snapshot, self.type_manager())? {
                 let player = Object::new(player.vertex());
@@ -3150,6 +3198,8 @@ impl ThingManager {
         storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptWriteError>> {
         debug_assert_ne!(count_for_player, 0);
+        let relation_is_newly_inserted = self.is_newly_inserted_object(snapshot, relation);
+        let edge_known_to_exist = edges_known_to_exist_if_newly_inserted(relation_is_newly_inserted);
         let players = relation
             .get_players(snapshot, self, storage_counters)
             .map_ok(|(roleplayer, count)| (roleplayer.player(), roleplayer.role_type(), count));
@@ -3165,9 +3215,10 @@ impl ThingManager {
                         role_type.vertex().type_id_(),
                         role_type.vertex().type_id_(),
                     );
-                    snapshot.put_val(
+                    snapshot.put_val_with(
                         index.into_storage_key().into_owned_array(),
                         ByteArray::copy(&encode_u64(player_repetitions)),
+                        edge_known_to_exist,
                     );
                 }
             } else {
@@ -3179,8 +3230,11 @@ impl ThingManager {
                     role_type.vertex().type_id_(),
                     rp_role_type.vertex().type_id_(),
                 );
-                snapshot
-                    .put_val(index.into_storage_key().into_owned_array(), ByteArray::copy(&encode_u64(rp_repetitions)));
+                snapshot.put_val_with(
+                    index.into_storage_key().into_owned_array(),
+                    ByteArray::copy(&encode_u64(rp_repetitions)),
+                    edge_known_to_exist,
+                );
                 let player_repetitions = count_for_player;
                 let index_reverse = ThingEdgeIndexedRelation::new(
                     rp_player.vertex(),
@@ -3189,9 +3243,10 @@ impl ThingManager {
                     rp_role_type.vertex().type_id_(),
                     role_type.vertex().type_id_(),
                 );
-                snapshot.put_val(
+                snapshot.put_val_with(
                     index_reverse.into_storage_key().into_owned_array(),
                     ByteArray::copy(&encode_u64(player_repetitions)),
+                    edge_known_to_exist,
                 );
             }
         }
@@ -3289,6 +3344,10 @@ impl ThingManager {
             }
         }
     }
+}
+
+fn edges_known_to_exist_if_newly_inserted(vertex_newly_inserted: bool) -> KnownToExist {
+    if vertex_newly_inserted { KnownToExist::NonExistent } else { KnownToExist::Unknown }
 }
 
 fn register_delete_in_cleanup_intervals(
