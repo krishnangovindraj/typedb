@@ -82,7 +82,10 @@ use crate::{
         entity::Entity,
         has::Has,
         object::{HasIterator, HasReverseIterator, Object, ObjectAPI},
-        relation::{IndexedRelationsIterator, LinksIterator, LinksReverseIterator, Relation, RolePlayer},
+        relation::{
+            IndexedRelationsIterator, Links, LinksIterator, LinksReverseIterator, Relation, RolePlayer,
+            storage_key_edge_to_links,
+        },
         statistics::Statistics,
         r#struct::StructIndexForAttributeTypeIterator,
         thing_manager::validation::{
@@ -1456,15 +1459,20 @@ impl ThingManager {
         storage_counters: StorageCounters,
     ) -> impl Iterator<Item = Result<(RolePlayer, u64), Box<ConceptReadError>>> + use<Snapshot> {
         let prefix = ThingEdgeLinks::prefix_from_relation(relation.vertex());
-        Iterator::map(
-            LinksIterator::new(
-                snapshot.iterate_range(
-                    &KeyRange::new_within(prefix, ThingEdgeLinks::FIXED_WIDTH_ENCODING),
-                    storage_counters,
-                ),
-            ),
-            |result| result.map(|(links, count)| (links.into_role_player(), count)),
-        )
+        let keyrange = KeyRange::new_within(prefix, ThingEdgeLinks::FIXED_WIDTH_ENCODING);
+
+        let iter: Box<dyn Iterator<Item = Result<(Links, u64), Box<ConceptReadError>>>> =
+            if self.is_newly_inserted_object(snapshot, Object::Relation(relation)) {
+                Box::new(
+                    snapshot
+                        .iterate_writes_range(&keyrange)
+                        .filter_map(buffer_insert_entry_to_storage_entry)
+                        .map(|result| result.map(|(k, v)| storage_key_edge_to_links(k, v))),
+                )
+            } else {
+                Box::new(LinksIterator::new(snapshot.iterate_range(&keyrange, storage_counters)))
+            };
+        iter.map(|result| result.map(|(links, count)| (links.into_role_player(), count)))
     }
 
     pub(crate) fn get_role_players_ordered(
@@ -1674,6 +1682,15 @@ impl ThingManager {
                     None => Ok(ConceptStatus::Deleted),
                 }
             })
+    }
+
+    pub(crate) fn is_newly_inserted_object(&self, snapshot: &impl ReadableSnapshot, object: Object) -> bool {
+        let key = object.vertex().into_storage_key();
+        snapshot.get_write(key.as_reference()).map_or(false, |write| match write {
+            Write::Insert { .. } => true,
+            Write::Put { .. } => unreachable!("Encountered a Put for a relation"),
+            Write::Delete => false,
+        })
     }
 
     pub(crate) fn for_each_new_object<Snapshot: ReadableSnapshot, E>(
@@ -3369,5 +3386,15 @@ fn register_delete_in_cleanup_intervals(
         | Some(DecodableKey::IndexValueToStruct(_)) => {
             trace!("Unhandled delete when constructing compaction record!")
         }
+    }
+}
+
+fn buffer_insert_entry_to_storage_entry(
+    (key, write): (StorageKeyArray<BUFFER_KEY_INLINE>, Write),
+) -> Option<Result<(StorageKey<'static, BUFFER_KEY_INLINE>, Bytes<'static, BUFFER_VALUE_INLINE>), Box<ConceptReadError>>>
+{
+    match write {
+        Write::Insert { value } | Write::Put { value, .. } => Some(Ok((StorageKey::Array(key), Bytes::Array(value)))),
+        Write::Delete { .. } => None,
     }
 }
