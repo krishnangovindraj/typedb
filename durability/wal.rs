@@ -138,22 +138,24 @@ impl DurabilityService for WAL {
         bytes: &[u8],
     ) -> Result<DurabilitySequenceNumber, DurabilityServiceError> {
         debug_assert!(self.registered_types.contains_key(&record_type));
+        let compressed_bytes = Files::compress_record_bytes(bytes)?;
         let mut files = self.files.write().unwrap();
         let sequence_number = self.increment();
         debug!("Writing unsequenced record with {sequence_number}");
         let raw_record = RawRecord { sequence_number, record_type, bytes: Cow::Borrowed(bytes) };
-        files.write_record(raw_record)?;
+        files.write_record(raw_record, compressed_bytes)?;
         self.metrics.record_bytes_written(bytes.len() as u64);
         Ok(sequence_number)
     }
 
     fn unsequenced_write(&self, record_type: DurabilityRecordType, bytes: &[u8]) -> Result<(), DurabilityServiceError> {
         debug_assert!(self.registered_types.contains_key(&record_type));
+        let compressed_bytes = Files::compress_record_bytes(bytes)?;
         let mut files = self.files.write().unwrap();
         let sequence_number = self.previous();
         debug!("Writing unsequenced record with {sequence_number}");
         let raw_record = RawRecord { sequence_number, record_type, bytes: Cow::Borrowed(bytes) };
-        files.write_record(raw_record)?;
+        files.write_record(raw_record, compressed_bytes)?;
         self.metrics.record_bytes_written(bytes.len() as u64);
         Ok(())
     }
@@ -299,17 +301,20 @@ impl Files {
         Ok(())
     }
 
-    fn write_record(&mut self, record: RawRecord<'_>) -> Result<(), DurabilityServiceError> {
-        if self.files.is_empty() || self.files.last().unwrap().len >= MAX_WAL_FILE_SIZE {
-            self.open_new_file_at(record.sequence_number)?;
-        }
-
+    fn compress_record_bytes(bytes: &[u8]) -> Result<Vec<u8>, WALError> {
         let mut compressed_bytes = Vec::new();
         let mut encoder = lz4::EncoderBuilder::new()
             .build(&mut compressed_bytes)
             .map_err(|err| WALError::Compression { source: Arc::new(err) })?;
-        encoder.write_all(&record.bytes).map_err(|err| WALError::Compression { source: Arc::new(err) })?;
+        encoder.write_all(bytes).map_err(|err| WALError::Compression { source: Arc::new(err) })?;
         encoder.finish().1.map_err(|err| WALError::Compression { source: Arc::new(err) })?;
+        Ok(compressed_bytes)
+    }
+
+    fn write_record(&mut self, record: RawRecord<'_>, compressed_bytes: Vec<u8>) -> Result<(), DurabilityServiceError> {
+        if self.files.is_empty() || self.files.last().unwrap().len >= MAX_WAL_FILE_SIZE {
+            self.open_new_file_at(record.sequence_number)?;
+        }
 
         let writer = self.writer.as_mut().unwrap();
         write_header(
