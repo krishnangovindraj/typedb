@@ -156,7 +156,6 @@ impl CommitRecord {
                     _ => (),
                 }
             }
-
             for (_key, write, predecessor_lock) in BTreeMapIntersectionIterator::new(writes, predecessor_locks) {
                 if matches!(write, Write::Delete) && matches!(predecessor_lock, LockType::Unmodifiable) {
                     return CommitDependency::Conflict(IsolationConflict::DeletingRequiredKey);
