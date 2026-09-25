@@ -8,6 +8,7 @@ use std::{fmt, io::Read};
 
 use durability::DurabilityRecordType;
 use logger::result::ResultExt;
+use primitive::btreemap_intersection_iterator::BTreeMapIntersectionIterator;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -146,20 +147,20 @@ impl CommitRecord {
             let writes = write_buffer.writes();
             let predecessor_writes = pred_write_buffer.writes();
 
-            for (key, write) in writes.iter() {
-                if let Some(predecessor_write) = predecessor_writes.get(key) {
-                    match (predecessor_write, write) {
-                        (Write::Insert { .. } | Write::Put { .. }, Write::Put { reinsert, .. }) => {
-                            puts_to_update.push(DependentPut::Inserted { reinsert: reinsert.clone() });
-                        }
-                        (Write::Delete, Write::Put { reinsert, .. }) => {
-                            puts_to_update.push(DependentPut::Deleted { reinsert: reinsert.clone() });
-                        }
-                        _ => (),
+            for (_key, write, predecessor_write) in BTreeMapIntersectionIterator::new(writes, predecessor_writes) {
+                match (predecessor_write, write) {
+                    (Write::Insert { .. } | Write::Put { .. }, Write::Put { reinsert, .. }) => {
+                        puts_to_update.push(DependentPut::Inserted { reinsert: reinsert.clone() });
                     }
+                    (Write::Delete, Write::Put { reinsert, .. }) => {
+                        puts_to_update.push(DependentPut::Deleted { reinsert: reinsert.clone() });
+                    }
+                    _ => (),
                 }
-                if matches!(write, Write::Delete) && matches!(predecessor_locks.get(key), Some(LockType::Unmodifiable))
-                {
+            }
+            // If there's a lock on a key, is there guaranteed to be a write on the key?
+            for (_key, write, predecessor_lock) in BTreeMapIntersectionIterator::new(writes, predecessor_locks) {
+                if matches!(write, Write::Delete) && matches!(predecessor_lock, LockType::Unmodifiable) {
                     return CommitDependency::Conflict(IsolationConflict::DeletingRequiredKey);
                 }
             }
