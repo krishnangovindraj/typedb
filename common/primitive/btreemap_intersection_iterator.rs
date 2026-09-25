@@ -9,12 +9,6 @@ use std::{
     ops::Bound,
 };
 
-// The implementation may rely on keys being unique, which is guaranteed for BTreeMaps
-pub struct BTreeMapIntersectionIterator<'a, K: Ord, V1, V2> {
-    first: BTreeMapAndRange<'a, K, V1>,
-    second: BTreeMapAndRange<'a, K, V2>,
-}
-
 struct BTreeMapAndRange<'a, K: Ord, V> {
     map: &'a BTreeMap<K, V>,
     range: Range<'a, K, V>,
@@ -33,6 +27,12 @@ impl<'a, K: Ord, V> BTreeMapAndRange<'a, K, V> {
     fn seek(&mut self, key: &K) {
         self.range = self.map.range((Bound::Included(key), Bound::Unbounded))
     }
+}
+
+// The implementation may rely on keys being unique, which is guaranteed for BTreeMaps
+pub struct BTreeMapIntersectionIterator<'a, K: Ord, V1, V2> {
+    first: BTreeMapAndRange<'a, K, V1>,
+    second: BTreeMapAndRange<'a, K, V2>,
 }
 
 impl<'a, K: Ord, V1, V2> BTreeMapIntersectionIterator<'a, K, V1, V2> {
