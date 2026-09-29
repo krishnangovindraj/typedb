@@ -41,6 +41,10 @@ pub trait DurabilityClient {
     where
         Record: SequencedDurabilityRecord;
 
+    fn may_queue_unsequenced_write<Record>(&self, record: &Record) -> Result<(), DurabilityClientError>
+    where
+        Record: UnsequencedDurabilityRecord;
+
     fn unsequenced_write<Record>(&self, record: &Record) -> Result<(), DurabilityClientError>
     where
         Record: UnsequencedDurabilityRecord;
@@ -148,6 +152,16 @@ impl DurabilityClient for WALClient {
         let serialised = Self::serialise_record(record)?;
         self.wal
             .sequenced_write(Record::RECORD_TYPE, &serialised)
+            .map_err(|err| DurabilityClientError::ServiceError { source: err })
+    }
+
+    fn may_queue_unsequenced_write<Record>(&self, record: &Record) -> Result<(), DurabilityClientError>
+    where
+        Record: UnsequencedDurabilityRecord,
+    {
+        let serialised = Self::serialise_record(record)?;
+        self.wal
+            .may_queue_unsequenced_write(Record::RECORD_TYPE, serialised)
             .map_err(|err| DurabilityClientError::ServiceError { source: err })
     }
 

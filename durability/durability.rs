@@ -51,6 +51,14 @@ pub trait DurabilityService {
 
     fn unsequenced_write(&self, record_type: DurabilityRecordType, bytes: &[u8]) -> Result<(), DurabilityServiceError>;
 
+    fn may_queue_unsequenced_write(
+        &self,
+        record_type: DurabilityRecordType,
+        bytes: Vec<u8>,
+    ) -> Result<(), DurabilityServiceError> {
+        self.unsequenced_write(record_type, &bytes)
+    }
+
     fn iter_any_from(
         &self,
         sequence_number: DurabilitySequenceNumber,

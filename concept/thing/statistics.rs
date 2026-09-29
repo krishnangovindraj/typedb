@@ -212,7 +212,7 @@ impl Statistics {
 
     pub fn durably_write(&mut self, durability: &impl DurabilityClient) -> Result<(), StatisticsError> {
         use StatisticsError::DurablyWrite;
-        durability.unsequenced_write(self).map_err(|err| DurablyWrite { typedb_source: err })?;
+        durability.may_queue_unsequenced_write(self).map_err(|err| DurablyWrite { typedb_source: err })?;
         self.last_durable_write_sequence_number = self.sequence_number;
         self.last_durable_write_total_count = self.total_count;
         Ok(())

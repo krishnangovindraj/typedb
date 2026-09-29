@@ -40,11 +40,56 @@ const MAX_WAL_FILE_SIZE: u64 = 16 * 1024 * 1024;
 
 const FILE_PREFIX: &str = "wal-";
 
+type QueuedRecord = (DurabilityRecordType, Vec<u8>);
+
+#[derive(Debug)]
+struct UnsequencedWriteQueue {
+    queue: Mutex<Vec<QueuedRecord>>,
+    next_sequence_number: Arc<AtomicU64>,
+    metrics: FsyncMetrics,
+}
+
+impl UnsequencedWriteQueue {
+    fn new(next_sequence_number: Arc<AtomicU64>, metrics: FsyncMetrics) -> Self {
+        Self { queue: Mutex::new(Vec::new()), next_sequence_number, metrics }
+    }
+
+    fn previous(&self) -> DurabilitySequenceNumber {
+        DurabilitySequenceNumber::from(self.next_sequence_number.load(Ordering::Relaxed) - 1)
+    }
+
+    fn push(&self, item: QueuedRecord) {
+        let (rec, uncompressed_bytes) = item;
+
+        let item = (rec, Files::compress_record_bytes(&uncompressed_bytes).unwrap());
+        self.queue.lock().unwrap().push(item)
+    }
+
+    fn take(&self) -> Vec<QueuedRecord> {
+        std::mem::take(&mut self.queue.lock().unwrap())
+    }
+
+    fn flush(&self, queue: Vec<QueuedRecord>, files: &mut Files) -> Result<(), DurabilityServiceError> {
+        let sequence_number = self.previous();
+        print!("QUEUE: {}", queue.len());
+        debug!("Flushing unsequenced record with {sequence_number}");
+        for (record_type, compressed_bytes) in queue {
+            let raw_record = RawRecord { sequence_number, record_type, bytes: Cow::Borrowed(&[]) };
+            // let compressed_bytes = Files::compress_record_bytes(&compressed_bytes)?;
+            files.write_record(raw_record, compressed_bytes, false)?;
+            // self.metrics.record_bytes_written(uncompressed_bytes.len() as u64);
+        }
+        files.writer.as_mut().unwrap().flush()?;
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 pub struct WAL {
     registered_types: HashMap<DurabilityRecordType, String>,
-    next_sequence_number: AtomicU64,
+    next_sequence_number: Arc<AtomicU64>,
     files: Arc<RwLock<Files>>,
+    unsequenced_write_queue: Arc<UnsequencedWriteQueue>,
     fsync_thread: FsyncThread,
     metrics: FsyncMetrics,
 }
@@ -69,12 +114,17 @@ impl WAL {
             .last()
             .map(|rr| rr.unwrap().sequence_number.next())
             .unwrap_or(DurabilitySequenceNumber::MIN.next());
-        let mut fsync_thread = FsyncThread::new(files.clone(), metrics.clone());
+        let next_sequence_number = Arc::new(AtomicU64::new(next.number()));
+        let unsequenced_write_queue =
+            Arc::new(UnsequencedWriteQueue::new(next_sequence_number.clone(), metrics.clone()));
+
+        let mut fsync_thread = FsyncThread::new(files.clone(), unsequenced_write_queue.clone(), metrics.clone());
         FsyncThread::start(&mut fsync_thread.handle, fsync_thread.context.clone());
         Ok(Self {
             registered_types: HashMap::new(),
-            next_sequence_number: AtomicU64::new(next.number()),
+            next_sequence_number,
             files,
+            unsequenced_write_queue,
             fsync_thread,
             metrics,
         })
@@ -95,13 +145,17 @@ impl WAL {
             .last()
             .map(|rr| rr.unwrap().sequence_number.next())
             .unwrap_or(DurabilitySequenceNumber::MIN.next());
+        let next_sequence_number = Arc::new(AtomicU64::new(next.number()));
+        let unsequenced_write_queue =
+            Arc::new(UnsequencedWriteQueue::new(next_sequence_number.clone(), metrics.clone()));
 
-        let mut fsync_thread = FsyncThread::new(files.clone(), metrics.clone());
+        let mut fsync_thread = FsyncThread::new(files.clone(), unsequenced_write_queue.clone(), metrics.clone());
         FsyncThread::start(&mut fsync_thread.handle, fsync_thread.context.clone());
         Ok(Self {
             registered_types: HashMap::new(),
-            next_sequence_number: AtomicU64::new(next.number()),
+            next_sequence_number,
             files,
+            unsequenced_write_queue,
             fsync_thread,
             metrics,
         })
@@ -143,9 +197,19 @@ impl DurabilityService for WAL {
         let sequence_number = self.increment();
         debug!("Writing unsequenced record with {sequence_number}");
         let raw_record = RawRecord { sequence_number, record_type, bytes: Cow::Borrowed(bytes) };
-        files.write_record(raw_record, compressed_bytes)?;
+        files.write_record(raw_record, compressed_bytes, true)?;
         self.metrics.record_bytes_written(bytes.len() as u64);
         Ok(sequence_number)
+    }
+
+    fn may_queue_unsequenced_write(
+        &self,
+        record_type: DurabilityRecordType,
+        bytes: Vec<u8>,
+    ) -> Result<(), DurabilityServiceError> {
+        debug!("Queueing unsequenced record");
+        self.unsequenced_write_queue.push((record_type, bytes));
+        Ok(())
     }
 
     fn unsequenced_write(&self, record_type: DurabilityRecordType, bytes: &[u8]) -> Result<(), DurabilityServiceError> {
@@ -155,7 +219,7 @@ impl DurabilityService for WAL {
         let sequence_number = self.previous();
         debug!("Writing unsequenced record with {sequence_number}");
         let raw_record = RawRecord { sequence_number, record_type, bytes: Cow::Borrowed(bytes) };
-        files.write_record(raw_record, compressed_bytes)?;
+        files.write_record(raw_record, compressed_bytes, true)?;
         self.metrics.record_bytes_written(bytes.len() as u64);
         Ok(())
     }
@@ -311,7 +375,7 @@ impl Files {
         Ok(compressed_bytes)
     }
 
-    fn write_record(&mut self, record: RawRecord<'_>, compressed_bytes: Vec<u8>) -> Result<(), DurabilityServiceError> {
+    fn write_record(&mut self, record: RawRecord<'_>, compressed_bytes: Vec<u8>, do_flush: bool) -> Result<(), DurabilityServiceError> {
         if self.files.is_empty() || self.files.last().unwrap().len >= MAX_WAL_FILE_SIZE {
             self.open_new_file_at(record.sequence_number)?;
         }
@@ -330,7 +394,10 @@ impl Files {
 
         writer.write_all(&compressed_bytes)?;
         fail_point!(WAL_RECORD_UNFLUSHED);
-        writer.flush()?;
+        // TODO: Figure out if flush takes time.
+        if do_flush {
+            writer.flush()?;
+        }
 
         self.files.last_mut().unwrap().len = writer.stream_position()?;
         Ok(())
@@ -653,6 +720,7 @@ pub struct FsyncThreadContext {
     signalling: [Mutex<Vec<Option<mpsc::Sender<()>>>>; 2],
     current_signal: AtomicU8,
     metrics: FsyncMetrics,
+    unsequenced_write_queue: Arc<UnsequencedWriteQueue>,
 }
 
 #[derive(Debug)]
@@ -662,9 +730,14 @@ pub struct FsyncThread {
 }
 
 impl FsyncThread {
-    fn new(files: Arc<RwLock<Files>>, metrics: FsyncMetrics) -> Self {
+    fn new(
+        files: Arc<RwLock<Files>>,
+        unsequenced_write_queue: Arc<UnsequencedWriteQueue>,
+        metrics: FsyncMetrics,
+    ) -> Self {
         let context = FsyncThreadContext {
             files,
+            unsequenced_write_queue,
             shutting_down: AtomicBool::new(false),
             signalling: [Mutex::new(Vec::new()), Mutex::new(Vec::new())],
             current_signal: AtomicU8::new(0),
@@ -716,7 +789,12 @@ impl FsyncThread {
         let mut vec = vec_lock.unwrap();
         if !vec.is_empty() {
             let started = Instant::now();
-            context.files.write().unwrap().sync_all().expect("Expected sync all");
+            // Get the queue guard first because the contention is mainly on the files
+            let queue = context.unsequenced_write_queue.take();
+            let mut files = context.files.write().unwrap();
+            context.unsequenced_write_queue.flush(queue, &mut files).expect("Failed to flush unsequenced write queue");
+            files.sync_all().expect("Expected sync all");
+            drop(files);
             context.metrics.record_fsync_duration(started.elapsed());
             while let Some(sender_opt) = vec.pop() {
                 if let Some(sender) = sender_opt {

@@ -422,7 +422,7 @@ impl<Durability> MVCCStorage<Durability> {
     where
         Durability: DurabilityClient,
     {
-        durability_client.unsequenced_write(&StatusRecord::new(commit_sequence_number, did_apply))?;
+        durability_client.may_queue_unsequenced_write(&StatusRecord::new(commit_sequence_number, did_apply))?;
         Ok(())
     }
 
