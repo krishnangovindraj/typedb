@@ -222,6 +222,22 @@ impl<T> Checker<T> {
         }
     }
 
+    fn make_extractor_new(
+        &self,
+        vertex: &CheckVertex<ExecutorVariable>,
+        row: &MaybeOwnedRow<'_>,
+        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+    ) -> ExtractorOrExtractedVariable<T> {
+        match vertex.as_variable().and_then(|v| self.extractors.get(&v)) {
+            None => {
+                let value = get_vertex_value(vertex, Some(row), &context.parameters);
+                let owned_value = value.into_owned();
+                ExtractorOrExtractedVariable::Extracted(owned_value)
+            }
+            Some(&tuple_extractor) => ExtractorOrExtractedVariable::Extractor(tuple_extractor),
+        }
+    }
+
     pub(crate) fn filter_fn_for_row(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
@@ -469,12 +485,12 @@ impl<T> Checker<T> {
     ) -> Box<dyn Fn(&T) -> Result<bool, Box<ConceptReadError>>> {
         let snapshot = context.snapshot.clone();
         let thing_manager = context.thing_manager.clone();
-        let owner = self.make_extractor(owner, row, context);
-        let attribute = self.make_extractor(attribute, row, context);
+        let owner = self.make_extractor_new(owner, row, context);
+        let attribute = self.make_extractor_new(attribute, row, context);
         Box::new({
             move |value: &T| {
-                let owner = unwrap_or_result_false!(owner(value) => Thing).as_object();
-                let attribute = attribute(value);
+                let owner = unwrap_or_result_false!(owner.get(value) => Thing).as_object();
+                let attribute = attribute.get(value);
                 let attribute = unwrap_or_result_false!(&attribute => Thing).as_attribute();
                 owner.has_attribute(&*snapshot, &thing_manager, attribute, storage_counters.clone())
             }
@@ -1025,6 +1041,21 @@ fn get_variable_value<'a>(row: Option<&'a MaybeOwnedRow<'a>>, variable: &Executo
         }
         ExecutorVariable::Internal(_) => {
             unreachable!("Check variables without an extractor must have been recorded in the row.")
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum ExtractorOrExtractedVariable<T> {
+    Extracted(VariableValue<'static>),
+    Extractor(fn(&T) -> VariableValue<'_>),
+}
+
+impl<T> ExtractorOrExtractedVariable<T> {
+    fn get<'a>(&'a self, may_extract_from: &'a T) ->  VariableValue<'a> {
+        match self {
+            ExtractorOrExtractedVariable::Extracted(v) => v.as_reference(),
+            ExtractorOrExtractedVariable::Extractor(f) => f(may_extract_from)
         }
     }
 }
