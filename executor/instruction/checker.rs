@@ -301,21 +301,7 @@ impl<T> Checker<T> {
     ) -> Box<dyn Fn(&T) -> Result<bool, Box<ConceptReadError>>> {
         let var = self.make_extractor_new(&CheckVertex::Variable(var), row, context);
         let iid = context.parameters().iid(iid).unwrap().clone();
-        Box::new(move |value: &T| Ok(Self::check_iid(&iid, var.get(value))))
-    }
-
-    fn check_iid(iid: &ByteArray<{ THING_VERTEX_MAX_LENGTH }>, value: VariableValue<'_>) -> bool {
-        match value {
-            VariableValue::Thing(thing) => match thing {
-                Thing::Entity(entity) => *iid == *entity.vertex().to_bytes(),
-                Thing::Relation(relation) => *iid == *relation.vertex().to_bytes(),
-                Thing::Attribute(attribute) => *iid == *attribute.vertex().to_bytes(),
-            },
-            VariableValue::None => false,
-            VariableValue::Type(_) => false,
-            VariableValue::Value(_) => false, // or unreachable?
-            VariableValue::ThingList(_) | VariableValue::ValueList(_) => unimplemented_feature!(Lists),
-        }
+        Box::new(move |value: &T| Ok(check_iid(&iid, var.get(value))))
     }
 
     fn filter_type_list_fn(
@@ -357,21 +343,8 @@ impl<T> Checker<T> {
         Box::new(move |source: &T| {
             let subtype = unwrap_or_result_false!(subtype.get(source) => Type);
             let supertype = unwrap_or_result_false!(supertype.get(source) => Type);
-            Self::check_sub(&*snapshot, &*thing_manager, sub_kind, subtype, supertype)
+            check_sub(&*snapshot, &*thing_manager, sub_kind, subtype, supertype)
         })
-    }
-
-    fn check_sub(
-        snapshot: &impl ReadableSnapshot,
-        thing_manager: &ThingManager,
-        sub_kind: SubKind,
-        subtype: Type,
-        supertype: Type,
-    ) -> Result<bool, Box<ConceptReadError>> {
-        match sub_kind {
-            SubKind::Subtype => subtype.is_transitive_subtype_of(supertype, &*snapshot, thing_manager.type_manager()),
-            SubKind::Exact => subtype.is_direct_subtype_of(supertype, &*snapshot, thing_manager.type_manager()),
-        }
     }
 
     fn filter_owns_fn(
@@ -661,35 +634,13 @@ impl<T> Checker<T> {
                 VariableValue::None | VariableValue::Type(_) | VariableValue::Thing(_) => unreachable!(),
             };
             if rhs.value_type().is_trivially_castable_to(lhs.value_type().category()) {
-                Ok(Self::cmp_values_fn(&comparator)(&lhs, &rhs.cast(lhs.value_type().category()).unwrap()))
+                Ok(cmp_values_fn(&comparator)(&lhs, &rhs.cast(lhs.value_type().category()).unwrap()))
             } else if lhs.value_type().is_trivially_castable_to(rhs.value_type().category()) {
-                Ok(Self::cmp_values_fn(&comparator)(&lhs.cast(rhs.value_type().category()).unwrap(), &rhs))
+                Ok(cmp_values_fn(&comparator)(&lhs.cast(rhs.value_type().category()).unwrap(), &rhs))
             } else {
                 Ok(false)
             }
         })
-    }
-
-    fn cmp_values_fn(comparator: &Comparator) -> fn(&Value<'_>, &Value<'_>) -> bool {
-        match comparator {
-            Comparator::Equal => |a, b| a == b,
-            Comparator::NotEqual => |a, b| a != b,
-            Comparator::Less => |a, b| a < b,
-            Comparator::Greater => |a, b| a > b,
-            Comparator::LessOrEqual => |a, b| a <= b,
-            Comparator::GreaterOrEqual => |a, b| a >= b,
-            Comparator::Like => |a, b| {
-                // TODO: Avoid recompiling the regex every time.
-                regex::Regex::new(b.unwrap_string_ref())
-                    .expect("Invalid regex should have been caught at compile time")
-                    .is_match(a.unwrap_string_ref())
-            },
-            Comparator::Contains => |a, b| {
-                let a_unicase = UniCase::new(a.unwrap_string_ref()).to_folded_case();
-                let b_unicase = UniCase::new(b.unwrap_string_ref()).to_folded_case();
-                a_unicase.contains(b_unicase.as_str())
-            },
-        }
     }
 }
 
@@ -702,32 +653,32 @@ impl Checker<()> {
     ) -> Result<bool, Box<ConceptReadError>> {
         for check in checks {
             let passes = match check {
-                CheckInstruction::Iid { var, iid } => Self::filter_iid(context, row, *var, iid),
+                CheckInstruction::Iid { var, iid } => filter_iid(context, row, *var, iid),
                 CheckInstruction::TypeList { type_var, types } => {
-                    Self::filter_type_list(context, row, *type_var, types)
+                    filter_type_list(context, row, *type_var, types)
                 }
                 CheckInstruction::ThingTypeList { thing_var, types } => {
-                    Self::filter_thing_type_list(context, row, *thing_var, types)
+                    filter_thing_type_list(context, row, *thing_var, types)
                 }
                 CheckInstruction::Sub { sub_kind, subtype, supertype } => {
-                    Self::filter_sub(context, row, *sub_kind, subtype, supertype)?
+                    filter_sub(context, row, *sub_kind, subtype, supertype)?
                 }
-                CheckInstruction::Owns { owner, attribute } => Self::filter_owns(context, row, owner, attribute)?,
+                CheckInstruction::Owns { owner, attribute } => filter_owns(context, row, owner, attribute)?,
                 CheckInstruction::Relates { relation, role_type } => {
-                    Self::filter_relates(context, row, relation, role_type)?
+                    filter_relates(context, row, relation, role_type)?
                 }
-                CheckInstruction::Plays { player, role_type } => Self::filter_plays(context, row, player, role_type)?,
+                CheckInstruction::Plays { player, role_type } => filter_plays(context, row, player, role_type)?,
                 CheckInstruction::Isa { isa_kind, type_, thing } => {
-                    Self::filter_isa(context, row, *isa_kind, type_, thing)?
+                    filter_isa(context, row, *isa_kind, type_, thing)?
                 }
                 CheckInstruction::Has { owner, attribute } => {
-                    Self::filter_has(context, row, owner, attribute, storage_counters.clone())?
+                    filter_has(context, row, owner, attribute, storage_counters.clone())?
                 }
                 CheckInstruction::Links { relation, player, role } => {
-                    Self::filter_links(context, row, relation, player, role, storage_counters.clone())?
+                    filter_links(context, row, relation, player, role, storage_counters.clone())?
                 }
                 CheckInstruction::IndexedRelation { start_player, end_player, relation, start_role, end_role } => {
-                    Self::filter_indexed_relation(
+                    filter_indexed_relation(
                         context,
                         row,
                         start_player,
@@ -738,14 +689,14 @@ impl Checker<()> {
                         storage_counters.clone(),
                     )?
                 }
-                CheckInstruction::Is { lhs, rhs } => Self::filter_is(row, *lhs, *rhs),
+                CheckInstruction::Is { lhs, rhs } => filter_is(row, *lhs, *rhs),
                 CheckInstruction::LinksDeduplication { role1, player1, role2, player2 } => {
-                    Self::filter_links_dedup(context, row, *role1, *player1, *role2, *player2)
+                    filter_links_dedup(context, row, *role1, *player1, *role2, *player2)
                 }
                 CheckInstruction::Comparison { lhs, rhs, comparator } => {
-                    Self::filter_comparison(context, row, lhs, rhs, *comparator, storage_counters.clone())?
+                    filter_comparison(context, row, lhs, rhs, *comparator, storage_counters.clone())?
                 }
-                CheckInstruction::NotNone { variables } => Self::filter_not_none(row, variables),
+                CheckInstruction::NotNone { variables } => filter_not_none(row, variables),
                 CheckInstruction::Unsatisfiable => false,
             };
             if !passes {
@@ -754,253 +705,302 @@ impl Checker<()> {
         }
         Ok(true)
     }
+}
 
-    fn filter_iid(
-        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-        row: &MaybeOwnedRow<'_>,
-        var: ExecutorVariable,
-        iid: &ir::pattern::ParameterID,
-    ) -> bool {
-        let extracted = get_vertex_value(&CheckVertex::Variable(var), Some(row), &context.parameters);
-        let iid = context.parameters().iid(iid).unwrap();
-        Self::check_iid(iid, extracted)
+fn filter_iid(
+    context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+    row: &MaybeOwnedRow<'_>,
+    var: ExecutorVariable,
+    iid: &ir::pattern::ParameterID,
+) -> bool {
+    let extracted = get_vertex_value(&CheckVertex::Variable(var), Some(row), &context.parameters);
+    let iid = context.parameters().iid(iid).unwrap();
+    check_iid(iid, extracted)
+}
+
+fn filter_type_list(
+    context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+    row: &MaybeOwnedRow<'_>,
+    type_var: ExecutorVariable,
+    types: &std::sync::Arc<std::collections::BTreeSet<Type>>,
+) -> bool {
+    let extracted = get_vertex_value(&CheckVertex::Variable(type_var), Some(row), &context.parameters);
+    types.contains(&unwrap_or_return_false!(extracted => Type))
+}
+
+fn filter_thing_type_list(
+    context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+    row: &MaybeOwnedRow<'_>,
+    thing_var: ExecutorVariable,
+    types: &std::sync::Arc<std::collections::BTreeSet<Type>>,
+) -> bool {
+    let extracted = get_vertex_value(&CheckVertex::Variable(thing_var), Some(row), &context.parameters);
+    types.contains(&unwrap_or_return_false!(extracted => Thing).type_())
+}
+
+fn filter_sub(
+    context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+    row: &MaybeOwnedRow<'_>,
+    sub_kind: SubKind,
+    subtype: &CheckVertex<ExecutorVariable>,
+    supertype: &CheckVertex<ExecutorVariable>,
+) -> Result<bool, Box<ConceptReadError>> {
+    let subtype = get_vertex_value(subtype, Some(row), &context.parameters);
+    let supertype = get_vertex_value(supertype, Some(row), &context.parameters);
+    check_sub(
+        context.snapshot.as_ref(),
+        context.thing_manager.as_ref(),
+        sub_kind,
+        unwrap_or_result_false!(subtype => Type),
+        unwrap_or_result_false!(supertype => Type),
+    )
+}
+
+fn filter_owns(
+    context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+    row: &MaybeOwnedRow<'_>,
+    owner: &CheckVertex<ExecutorVariable>,
+    attribute: &CheckVertex<ExecutorVariable>,
+) -> Result<bool, Box<ConceptReadError>> {
+    let owner = get_vertex_value(owner, Some(row), &context.parameters);
+    let attribute = get_vertex_value(attribute, Some(row), &context.parameters);
+    let owner = unwrap_or_result_false!(owner => Type).as_object_type();
+    let attribute = unwrap_or_result_false!(attribute => Type).as_attribute_type();
+    owner
+        .get_owns_attribute(context.snapshot.as_ref(), context.thing_manager.clone().type_manager(), attribute)
+        .map(|owns| owns.is_some())
+}
+
+fn filter_relates(
+    context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+    row: &MaybeOwnedRow<'_>,
+    relation: &CheckVertex<ExecutorVariable>,
+    role_type: &CheckVertex<ExecutorVariable>,
+) -> Result<bool, Box<ConceptReadError>> {
+    let relation = get_vertex_value(relation, Some(row), &context.parameters);
+    let role_type = get_vertex_value(role_type, Some(row), &context.parameters);
+    let relation_type = unwrap_or_result_false!(relation => Type).as_relation_type();
+    let role_type = unwrap_or_result_false!(role_type => Type).as_role_type();
+    relation_type
+        .get_relates_role(context.snapshot.as_ref(), context.thing_manager.type_manager(), role_type)
+        .map(|relates| relates.is_some())
+}
+
+fn filter_plays(
+    context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+    row: &MaybeOwnedRow<'_>,
+    player: &CheckVertex<ExecutorVariable>,
+    role_type: &CheckVertex<ExecutorVariable>,
+) -> Result<bool, Box<ConceptReadError>> {
+    let player = get_vertex_value(player, Some(row), &context.parameters);
+    let role_type = get_vertex_value(role_type, Some(row), &context.parameters);
+    let object_type = unwrap_or_result_false!(player => Type).as_object_type();
+    let role_type = unwrap_or_result_false!(role_type => Type).as_role_type();
+    object_type
+        .get_plays_role(context.snapshot.as_ref(), context.thing_manager.type_manager(), role_type)
+        .map(|plays| plays.is_some())
+}
+
+fn filter_isa(
+    context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+    row: &MaybeOwnedRow<'_>,
+    isa_kind: IsaKind,
+    type_: &CheckVertex<ExecutorVariable>,
+    thing: &CheckVertex<ExecutorVariable>,
+) -> Result<bool, Box<ConceptReadError>> {
+    let thing = get_vertex_value(thing, Some(row), &context.parameters);
+    let type_ = get_vertex_value(type_, Some(row), &context.parameters);
+    let actual = unwrap_or_result_false!(thing => Thing).type_();
+    let expected = unwrap_or_result_false!(type_ => Type);
+    if isa_kind == IsaKind::Exact {
+        Ok(actual == expected)
+    } else {
+        actual.is_transitive_subtype_of(expected, context.snapshot.as_ref(), context.thing_manager.type_manager())
     }
+}
 
-    fn filter_type_list(
-        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-        row: &MaybeOwnedRow<'_>,
-        type_var: ExecutorVariable,
-        types: &std::sync::Arc<std::collections::BTreeSet<Type>>,
-    ) -> bool {
-        let extracted = get_vertex_value(&CheckVertex::Variable(type_var), Some(row), &context.parameters);
-        types.contains(&unwrap_or_return_false!(extracted => Type))
-    }
+fn filter_has(
+    context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+    row: &MaybeOwnedRow<'_>,
+    owner: &CheckVertex<ExecutorVariable>,
+    attribute: &CheckVertex<ExecutorVariable>,
+    storage_counters: StorageCounters,
+) -> Result<bool, Box<ConceptReadError>> {
+    let owner = get_vertex_value(owner, Some(row), &context.parameters);
+    let attribute = get_vertex_value(attribute, Some(row), &context.parameters);
+    let owner = unwrap_or_result_false!(&owner => Thing).as_object();
+    let attribute = unwrap_or_result_false!(&attribute => Thing).as_attribute();
+    owner.has_attribute(
+        context.snapshot.as_ref(),
+        context.thing_manager.as_ref(),
+        attribute,
+        storage_counters.clone(),
+    )
+}
 
-    fn filter_thing_type_list(
-        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-        row: &MaybeOwnedRow<'_>,
-        thing_var: ExecutorVariable,
-        types: &std::sync::Arc<std::collections::BTreeSet<Type>>,
-    ) -> bool {
-        let extracted = get_vertex_value(&CheckVertex::Variable(thing_var), Some(row), &context.parameters);
-        types.contains(&unwrap_or_return_false!(extracted => Thing).type_())
-    }
+fn filter_links(
+    context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+    row: &MaybeOwnedRow<'_>,
+    relation: &CheckVertex<ExecutorVariable>,
+    player: &CheckVertex<ExecutorVariable>,
+    role: &CheckVertex<ExecutorVariable>,
+    storage_counters: StorageCounters,
+) -> Result<bool, Box<ConceptReadError>> {
+    let relation = get_vertex_value(relation, Some(row), &context.parameters);
+    let player = get_vertex_value(player, Some(row), &context.parameters);
+    let role = get_vertex_value(role, Some(row), &context.parameters);
+    let relation = unwrap_or_result_false!(relation => Thing).as_relation();
+    let player = unwrap_or_result_false!(player => Thing).as_object();
+    let role = unwrap_or_result_false!(role => Type).as_role_type();
+    relation.has_role_player(
+        context.snapshot.as_ref(),
+        context.thing_manager.as_ref(),
+        player,
+        role,
+        storage_counters.clone(),
+    )
+}
 
-    fn filter_sub(
-        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-        row: &MaybeOwnedRow<'_>,
-        sub_kind: SubKind,
-        subtype: &CheckVertex<ExecutorVariable>,
-        supertype: &CheckVertex<ExecutorVariable>,
-    ) -> Result<bool, Box<ConceptReadError>> {
-        let subtype = get_vertex_value(subtype, Some(row), &context.parameters);
-        let supertype = get_vertex_value(supertype, Some(row), &context.parameters);
-        Self::check_sub(
-            context.snapshot.as_ref(),
-            context.thing_manager.as_ref(),
-            sub_kind,
-            unwrap_or_result_false!(subtype => Type),
-            unwrap_or_result_false!(supertype => Type),
-        )
-    }
+fn filter_indexed_relation(
+    context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+    row: &MaybeOwnedRow<'_>,
+    start_player: &CheckVertex<ExecutorVariable>,
+    end_player: &CheckVertex<ExecutorVariable>,
+    relation: &CheckVertex<ExecutorVariable>,
+    start_role: &CheckVertex<ExecutorVariable>,
+    end_role: &CheckVertex<ExecutorVariable>,
+    storage_counters: StorageCounters,
+) -> Result<bool, Box<ConceptReadError>> {
+    let start_player_extractor = get_vertex_value(start_player, Some(row), &context.parameters);
+    let end_player_extractor = get_vertex_value(end_player, Some(row), &context.parameters);
+    let relation_extractor = get_vertex_value(relation, Some(row), &context.parameters);
+    let start_role_extractor = get_vertex_value(start_role, Some(row), &context.parameters);
+    let end_role_extractor = get_vertex_value(end_role, Some(row), &context.parameters);
+    let object = unwrap_or_result_false!(start_player_extractor => Thing).as_object();
+    let end_player = unwrap_or_result_false!(end_player_extractor => Thing).as_object();
+    let relation = unwrap_or_result_false!(relation_extractor => Thing).as_relation();
+    let start_role = unwrap_or_result_false!(start_role_extractor => Type).as_role_type();
+    let end_role = unwrap_or_result_false!(end_role_extractor => Type).as_role_type();
+    object.has_indexed_relation_player(
+        context.snapshot.as_ref(),
+        context.thing_manager.as_ref(),
+        end_player,
+        relation,
+        start_role,
+        end_role,
+        storage_counters.clone(),
+    )
+}
 
-    fn filter_owns(
-        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-        row: &MaybeOwnedRow<'_>,
-        owner: &CheckVertex<ExecutorVariable>,
-        attribute: &CheckVertex<ExecutorVariable>,
-    ) -> Result<bool, Box<ConceptReadError>> {
-        let owner = get_vertex_value(owner, Some(row), &context.parameters);
-        let attribute = get_vertex_value(attribute, Some(row), &context.parameters);
-        let owner = unwrap_or_result_false!(owner => Type).as_object_type();
-        let attribute = unwrap_or_result_false!(attribute => Type).as_attribute_type();
-        owner
-            .get_owns_attribute(context.snapshot.as_ref(), context.thing_manager.clone().type_manager(), attribute)
-            .map(|owns| owns.is_some())
-    }
+fn filter_is(row: &MaybeOwnedRow<'_>, lhs: ExecutorVariable, rhs: ExecutorVariable) -> bool {
+    let lhs = get_variable_value(Some(row), &lhs);
+    let rhs = get_variable_value(Some(row), &rhs);
+    lhs == rhs
+}
 
-    fn filter_relates(
-        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-        row: &MaybeOwnedRow<'_>,
-        relation: &CheckVertex<ExecutorVariable>,
-        role_type: &CheckVertex<ExecutorVariable>,
-    ) -> Result<bool, Box<ConceptReadError>> {
-        let relation = get_vertex_value(relation, Some(row), &context.parameters);
-        let role_type = get_vertex_value(role_type, Some(row), &context.parameters);
-        let relation_type = unwrap_or_result_false!(relation => Type).as_relation_type();
-        let role_type = unwrap_or_result_false!(role_type => Type).as_role_type();
-        relation_type
-            .get_relates_role(context.snapshot.as_ref(), context.thing_manager.type_manager(), role_type)
-            .map(|relates| relates.is_some())
-    }
+fn filter_links_dedup(
+    _context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+    row: &MaybeOwnedRow<'_>,
+    role1: ExecutorVariable,
+    player1: ExecutorVariable,
+    role2: ExecutorVariable,
+    player2: ExecutorVariable,
+) -> bool {
+    let role1 = get_variable_value(Some(row), &role1);
+    let player1 = get_variable_value(Some(row), &player1);
+    let role2 = get_variable_value(Some(row), &role2);
+    let player2 = get_variable_value(Some(row), &player2);
+    !(role1 == role2 && player1 == player2)
+}
 
-    fn filter_plays(
-        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-        row: &MaybeOwnedRow<'_>,
-        player: &CheckVertex<ExecutorVariable>,
-        role_type: &CheckVertex<ExecutorVariable>,
-    ) -> Result<bool, Box<ConceptReadError>> {
-        let player = get_vertex_value(player, Some(row), &context.parameters);
-        let role_type = get_vertex_value(role_type, Some(row), &context.parameters);
-        let object_type = unwrap_or_result_false!(player => Type).as_object_type();
-        let role_type = unwrap_or_result_false!(role_type => Type).as_role_type();
-        object_type
-            .get_plays_role(context.snapshot.as_ref(), context.thing_manager.type_manager(), role_type)
-            .map(|plays| plays.is_some())
-    }
+fn filter_not_none(row: &MaybeOwnedRow<'_>, variables: &[ExecutorVariable]) -> bool {
+    variables.iter().all(|var| {
+        let value = get_variable_value(Some(row), var);
+        !value.is_none()
+    })
+}
 
-    fn filter_isa(
-        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-        row: &MaybeOwnedRow<'_>,
-        isa_kind: IsaKind,
-        type_: &CheckVertex<ExecutorVariable>,
-        thing: &CheckVertex<ExecutorVariable>,
-    ) -> Result<bool, Box<ConceptReadError>> {
-        let thing = get_vertex_value(thing, Some(row), &context.parameters);
-        let type_ = get_vertex_value(type_, Some(row), &context.parameters);
-        let actual = unwrap_or_result_false!(thing => Thing).type_();
-        let expected = unwrap_or_result_false!(type_ => Type);
-        if isa_kind == IsaKind::Exact {
-            Ok(actual == expected)
-        } else {
-            actual.is_transitive_subtype_of(expected, context.snapshot.as_ref(), context.thing_manager.type_manager())
+fn filter_comparison(
+    context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+    row: &MaybeOwnedRow<'_>,
+    lhs: &CheckVertex<ExecutorVariable>,
+    rhs: &CheckVertex<ExecutorVariable>,
+    comparator: Comparator,
+    storage_counters: StorageCounters,
+) -> Result<bool, Box<ConceptReadError>> {
+    let lhs = get_vertex_value(lhs, Some(row), &context.parameters);
+    let rhs = get_vertex_value(rhs, Some(row), &context.parameters);
+    let rhs = match &rhs {
+        VariableValue::Thing(Thing::Attribute(attr)) => {
+            attr.get_value(context.snapshot.as_ref(), context.thing_manager.as_ref(), storage_counters.clone())?
         }
-    }
-
-    fn filter_has(
-        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-        row: &MaybeOwnedRow<'_>,
-        owner: &CheckVertex<ExecutorVariable>,
-        attribute: &CheckVertex<ExecutorVariable>,
-        storage_counters: StorageCounters,
-    ) -> Result<bool, Box<ConceptReadError>> {
-        let owner = get_vertex_value(owner, Some(row), &context.parameters);
-        let attribute = get_vertex_value(attribute, Some(row), &context.parameters);
-        let owner = unwrap_or_result_false!(&owner => Thing).as_object();
-        let attribute = unwrap_or_result_false!(&attribute => Thing).as_attribute();
-        owner.has_attribute(
-            context.snapshot.as_ref(),
-            context.thing_manager.as_ref(),
-            attribute,
-            storage_counters.clone(),
-        )
-    }
-
-    fn filter_links(
-        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-        row: &MaybeOwnedRow<'_>,
-        relation: &CheckVertex<ExecutorVariable>,
-        player: &CheckVertex<ExecutorVariable>,
-        role: &CheckVertex<ExecutorVariable>,
-        storage_counters: StorageCounters,
-    ) -> Result<bool, Box<ConceptReadError>> {
-        let relation = get_vertex_value(relation, Some(row), &context.parameters);
-        let player = get_vertex_value(player, Some(row), &context.parameters);
-        let role = get_vertex_value(role, Some(row), &context.parameters);
-        let relation = unwrap_or_result_false!(relation => Thing).as_relation();
-        let player = unwrap_or_result_false!(player => Thing).as_object();
-        let role = unwrap_or_result_false!(role => Type).as_role_type();
-        relation.has_role_player(
-            context.snapshot.as_ref(),
-            context.thing_manager.as_ref(),
-            player,
-            role,
-            storage_counters.clone(),
-        )
-    }
-
-    fn filter_indexed_relation(
-        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-        row: &MaybeOwnedRow<'_>,
-        start_player: &CheckVertex<ExecutorVariable>,
-        end_player: &CheckVertex<ExecutorVariable>,
-        relation: &CheckVertex<ExecutorVariable>,
-        start_role: &CheckVertex<ExecutorVariable>,
-        end_role: &CheckVertex<ExecutorVariable>,
-        storage_counters: StorageCounters,
-    ) -> Result<bool, Box<ConceptReadError>> {
-        let start_player_extractor = get_vertex_value(start_player, Some(row), &context.parameters);
-        let end_player_extractor = get_vertex_value(end_player, Some(row), &context.parameters);
-        let relation_extractor = get_vertex_value(relation, Some(row), &context.parameters);
-        let start_role_extractor = get_vertex_value(start_role, Some(row), &context.parameters);
-        let end_role_extractor = get_vertex_value(end_role, Some(row), &context.parameters);
-        let object = unwrap_or_result_false!(start_player_extractor => Thing).as_object();
-        let end_player = unwrap_or_result_false!(end_player_extractor => Thing).as_object();
-        let relation = unwrap_or_result_false!(relation_extractor => Thing).as_relation();
-        let start_role = unwrap_or_result_false!(start_role_extractor => Type).as_role_type();
-        let end_role = unwrap_or_result_false!(end_role_extractor => Type).as_role_type();
-        object.has_indexed_relation_player(
-            context.snapshot.as_ref(),
-            context.thing_manager.as_ref(),
-            end_player,
-            relation,
-            start_role,
-            end_role,
-            storage_counters.clone(),
-        )
-    }
-
-    fn filter_is(row: &MaybeOwnedRow<'_>, lhs: ExecutorVariable, rhs: ExecutorVariable) -> bool {
-        let lhs = get_variable_value(Some(row), &lhs);
-        let rhs = get_variable_value(Some(row), &rhs);
-        lhs == rhs
-    }
-
-    fn filter_links_dedup(
-        _context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-        row: &MaybeOwnedRow<'_>,
-        role1: ExecutorVariable,
-        player1: ExecutorVariable,
-        role2: ExecutorVariable,
-        player2: ExecutorVariable,
-    ) -> bool {
-        let role1 = get_variable_value(Some(row), &role1);
-        let player1 = get_variable_value(Some(row), &player1);
-        let role2 = get_variable_value(Some(row), &role2);
-        let player2 = get_variable_value(Some(row), &player2);
-        !(role1 == role2 && player1 == player2)
-    }
-
-    fn filter_not_none(row: &MaybeOwnedRow<'_>, variables: &[ExecutorVariable]) -> bool {
-        variables.iter().all(|var| {
-            let value = get_variable_value(Some(row), var);
-            !value.is_none()
-        })
-    }
-
-    fn filter_comparison(
-        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-        row: &MaybeOwnedRow<'_>,
-        lhs: &CheckVertex<ExecutorVariable>,
-        rhs: &CheckVertex<ExecutorVariable>,
-        comparator: Comparator,
-        storage_counters: StorageCounters,
-    ) -> Result<bool, Box<ConceptReadError>> {
-        let lhs = get_vertex_value(lhs, Some(row), &context.parameters);
-        let rhs = get_vertex_value(rhs, Some(row), &context.parameters);
-        let rhs = match &rhs {
-            VariableValue::Thing(Thing::Attribute(attr)) => {
-                attr.get_value(context.snapshot.as_ref(), context.thing_manager.as_ref(), storage_counters.clone())?
-            }
-            VariableValue::Value(value) => value.as_reference(),
-            VariableValue::ThingList(_) | VariableValue::ValueList(_) => unimplemented_feature!(Lists),
-            VariableValue::None | VariableValue::Type(_) | VariableValue::Thing(_) => unreachable!(),
-        };
-        let lhs = match &lhs {
-            VariableValue::Thing(Thing::Attribute(attr)) => {
-                attr.get_value(context.snapshot.as_ref(), context.thing_manager.as_ref(), storage_counters.clone())?
-            }
-            VariableValue::Value(value) => value.as_reference(),
-            VariableValue::ThingList(_) | VariableValue::ValueList(_) => unimplemented_feature!(Lists),
-            VariableValue::None | VariableValue::Type(_) | VariableValue::Thing(_) => unreachable!(),
-        };
-        if rhs.value_type().is_trivially_castable_to(lhs.value_type().category()) {
-            Ok(Self::cmp_values_fn(&comparator)(&lhs, &rhs.cast(lhs.value_type().category()).unwrap()))
-        } else if lhs.value_type().is_trivially_castable_to(rhs.value_type().category()) {
-            Ok(Self::cmp_values_fn(&comparator)(&lhs.cast(rhs.value_type().category()).unwrap(), &rhs))
-        } else {
-            Ok(false)
+        VariableValue::Value(value) => value.as_reference(),
+        VariableValue::ThingList(_) | VariableValue::ValueList(_) => unimplemented_feature!(Lists),
+        VariableValue::None | VariableValue::Type(_) | VariableValue::Thing(_) => unreachable!(),
+    };
+    let lhs = match &lhs {
+        VariableValue::Thing(Thing::Attribute(attr)) => {
+            attr.get_value(context.snapshot.as_ref(), context.thing_manager.as_ref(), storage_counters.clone())?
         }
+        VariableValue::Value(value) => value.as_reference(),
+        VariableValue::ThingList(_) | VariableValue::ValueList(_) => unimplemented_feature!(Lists),
+        VariableValue::None | VariableValue::Type(_) | VariableValue::Thing(_) => unreachable!(),
+    };
+    if rhs.value_type().is_trivially_castable_to(lhs.value_type().category()) {
+        Ok(cmp_values_fn(&comparator)(&lhs, &rhs.cast(lhs.value_type().category()).unwrap()))
+    } else if lhs.value_type().is_trivially_castable_to(rhs.value_type().category()) {
+        Ok(cmp_values_fn(&comparator)(&lhs.cast(rhs.value_type().category()).unwrap(), &rhs))
+    } else {
+        Ok(false)
+    }
+}
+
+fn cmp_values_fn(comparator: &Comparator) -> fn(&Value<'_>, &Value<'_>) -> bool {
+    match comparator {
+        Comparator::Equal => |a, b| a == b,
+        Comparator::NotEqual => |a, b| a != b,
+        Comparator::Less => |a, b| a < b,
+        Comparator::Greater => |a, b| a > b,
+        Comparator::LessOrEqual => |a, b| a <= b,
+        Comparator::GreaterOrEqual => |a, b| a >= b,
+        Comparator::Like => |a, b| {
+            // TODO: Avoid recompiling the regex every time.
+            regex::Regex::new(b.unwrap_string_ref())
+                .expect("Invalid regex should have been caught at compile time")
+                .is_match(a.unwrap_string_ref())
+        },
+        Comparator::Contains => |a, b| {
+            let a_unicase = UniCase::new(a.unwrap_string_ref()).to_folded_case();
+            let b_unicase = UniCase::new(b.unwrap_string_ref()).to_folded_case();
+            a_unicase.contains(b_unicase.as_str())
+        },
+    }
+}
+
+fn check_iid(iid: &ByteArray<{ THING_VERTEX_MAX_LENGTH }>, value: VariableValue<'_>) -> bool {
+    match value {
+        VariableValue::Thing(thing) => match thing {
+            Thing::Entity(entity) => *iid == *entity.vertex().to_bytes(),
+            Thing::Relation(relation) => *iid == *relation.vertex().to_bytes(),
+            Thing::Attribute(attribute) => *iid == *attribute.vertex().to_bytes(),
+        },
+        VariableValue::None => false,
+        VariableValue::Type(_) => false,
+        VariableValue::Value(_) => false, // or unreachable?
+        VariableValue::ThingList(_) | VariableValue::ValueList(_) => unimplemented_feature!(Lists),
+    }
+}
+
+fn check_sub(
+    snapshot: &impl ReadableSnapshot,
+    thing_manager: &ThingManager,
+    sub_kind: SubKind,
+    subtype: Type,
+    supertype: Type,
+) -> Result<bool, Box<ConceptReadError>> {
+    match sub_kind {
+        SubKind::Subtype => subtype.is_transitive_subtype_of(supertype, &*snapshot, thing_manager.type_manager()),
+        SubKind::Exact => subtype.is_direct_subtype_of(supertype, &*snapshot, thing_manager.type_manager()),
     }
 }
 
