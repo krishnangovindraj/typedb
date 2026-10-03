@@ -936,7 +936,7 @@ impl CheckExecutor {
         let mut output = FixedBatch::new(self.output_width);
 
         while let Some(row) = input.next() {
-            let input_row = row.map_err(|err| err.clone())?;
+            let input_row: MaybeOwnedRow<'_> = row.map_err(|err| err.clone())?;
             if Checker::filter(&self.checks, context, &input_row, self.profile.storage_counters())
                 .map_err(|err| ReadExecutionError::ConceptRead { typedb_source: err })?
             {
