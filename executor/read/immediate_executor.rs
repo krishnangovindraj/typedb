@@ -937,7 +937,7 @@ impl CheckExecutor {
 
         while let Some(row) = input.next() {
             let input_row: MaybeOwnedRow<'_> = row.map_err(|err| err.clone())?;
-            if Checker::filter(&self.checks, context, &input_row, self.profile.storage_counters())
+            if Checker::filter_for_row(&self.checks, context, &input_row, self.profile.storage_counters())
                 .map_err(|err| ReadExecutionError::ConceptRead { typedb_source: err })?
             {
                 output.append(|mut row| {

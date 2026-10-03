@@ -34,7 +34,7 @@ use ir::{
 use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 use unicase::UniCase;
-use ir::pattern::ParameterID;
+
 use crate::{instruction::FilterFn, pipeline::stage::ExecutionContext, row::MaybeOwnedRow};
 
 #[derive(Debug)]
@@ -228,14 +228,11 @@ impl<T> Checker<T> {
         row: &MaybeOwnedRow<'_>,
         storage_counters: StorageCounters,
     ) -> Box<FilterFn<T>> {
-        let mut filters: Vec<CheckInstruction<ExtractorOrExtractedVariable<T>>> =
-            Vec::with_capacity(self.checks.len());
+        let mut filters: Vec<CheckInstruction<ExtractorOrExtractedVariable<T>>> = Vec::with_capacity(self.checks.len());
 
         for check in &self.checks {
             let filter = match check {
-                CheckInstruction::Iid { var, iid } => {
-                    self.filter_iid_fn(context, row, *var, iid)
-                },
+                CheckInstruction::Iid { var, iid } => self.filter_iid_fn(context, row, *var, iid),
                 &CheckInstruction::TypeList { type_var, ref types } => {
                     self.filter_type_list_fn(context, row, type_var, types)
                 }
@@ -307,9 +304,7 @@ impl<T> Checker<T> {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
     ) -> CheckVertex<ExtractorOrExtractedVariable<T>> {
         match vertex {
-            CheckVertex::Variable(var) => {
-                CheckVertex::Variable(self.make_extractor_new(*var, row, context))
-            }
+            CheckVertex::Variable(var) => CheckVertex::Variable(self.make_extractor_new(*var, row, context)),
             CheckVertex::Type(t) => CheckVertex::Type(*t),
             CheckVertex::Parameter(p) => CheckVertex::Parameter(p.clone()),
         }
@@ -480,8 +475,7 @@ impl<T> Checker<T> {
         row: &MaybeOwnedRow<'_>,
         variables: &[ExecutorVariable],
     ) -> CheckInstruction<ExtractorOrExtractedVariable<T>> {
-        let variables =
-            variables.iter().map(|var| self.make_extractor_new(*var, row, context)).collect();
+        let variables = variables.iter().map(|var| self.make_extractor_new(*var, row, context)).collect();
         CheckInstruction::NotNone { variables }
     }
 
@@ -500,6 +494,63 @@ impl<T> Checker<T> {
     }
 }
 
+impl Checker<()> {
+    pub(crate) fn filter_for_row(
+        checks: &[CheckInstruction<ExecutorVariable>],
+        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+        row: &MaybeOwnedRow<'_>,
+        storage_counters: StorageCounters,
+    ) -> Result<bool, Box<ConceptReadError>> {
+        for check in checks {
+            let passes = match check {
+                CheckInstruction::Iid { var, iid } => filter_iid(context, row, var, iid),
+                CheckInstruction::TypeList { type_var, types } => filter_type_list(context, row, type_var, types),
+                CheckInstruction::ThingTypeList { thing_var, types } => {
+                    filter_thing_type_list(context, row, thing_var, types)
+                }
+                CheckInstruction::Sub { sub_kind, subtype, supertype } => {
+                    filter_sub(context, row, *sub_kind, subtype, supertype)?
+                }
+                CheckInstruction::Owns { owner, attribute } => filter_owns(context, row, owner, attribute)?,
+                CheckInstruction::Relates { relation, role_type } => filter_relates(context, row, relation, role_type)?,
+                CheckInstruction::Plays { player, role_type } => filter_plays(context, row, player, role_type)?,
+                CheckInstruction::Isa { isa_kind, type_, thing } => filter_isa(context, row, *isa_kind, type_, thing)?,
+                CheckInstruction::Has { owner, attribute } => {
+                    filter_has(context, row, owner, attribute, storage_counters.clone())?
+                }
+                CheckInstruction::Links { relation, player, role } => {
+                    filter_links(context, row, relation, player, role, storage_counters.clone())?
+                }
+                CheckInstruction::IndexedRelation { start_player, end_player, relation, start_role, end_role } => {
+                    filter_indexed_relation(
+                        context,
+                        row,
+                        start_player,
+                        end_player,
+                        relation,
+                        start_role,
+                        end_role,
+                        storage_counters.clone(),
+                    )?
+                }
+                CheckInstruction::Is { lhs, rhs } => filter_is(row, lhs, rhs),
+                CheckInstruction::LinksDeduplication { role1, player1, role2, player2 } => {
+                    filter_links_dedup(context, row, role1, player1, role2, player2)
+                }
+                CheckInstruction::Comparison { lhs, rhs, comparator } => {
+                    filter_comparison(context, row, lhs, rhs, *comparator, storage_counters.clone())?
+                }
+                CheckInstruction::NotNone { variables } => filter_not_none(row, variables),
+                CheckInstruction::Unsatisfiable => false,
+            };
+            if !passes {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+}
+
 impl<T> Checker<T> {
     pub(crate) fn filter<V: ExtractFrom<T>>(
         checks: &[CheckInstruction<V>],
@@ -510,9 +561,7 @@ impl<T> Checker<T> {
         for check in checks {
             let passes = match check {
                 CheckInstruction::Iid { var, iid } => filter_iid(context, row, var, iid),
-                CheckInstruction::TypeList { type_var, types } => {
-                    filter_type_list(context, row, type_var, types)
-                }
+                CheckInstruction::TypeList { type_var, types } => filter_type_list(context, row, type_var, types),
                 CheckInstruction::ThingTypeList { thing_var, types } => {
                     filter_thing_type_list(context, row, thing_var, types)
                 }
@@ -520,13 +569,9 @@ impl<T> Checker<T> {
                     filter_sub(context, row, *sub_kind, subtype, supertype)?
                 }
                 CheckInstruction::Owns { owner, attribute } => filter_owns(context, row, owner, attribute)?,
-                CheckInstruction::Relates { relation, role_type } => {
-                    filter_relates(context, row, relation, role_type)?
-                }
+                CheckInstruction::Relates { relation, role_type } => filter_relates(context, row, relation, role_type)?,
                 CheckInstruction::Plays { player, role_type } => filter_plays(context, row, player, role_type)?,
-                CheckInstruction::Isa { isa_kind, type_, thing } => {
-                    filter_isa(context, row, *isa_kind, type_, thing)?
-                }
+                CheckInstruction::Isa { isa_kind, type_, thing } => filter_isa(context, row, *isa_kind, type_, thing)?,
                 CheckInstruction::Has { owner, attribute } => {
                     filter_has(context, row, owner, attribute, storage_counters.clone())?
                 }
@@ -688,12 +733,7 @@ fn filter_has<'a, T, V: ExtractFrom<T>>(
     let attribute = V::extract_vertex(attribute, row, &context.parameters);
     let owner = unwrap_or_result_false!(&owner => Thing).as_object();
     let attribute = unwrap_or_result_false!(&attribute => Thing).as_attribute();
-    owner.has_attribute(
-        context.snapshot.as_ref(),
-        context.thing_manager.as_ref(),
-        attribute,
-        storage_counters.clone(),
-    )
+    owner.has_attribute(context.snapshot.as_ref(), context.thing_manager.as_ref(), attribute, storage_counters.clone())
 }
 
 fn filter_links<T, V: ExtractFrom<T>>(
@@ -894,14 +934,17 @@ pub enum ExtractorOrExtractedVariable<T> {
 }
 
 impl<T> ExtractorOrExtractedVariable<T> {
-    fn get<'a>(&'a self, may_extract_from: &'a T) ->  VariableValue<'a> {
+    fn get<'a>(&'a self, may_extract_from: &'a T) -> VariableValue<'a> {
         self.extract(may_extract_from)
     }
 }
 
-trait ExtractFrom<T>: Sized
-{
-    fn extract_vertex<'a>(vertex: &'a CheckVertex<Self>, from: &'a T, parameters: &'a ParameterRegistry) -> VariableValue<'a> {
+trait ExtractFrom<T>: Sized {
+    fn extract_vertex<'a>(
+        vertex: &'a CheckVertex<Self>,
+        from: &'a T,
+        parameters: &'a ParameterRegistry,
+    ) -> VariableValue<'a> {
         match vertex {
             CheckVertex::Variable(var) => var.extract(from),
             CheckVertex::Type(type_) => VariableValue::Type(*type_),
@@ -917,9 +960,7 @@ trait ExtractFrom<T>: Sized
 impl<'r> ExtractFrom<MaybeOwnedRow<'r>> for ExecutorVariable {
     fn extract<'a>(&'a self, row: &'a MaybeOwnedRow<'r>) -> VariableValue<'a> {
         match self {
-            ExecutorVariable::RowPosition(position) => {
-                row.get(*position).as_reference()
-            }
+            ExecutorVariable::RowPosition(position) => row.get(*position).as_reference(),
             ExecutorVariable::Internal(_) => {
                 unreachable!("Check variables without an extractor must have been recorded in the row.")
             }
