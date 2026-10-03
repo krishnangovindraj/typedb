@@ -14,7 +14,7 @@ use answer::{Thing, Type, variable_value::VariableValue};
 use bytes::byte_array::ByteArray;
 use compiler::{
     ExecutorVariable,
-    executable::match_::instructions::{CheckInstruction, CheckVertex},
+    executable::match_::instructions::{CheckInstruction, CheckVertex, thing, type_},
 };
 use concept::{
     error::ConceptReadError,
@@ -282,7 +282,7 @@ impl<T> Checker<T> {
         let context = context.clone();
         Box::new(move |res| {
             let Ok(value) = res else { return Ok(true) };
-            Self::filter(&filters, &context, value, storage_counters.clone())
+            filter_impl(&filters, &context, value, storage_counters.clone())
         })
     }
 
@@ -495,117 +495,69 @@ impl<T> Checker<T> {
 }
 
 impl Checker<()> {
-    pub(crate) fn filter_for_row(
+    pub(crate) fn filter(
         checks: &[CheckInstruction<ExecutorVariable>],
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: &MaybeOwnedRow<'_>,
         storage_counters: StorageCounters,
     ) -> Result<bool, Box<ConceptReadError>> {
-        for check in checks {
-            let passes = match check {
-                CheckInstruction::Iid { var, iid } => filter_iid(context, row, var, iid),
-                CheckInstruction::TypeList { type_var, types } => filter_type_list(context, row, type_var, types),
-                CheckInstruction::ThingTypeList { thing_var, types } => {
-                    filter_thing_type_list(context, row, thing_var, types)
-                }
-                CheckInstruction::Sub { sub_kind, subtype, supertype } => {
-                    filter_sub(context, row, *sub_kind, subtype, supertype)?
-                }
-                CheckInstruction::Owns { owner, attribute } => filter_owns(context, row, owner, attribute)?,
-                CheckInstruction::Relates { relation, role_type } => filter_relates(context, row, relation, role_type)?,
-                CheckInstruction::Plays { player, role_type } => filter_plays(context, row, player, role_type)?,
-                CheckInstruction::Isa { isa_kind, type_, thing } => filter_isa(context, row, *isa_kind, type_, thing)?,
-                CheckInstruction::Has { owner, attribute } => {
-                    filter_has(context, row, owner, attribute, storage_counters.clone())?
-                }
-                CheckInstruction::Links { relation, player, role } => {
-                    filter_links(context, row, relation, player, role, storage_counters.clone())?
-                }
-                CheckInstruction::IndexedRelation { start_player, end_player, relation, start_role, end_role } => {
-                    filter_indexed_relation(
-                        context,
-                        row,
-                        start_player,
-                        end_player,
-                        relation,
-                        start_role,
-                        end_role,
-                        storage_counters.clone(),
-                    )?
-                }
-                CheckInstruction::Is { lhs, rhs } => filter_is(row, lhs, rhs),
-                CheckInstruction::LinksDeduplication { role1, player1, role2, player2 } => {
-                    filter_links_dedup(context, row, role1, player1, role2, player2)
-                }
-                CheckInstruction::Comparison { lhs, rhs, comparator } => {
-                    filter_comparison(context, row, lhs, rhs, *comparator, storage_counters.clone())?
-                }
-                CheckInstruction::NotNone { variables } => filter_not_none(row, variables),
-                CheckInstruction::Unsatisfiable => false,
-            };
-            if !passes {
-                return Ok(false);
-            }
-        }
-        Ok(true)
+        filter_impl(checks, context, row, storage_counters)
     }
 }
 
-impl<T> Checker<T> {
-    pub(crate) fn filter<V: ExtractFrom<T>>(
-        checks: &[CheckInstruction<V>],
-        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-        row: &T,
-        storage_counters: StorageCounters,
-    ) -> Result<bool, Box<ConceptReadError>> {
-        for check in checks {
-            let passes = match check {
-                CheckInstruction::Iid { var, iid } => filter_iid(context, row, var, iid),
-                CheckInstruction::TypeList { type_var, types } => filter_type_list(context, row, type_var, types),
-                CheckInstruction::ThingTypeList { thing_var, types } => {
-                    filter_thing_type_list(context, row, thing_var, types)
-                }
-                CheckInstruction::Sub { sub_kind, subtype, supertype } => {
-                    filter_sub(context, row, *sub_kind, subtype, supertype)?
-                }
-                CheckInstruction::Owns { owner, attribute } => filter_owns(context, row, owner, attribute)?,
-                CheckInstruction::Relates { relation, role_type } => filter_relates(context, row, relation, role_type)?,
-                CheckInstruction::Plays { player, role_type } => filter_plays(context, row, player, role_type)?,
-                CheckInstruction::Isa { isa_kind, type_, thing } => filter_isa(context, row, *isa_kind, type_, thing)?,
-                CheckInstruction::Has { owner, attribute } => {
-                    filter_has(context, row, owner, attribute, storage_counters.clone())?
-                }
-                CheckInstruction::Links { relation, player, role } => {
-                    filter_links(context, row, relation, player, role, storage_counters.clone())?
-                }
-                CheckInstruction::IndexedRelation { start_player, end_player, relation, start_role, end_role } => {
-                    filter_indexed_relation(
-                        context,
-                        row,
-                        start_player,
-                        end_player,
-                        relation,
-                        start_role,
-                        end_role,
-                        storage_counters.clone(),
-                    )?
-                }
-                CheckInstruction::Is { lhs, rhs } => filter_is(row, lhs, rhs),
-                CheckInstruction::LinksDeduplication { role1, player1, role2, player2 } => {
-                    filter_links_dedup(context, row, role1, player1, role2, player2)
-                }
-                CheckInstruction::Comparison { lhs, rhs, comparator } => {
-                    filter_comparison(context, row, lhs, rhs, *comparator, storage_counters.clone())?
-                }
-                CheckInstruction::NotNone { variables } => filter_not_none(row, variables),
-                CheckInstruction::Unsatisfiable => false,
-            };
-            if !passes {
-                return Ok(false);
+pub(crate) fn filter_impl<T, V: ExtractFrom<T>>(
+    checks: &[CheckInstruction<V>],
+    context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+    row: &T,
+    storage_counters: StorageCounters,
+) -> Result<bool, Box<ConceptReadError>> {
+    for check in checks {
+        let passes = match check {
+            CheckInstruction::Iid { var, iid } => filter_iid(context, row, var, iid),
+            CheckInstruction::TypeList { type_var, types } => filter_type_list(context, row, type_var, types),
+            CheckInstruction::ThingTypeList { thing_var, types } => {
+                filter_thing_type_list(context, row, thing_var, types)
             }
+            CheckInstruction::Sub { sub_kind, subtype, supertype } => {
+                filter_sub(context, row, *sub_kind, subtype, supertype)?
+            }
+            CheckInstruction::Owns { owner, attribute } => filter_owns(context, row, owner, attribute)?,
+            CheckInstruction::Relates { relation, role_type } => filter_relates(context, row, relation, role_type)?,
+            CheckInstruction::Plays { player, role_type } => filter_plays(context, row, player, role_type)?,
+            CheckInstruction::Isa { isa_kind, type_, thing } => filter_isa(context, row, *isa_kind, type_, thing)?,
+            CheckInstruction::Has { owner, attribute } => {
+                filter_has(context, row, owner, attribute, storage_counters.clone())?
+            }
+            CheckInstruction::Links { relation, player, role } => {
+                filter_links(context, row, relation, player, role, storage_counters.clone())?
+            }
+            CheckInstruction::IndexedRelation { start_player, end_player, relation, start_role, end_role } => {
+                filter_indexed_relation(
+                    context,
+                    row,
+                    start_player,
+                    end_player,
+                    relation,
+                    start_role,
+                    end_role,
+                    storage_counters.clone(),
+                )?
+            }
+            CheckInstruction::Is { lhs, rhs } => filter_is(row, lhs, rhs),
+            CheckInstruction::LinksDeduplication { role1, player1, role2, player2 } => {
+                filter_links_dedup(context, row, role1, player1, role2, player2)
+            }
+            CheckInstruction::Comparison { lhs, rhs, comparator } => {
+                filter_comparison(context, row, lhs, rhs, *comparator, storage_counters.clone())?
+            }
+            CheckInstruction::NotNone { variables } => filter_not_none(row, variables),
+            CheckInstruction::Unsatisfiable => false,
+        };
+        if !passes {
+            return Ok(false);
         }
-        Ok(true)
     }
+    Ok(true)
 }
 
 fn filter_iid<T, V: ExtractFrom<T>>(
