@@ -34,7 +34,7 @@ use ir::{
 use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 use unicase::UniCase;
-
+use ir::pattern::ParameterID;
 use crate::{instruction::FilterFn, pipeline::stage::ExecutionContext, row::MaybeOwnedRow};
 
 #[derive(Debug)]
@@ -218,7 +218,7 @@ impl<T> Checker<T> {
                 let owned_value = value.into_owned();
                 ExtractorOrExtractedVariable::Extracted(owned_value)
             }
-            Some(&tuple_extractor) => ExtractorOrExtractedVariable::Extractor(tuple_extractor),
+            Some(&tuple_extractor) => ExtractorOrExtractedVariable::ExtractFromTuple(tuple_extractor),
         }
     }
 
@@ -801,15 +801,15 @@ fn filter_plays(
         .map(|plays| plays.is_some())
 }
 
-fn filter_isa(
+fn filter_isa<T, V: ExtractFrom<T>>(
     context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-    row: &MaybeOwnedRow<'_>,
+    row: &T,
     isa_kind: IsaKind,
-    type_: &CheckVertex<ExecutorVariable>,
-    thing: &CheckVertex<ExecutorVariable>,
+    type_: &CheckVertex<V>,
+    thing: &CheckVertex<V>,
 ) -> Result<bool, Box<ConceptReadError>> {
-    let thing = get_vertex_value(thing, Some(row), &context.parameters);
-    let type_ = get_vertex_value(type_, Some(row), &context.parameters);
+    let thing = V::extract_vertex(thing, row, &context.parameters);
+    let type_ = V::extract_vertex(type_, row, &context.parameters);
     let actual = unwrap_or_result_false!(thing => Thing).type_();
     let expected = unwrap_or_result_false!(type_ => Type);
     if isa_kind == IsaKind::Exact {
@@ -819,15 +819,15 @@ fn filter_isa(
     }
 }
 
-fn filter_has(
+fn filter_has<'a, V: ExtractFrom<MaybeOwnedRow<'a>>>(
     context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-    row: &MaybeOwnedRow<'_>,
-    owner: &CheckVertex<ExecutorVariable>,
-    attribute: &CheckVertex<ExecutorVariable>,
+    row: &MaybeOwnedRow<'a>,
+    owner: &CheckVertex<V>,
+    attribute: &CheckVertex<V>,
     storage_counters: StorageCounters,
 ) -> Result<bool, Box<ConceptReadError>> {
-    let owner = get_vertex_value(owner, Some(row), &context.parameters);
-    let attribute = get_vertex_value(attribute, Some(row), &context.parameters);
+    let owner = V::extract_vertex(owner, row, &context.parameters);
+    let attribute = V::extract_vertex(attribute, row, &context.parameters);
     let owner = unwrap_or_result_false!(&owner => Thing).as_object();
     let attribute = unwrap_or_result_false!(&attribute => Thing).as_attribute();
     owner.has_attribute(
@@ -1032,14 +1032,48 @@ fn get_variable_value<'a>(row: Option<&'a MaybeOwnedRow<'a>>, variable: &Executo
 #[derive(Debug, Clone)]
 pub enum ExtractorOrExtractedVariable<T> {
     Extracted(VariableValue<'static>),
-    Extractor(fn(&T) -> VariableValue<'_>),
+    ExtractFromTuple(fn(&T) -> VariableValue<'_>),
 }
 
 impl<T> ExtractorOrExtractedVariable<T> {
     fn get<'a>(&'a self, may_extract_from: &'a T) ->  VariableValue<'a> {
+        self.extract(may_extract_from)
+    }
+}
+
+trait ExtractFrom<T>: Sized
+{
+    fn extract_vertex<'a>(vertex: &'a CheckVertex<Self>, from: &'a T, parameters: &'a ParameterRegistry) -> VariableValue<'a> {
+        match vertex {
+            CheckVertex::Variable(var) => var.extract(from),
+            CheckVertex::Type(type_) => VariableValue::Type(*type_),
+            CheckVertex::Parameter(parameter_id) => {
+                VariableValue::Value(parameters.value_unchecked(parameter_id).as_reference())
+            }
+        }
+    }
+
+    fn extract<'a>(&'a self, from: &'a T) -> VariableValue<'a>;
+}
+
+impl<'r> ExtractFrom<MaybeOwnedRow<'r>> for ExecutorVariable {
+    fn extract<'a>(&'a self, row: &'a MaybeOwnedRow<'r>) -> VariableValue<'a> {
+        match self {
+            ExecutorVariable::RowPosition(position) => {
+                row.get(*position).as_reference()
+            }
+            ExecutorVariable::Internal(_) => {
+                unreachable!("Check variables without an extractor must have been recorded in the row.")
+            }
+        }
+    }
+}
+
+impl<T> ExtractFrom<T> for ExtractorOrExtractedVariable<T> {
+    fn extract<'a>(&'a self, tuple: &'a T) -> VariableValue<'a> {
         match self {
             ExtractorOrExtractedVariable::Extracted(v) => v.as_reference(),
-            ExtractorOrExtractedVariable::Extractor(f) => f(may_extract_from)
+            ExtractorOrExtractedVariable::ExtractFromTuple(f) => f(tuple),
         }
     }
 }
