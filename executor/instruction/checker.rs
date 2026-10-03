@@ -689,9 +689,9 @@ impl Checker<()> {
                         storage_counters.clone(),
                     )?
                 }
-                CheckInstruction::Is { lhs, rhs } => filter_is(row, *lhs, *rhs),
+                CheckInstruction::Is { lhs, rhs } => filter_is(row, lhs, rhs),
                 CheckInstruction::LinksDeduplication { role1, player1, role2, player2 } => {
-                    filter_links_dedup(context, row, *role1, *player1, *role2, *player2)
+                    filter_links_dedup(context, row, role1, player1, role2, player2)
                 }
                 CheckInstruction::Comparison { lhs, rhs, comparator } => {
                     filter_comparison(context, row, lhs, rhs, *comparator, storage_counters.clone())?
@@ -707,46 +707,51 @@ impl Checker<()> {
     }
 }
 
-fn filter_iid(
+fn filter_iid<T, V: ExtractFrom<T>>(
     context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-    row: &MaybeOwnedRow<'_>,
-    var: ExecutorVariable,
+    row: &T,
+    var: V,
     iid: &ir::pattern::ParameterID,
 ) -> bool {
-    let extracted = get_vertex_value(&CheckVertex::Variable(var), Some(row), &context.parameters);
+    let vertex = CheckVertex::Variable(var);
+    let extracted = V::extract_vertex(&vertex, row, &context.parameters);
     let iid = context.parameters().iid(iid).unwrap();
     check_iid(iid, extracted)
 }
 
-fn filter_type_list(
+fn filter_type_list<T, V: ExtractFrom<T>>(
     context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-    row: &MaybeOwnedRow<'_>,
-    type_var: ExecutorVariable,
+    row: &T,
+    type_var: V,
     types: &std::sync::Arc<std::collections::BTreeSet<Type>>,
 ) -> bool {
-    let extracted = get_vertex_value(&CheckVertex::Variable(type_var), Some(row), &context.parameters);
-    types.contains(&unwrap_or_return_false!(extracted => Type))
+    let vertex = CheckVertex::Variable(type_var);
+    let extracted = V::extract_vertex(&vertex, row, &context.parameters);
+    let VariableValue::Type(t) = extracted else { return false };
+    types.contains(&t)
 }
 
-fn filter_thing_type_list(
+fn filter_thing_type_list<T, V: ExtractFrom<T>>(
     context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-    row: &MaybeOwnedRow<'_>,
-    thing_var: ExecutorVariable,
+    row: &T,
+    thing_var: V,
     types: &std::sync::Arc<std::collections::BTreeSet<Type>>,
 ) -> bool {
-    let extracted = get_vertex_value(&CheckVertex::Variable(thing_var), Some(row), &context.parameters);
-    types.contains(&unwrap_or_return_false!(extracted => Thing).type_())
+    let vertex = CheckVertex::Variable(thing_var);
+    let extracted = V::extract_vertex(&vertex, row, &context.parameters);
+    let VariableValue::Thing(thing) = extracted else { return false };
+    types.contains(&thing.type_())
 }
 
-fn filter_sub(
+fn filter_sub<T, V: ExtractFrom<T>>(
     context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-    row: &MaybeOwnedRow<'_>,
+    row: &T,
     sub_kind: SubKind,
-    subtype: &CheckVertex<ExecutorVariable>,
-    supertype: &CheckVertex<ExecutorVariable>,
+    subtype: &CheckVertex<V>,
+    supertype: &CheckVertex<V>,
 ) -> Result<bool, Box<ConceptReadError>> {
-    let subtype = get_vertex_value(subtype, Some(row), &context.parameters);
-    let supertype = get_vertex_value(supertype, Some(row), &context.parameters);
+    let subtype = V::extract_vertex(subtype, row, &context.parameters);
+    let supertype = V::extract_vertex(supertype, row, &context.parameters);
     check_sub(
         context.snapshot.as_ref(),
         context.thing_manager.as_ref(),
@@ -756,14 +761,14 @@ fn filter_sub(
     )
 }
 
-fn filter_owns(
+fn filter_owns<T, V: ExtractFrom<T>>(
     context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-    row: &MaybeOwnedRow<'_>,
-    owner: &CheckVertex<ExecutorVariable>,
-    attribute: &CheckVertex<ExecutorVariable>,
+    row: &T,
+    owner: &CheckVertex<V>,
+    attribute: &CheckVertex<V>,
 ) -> Result<bool, Box<ConceptReadError>> {
-    let owner = get_vertex_value(owner, Some(row), &context.parameters);
-    let attribute = get_vertex_value(attribute, Some(row), &context.parameters);
+    let owner = V::extract_vertex(owner, row, &context.parameters);
+    let attribute = V::extract_vertex(attribute, row, &context.parameters);
     let owner = unwrap_or_result_false!(owner => Type).as_object_type();
     let attribute = unwrap_or_result_false!(attribute => Type).as_attribute_type();
     owner
@@ -771,14 +776,14 @@ fn filter_owns(
         .map(|owns| owns.is_some())
 }
 
-fn filter_relates(
+fn filter_relates<T, V: ExtractFrom<T>>(
     context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-    row: &MaybeOwnedRow<'_>,
-    relation: &CheckVertex<ExecutorVariable>,
-    role_type: &CheckVertex<ExecutorVariable>,
+    row: &T,
+    relation: &CheckVertex<V>,
+    role_type: &CheckVertex<V>,
 ) -> Result<bool, Box<ConceptReadError>> {
-    let relation = get_vertex_value(relation, Some(row), &context.parameters);
-    let role_type = get_vertex_value(role_type, Some(row), &context.parameters);
+    let relation = V::extract_vertex(relation, row, &context.parameters);
+    let role_type = V::extract_vertex(role_type, row, &context.parameters);
     let relation_type = unwrap_or_result_false!(relation => Type).as_relation_type();
     let role_type = unwrap_or_result_false!(role_type => Type).as_role_type();
     relation_type
@@ -786,14 +791,14 @@ fn filter_relates(
         .map(|relates| relates.is_some())
 }
 
-fn filter_plays(
+fn filter_plays<T, V: ExtractFrom<T>>(
     context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-    row: &MaybeOwnedRow<'_>,
-    player: &CheckVertex<ExecutorVariable>,
-    role_type: &CheckVertex<ExecutorVariable>,
+    row: &T,
+    player: &CheckVertex<V>,
+    role_type: &CheckVertex<V>,
 ) -> Result<bool, Box<ConceptReadError>> {
-    let player = get_vertex_value(player, Some(row), &context.parameters);
-    let role_type = get_vertex_value(role_type, Some(row), &context.parameters);
+    let player = V::extract_vertex(player, row, &context.parameters);
+    let role_type = V::extract_vertex(role_type, row, &context.parameters);
     let object_type = unwrap_or_result_false!(player => Type).as_object_type();
     let role_type = unwrap_or_result_false!(role_type => Type).as_role_type();
     object_type
@@ -819,9 +824,9 @@ fn filter_isa<T, V: ExtractFrom<T>>(
     }
 }
 
-fn filter_has<'a, V: ExtractFrom<MaybeOwnedRow<'a>>>(
+fn filter_has<'a, T, V: ExtractFrom<T>>(
     context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-    row: &MaybeOwnedRow<'a>,
+    row: &T,
     owner: &CheckVertex<V>,
     attribute: &CheckVertex<V>,
     storage_counters: StorageCounters,
@@ -838,17 +843,17 @@ fn filter_has<'a, V: ExtractFrom<MaybeOwnedRow<'a>>>(
     )
 }
 
-fn filter_links(
+fn filter_links<T, V: ExtractFrom<T>>(
     context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-    row: &MaybeOwnedRow<'_>,
-    relation: &CheckVertex<ExecutorVariable>,
-    player: &CheckVertex<ExecutorVariable>,
-    role: &CheckVertex<ExecutorVariable>,
+    row: &T,
+    relation: &CheckVertex<V>,
+    player: &CheckVertex<V>,
+    role: &CheckVertex<V>,
     storage_counters: StorageCounters,
 ) -> Result<bool, Box<ConceptReadError>> {
-    let relation = get_vertex_value(relation, Some(row), &context.parameters);
-    let player = get_vertex_value(player, Some(row), &context.parameters);
-    let role = get_vertex_value(role, Some(row), &context.parameters);
+    let relation = V::extract_vertex(relation, row, &context.parameters);
+    let player = V::extract_vertex(player, row, &context.parameters);
+    let role = V::extract_vertex(role, row, &context.parameters);
     let relation = unwrap_or_result_false!(relation => Thing).as_relation();
     let player = unwrap_or_result_false!(player => Thing).as_object();
     let role = unwrap_or_result_false!(role => Type).as_role_type();
@@ -861,27 +866,27 @@ fn filter_links(
     )
 }
 
-fn filter_indexed_relation(
+fn filter_indexed_relation<T, V: ExtractFrom<T>>(
     context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-    row: &MaybeOwnedRow<'_>,
-    start_player: &CheckVertex<ExecutorVariable>,
-    end_player: &CheckVertex<ExecutorVariable>,
-    relation: &CheckVertex<ExecutorVariable>,
-    start_role: &CheckVertex<ExecutorVariable>,
-    end_role: &CheckVertex<ExecutorVariable>,
+    row: &T,
+    start_player: &CheckVertex<V>,
+    end_player: &CheckVertex<V>,
+    relation: &CheckVertex<V>,
+    start_role: &CheckVertex<V>,
+    end_role: &CheckVertex<V>,
     storage_counters: StorageCounters,
 ) -> Result<bool, Box<ConceptReadError>> {
-    let start_player_extractor = get_vertex_value(start_player, Some(row), &context.parameters);
-    let end_player_extractor = get_vertex_value(end_player, Some(row), &context.parameters);
-    let relation_extractor = get_vertex_value(relation, Some(row), &context.parameters);
-    let start_role_extractor = get_vertex_value(start_role, Some(row), &context.parameters);
-    let end_role_extractor = get_vertex_value(end_role, Some(row), &context.parameters);
-    let object = unwrap_or_result_false!(start_player_extractor => Thing).as_object();
-    let end_player = unwrap_or_result_false!(end_player_extractor => Thing).as_object();
-    let relation = unwrap_or_result_false!(relation_extractor => Thing).as_relation();
-    let start_role = unwrap_or_result_false!(start_role_extractor => Type).as_role_type();
-    let end_role = unwrap_or_result_false!(end_role_extractor => Type).as_role_type();
-    object.has_indexed_relation_player(
+    let start_player = V::extract_vertex(start_player, row, &context.parameters);
+    let end_player = V::extract_vertex(end_player, row, &context.parameters);
+    let relation = V::extract_vertex(relation, row, &context.parameters);
+    let start_role = V::extract_vertex(start_role, row, &context.parameters);
+    let end_role = V::extract_vertex(end_role, row, &context.parameters);
+    let start_player = unwrap_or_result_false!(start_player => Thing).as_object();
+    let end_player = unwrap_or_result_false!(end_player => Thing).as_object();
+    let relation = unwrap_or_result_false!(relation => Thing).as_relation();
+    let start_role = unwrap_or_result_false!(start_role => Type).as_role_type();
+    let end_role = unwrap_or_result_false!(end_role => Type).as_role_type();
+    start_player.has_indexed_relation_player(
         context.snapshot.as_ref(),
         context.thing_manager.as_ref(),
         end_player,
@@ -892,44 +897,44 @@ fn filter_indexed_relation(
     )
 }
 
-fn filter_is(row: &MaybeOwnedRow<'_>, lhs: ExecutorVariable, rhs: ExecutorVariable) -> bool {
-    let lhs = get_variable_value(Some(row), &lhs);
-    let rhs = get_variable_value(Some(row), &rhs);
+fn filter_is<T, V: ExtractFrom<T>>(row: &T, lhs: &V, rhs: &V) -> bool {
+    let lhs = V::extract(lhs, row);
+    let rhs = V::extract(rhs, row);
     lhs == rhs
 }
 
-fn filter_links_dedup(
+fn filter_links_dedup<T, V: ExtractFrom<T>>(
     _context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-    row: &MaybeOwnedRow<'_>,
-    role1: ExecutorVariable,
-    player1: ExecutorVariable,
-    role2: ExecutorVariable,
-    player2: ExecutorVariable,
+    row: &T,
+    role1: &V,
+    player1: &V,
+    role2: &V,
+    player2: &V,
 ) -> bool {
-    let role1 = get_variable_value(Some(row), &role1);
-    let player1 = get_variable_value(Some(row), &player1);
-    let role2 = get_variable_value(Some(row), &role2);
-    let player2 = get_variable_value(Some(row), &player2);
+    let role1 = V::extract(role1, row);
+    let player1 = V::extract(player1, row);
+    let role2 = V::extract(role2, row);
+    let player2 = V::extract(player2, row);
     !(role1 == role2 && player1 == player2)
 }
 
-fn filter_not_none(row: &MaybeOwnedRow<'_>, variables: &[ExecutorVariable]) -> bool {
+fn filter_not_none<T, V: ExtractFrom<T>>(row: &T, variables: &[V]) -> bool {
     variables.iter().all(|var| {
-        let value = get_variable_value(Some(row), var);
+        let value = V::extract(var, row);
         !value.is_none()
     })
 }
 
-fn filter_comparison(
+fn filter_comparison<T, V: ExtractFrom<T>>(
     context: &ExecutionContext<impl ReadableSnapshot + 'static>,
-    row: &MaybeOwnedRow<'_>,
-    lhs: &CheckVertex<ExecutorVariable>,
-    rhs: &CheckVertex<ExecutorVariable>,
+    row: &T,
+    lhs: &CheckVertex<V>,
+    rhs: &CheckVertex<V>,
     comparator: Comparator,
     storage_counters: StorageCounters,
 ) -> Result<bool, Box<ConceptReadError>> {
-    let lhs = get_vertex_value(lhs, Some(row), &context.parameters);
-    let rhs = get_vertex_value(rhs, Some(row), &context.parameters);
+    let lhs = V::extract_vertex(lhs, row, &context.parameters);
+    let rhs = V::extract_vertex(rhs, row, &context.parameters);
     let rhs = match &rhs {
         VariableValue::Thing(Thing::Attribute(attr)) => {
             attr.get_value(context.snapshot.as_ref(), context.thing_manager.as_ref(), storage_counters.clone())?
