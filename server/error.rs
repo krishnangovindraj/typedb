@@ -403,13 +403,13 @@ fn concept_write_origin(error: &ConceptWriteError) -> ErrorOrigin {
         | ConceptWriteError::UnsetHasUnorderedOwnsOrdered { .. }
         | ConceptWriteError::SetPlayersOrderedRoleUnordered { .. } => ErrorOrigin::Request,
 
+        ConceptWriteError::UnimplementedLanguageFeatureCascade { .. } => ErrorOrigin::Request,
+
         ConceptWriteError::SnapshotGet { .. } | ConceptWriteError::SnapshotIterate { .. } => ErrorOrigin::System,
 
         ConceptWriteError::Encoding { .. } => ErrorOrigin::Internal,
 
         ConceptWriteError::ConceptRead { typedb_source } => concept_read_origin(typedb_source),
-
-        ConceptWriteError::UnimplementedLanguageFeatureCascade { .. } => ErrorOrigin::Request,
     }
 }
 
