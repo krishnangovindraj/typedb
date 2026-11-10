@@ -18,6 +18,7 @@ use crate::state::ServerState;
 
 pub(crate) mod credential_verifier;
 pub(crate) mod token_manager;
+mod session;
 
 pub const HTTP_AUTHORIZATION_FIELD: &str = "authorization";
 pub const HTTP_BEARER_PREFIX: &str = "Bearer ";
