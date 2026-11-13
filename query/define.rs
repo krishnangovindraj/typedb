@@ -38,6 +38,7 @@ use typeql::{
     query::schema::Define,
     schema::definable::{
         Struct, Type,
+        rbac::RBACTypeAccess,
         struct_::Field,
         type_::{Capability as TypeQLCapability, CapabilityBase, capability::Relates as TypeQLRelates},
     },
@@ -90,6 +91,7 @@ pub(crate) fn execute(
     process_struct_definitions(snapshot, type_manager, &define.definables)?;
     process_type_definitions(snapshot, type_manager, thing_manager, &define.definables, storage_counters)?;
     process_function_definitions(snapshot, function_manager, &define.definables)?;
+    process_role_definitions(snapshot, function_manager, &define.definables)?;
     Ok(())
 }
 
@@ -148,6 +150,37 @@ fn process_function_definitions(
             .define_functions(snapshot, functions)
             .map_err(|err| DefineError::FunctionDefinition { typedb_source: *err })?;
     }
+    Ok(())
+}
+
+fn process_role_definitions(
+    snapshot: &mut impl WritableSnapshot,
+    type_manager: &TypeManager,
+    definables: &[Definable],
+    storage_counters: StorageCounters,
+) -> Result<(), DefineError> {
+    filter_variants!(Definable::RBACDeclaration : definables).try_for_each(|rbac| {
+        if rbac.kind.is_some() {
+            type_manager.put_role(rbac.label)?;
+        }
+        Ok(())
+    })?;
+    filter_variants!(Definable::RBACDeclaration : definables).try_for_each(|rbac| {
+        rbac.type_access.iter().try_for_each(|access| match access {
+            RBACTypeAccess::Reads(types) => types.iter().try_for_each(|type_label| {
+                let resolved_type = resolve_typeql_type(snapshot, type_manager, &type_label)
+                    .map_err(|typedb_source| DefineError::SymbolResolution { typedb_source })?;
+                type_manager.add_rbac_read_access(snapshot, rbac.role, resolved_type)?;
+                Ok(())
+            }),
+            RBACTypeAccess::Writes(types) => types.iter().try_for_each(|type_label| {
+                let resolved_type = resolve_typeql_type(snapshot, type_manager, &type_label)
+                    .map_err(|typedb_source| DefineError::SymbolResolution { typedb_source })?;
+                type_manager.add_rbac_write_access(snapshot, rbac.role, resolved_type)?;
+                Ok(())
+            }),
+        })
+    })?;
     Ok(())
 }
 

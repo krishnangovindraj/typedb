@@ -17,6 +17,7 @@ use encoding::{
         definition::{
             definition_key::DefinitionKey, definition_key_generator::DefinitionKeyGenerator, r#struct::StructDefinition,
         },
+        rbac::RBACRole,
         type_::{Kind, vertex::TypeVertexEncoding, vertex_generator::TypeVertexGenerator},
     },
     layout::prefix::Prefix,
@@ -3924,5 +3925,57 @@ impl TypeManager {
         .map_err(|typedb_source| ConceptWriteError::SchemaValidation { typedb_source })?;
 
         Ok(())
+    }
+
+    pub fn get_rbac_role(
+        &self,
+        snapshot: &mut impl ReadableSnapshot,
+        role_label: &Label,
+    ) -> Result<Option<RBACRole>, Box<ConceptReadError>> {
+        todo!("Also move above to the readable snapshot impl block")
+    }
+
+    pub fn delete_rbac_role(
+        &self,
+        snapshot: &mut impl ReadableSnapshot,
+        role_label: &Label,
+    ) -> Result<Option<RBACRole>, Box<ConceptReadError>> {
+        todo!("Delete all access, properties and the 'vertex'")
+    }
+
+    pub fn add_rbac_read_access(
+        &self,
+        snapshot: &mut impl WritableSnapshot,
+        role: &RBACRole,
+        type_: impl TypeAPI,
+    ) -> Result<(), Box<ConceptWriteError>> {
+        todo!()
+    }
+
+    pub fn add_rbac_write_access(
+        &self,
+        snapshot: &mut impl WritableSnapshot,
+        role: &RBACRole,
+        type_: impl TypeAPI,
+    ) -> Result<(), Box<ConceptWriteError>> {
+        todo!()
+    }
+
+    pub fn remove_rbac_read_access(
+        &self,
+        snapshot: &mut impl WritableSnapshot,
+        role: &RBACRole,
+        type_: impl TypeAPI,
+    ) -> Result<(), Box<ConceptWriteError>> {
+        todo!()
+    }
+
+    pub fn remove_rbac_write_access(
+        &self,
+        snapshot: &mut impl WritableSnapshot,
+        role: &RBACRole,
+        type_: impl TypeAPI,
+    ) -> Result<(), Box<ConceptWriteError>> {
+        todo!()
     }
 }
