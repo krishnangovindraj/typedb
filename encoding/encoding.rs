@@ -21,6 +21,7 @@ use storage::{
 use crate::{
     graph::{
         definition::{definition_key::DefinitionKey, function::FunctionDefinition, r#struct::StructDefinition},
+        rbac::{RBACRole, RBACRoleAccess, RBACRoleProperty},
         thing::{
             ThingVertex,
             edge::{ThingEdgeHas, ThingEdgeHasReverse, ThingEdgeIndexedRelation, ThingEdgeLinks},
@@ -226,11 +227,15 @@ pub enum DecodableKey {
     PropertyTypeEdge(TypeEdgeProperty),
     PropertyObjectVertex(ObjectVertexProperty),
     PropertyFunction(FunctionProperty),
+    PropertyRBACRole(RBACRoleProperty),
 
     IndexLabelToType(Label),
     IndexNameToDefinitionStruct(String),
     IndexNameToDefinitionFunction(String),
     IndexValueToStruct(StructIndexEntryKey),
+
+    RBACRole(RBACRole),
+    RBACAccess(RBACRoleAccess),
 }
 
 impl DecodableKey {
@@ -269,6 +274,7 @@ impl DecodableKey {
             Prefix::PropertyTypeEdge => Some(Self::PropertyTypeEdge(TypeEdgeProperty::try_decode(bytes)?)),
             Prefix::PropertyObjectVertex => Some(Self::PropertyObjectVertex(ObjectVertexProperty::try_decode(bytes)?)),
             Prefix::PropertyFunction => Some(Self::PropertyFunction(FunctionProperty::try_decode(bytes)?)),
+            Prefix::PropertyRBACRole => Some(Self::PropertyRBACRole(RBACRoleProperty::try_decode(bytes)?)),
 
             Prefix::IndexLabelToType => Some(Self::IndexLabelToType(Label::parse_from_bytes(
                 IdentifierIndex::<TypeVertex>::new(Bytes::reference(bytes)).identifier(),
@@ -280,6 +286,9 @@ impl DecodableKey {
                 IdentifierIndex::<FunctionDefinition>::new(Bytes::reference(bytes)).identifier().as_str().to_owned(),
             )),
             Prefix::IndexValueToStruct => Some(Self::IndexValueToStruct(StructIndexEntryKey::new(Bytes::copy(bytes)))),
+
+            Prefix::RBACRole => Some(Self::RBACRole(RBACRole::try_decode(bytes)?)),
+            Prefix::RBACAccess => Some(Self::RBACAccess(RBACRoleAccess::try_decode(bytes)?)),
         }
     }
 }

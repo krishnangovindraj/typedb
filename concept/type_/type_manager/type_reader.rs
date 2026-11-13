@@ -621,7 +621,9 @@ impl TypeReader {
                     | Infix::PropertyOrdering
                     | Infix::PropertyRelationTypeIndependent
                     | Infix::PropertyHasOrder
-                    | Infix::PropertyLinksOrder => {
+                    | Infix::PropertyLinksOrder
+                    | Infix::RBACAccessReads
+                    | Infix::RBACAccessWrites => {
                         unreachable!("Retrieved unexpected infixes while reading annotations.")
                     }
                 };
@@ -720,7 +722,9 @@ impl TypeReader {
                     | Infix::PropertyOrdering
                     | Infix::PropertyRelationTypeIndependent
                     | Infix::PropertyHasOrder
-                    | Infix::PropertyLinksOrder => {
+                    | Infix::PropertyLinksOrder
+                    | Infix::RBACAccessReads
+                    | Infix::RBACAccessWrites => {
                         unreachable!("Retrieved unexpected infixes while reading annotations.")
                     }
                 };
