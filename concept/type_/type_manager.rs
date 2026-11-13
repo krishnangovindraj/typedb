@@ -3931,15 +3931,26 @@ impl TypeManager {
         &self,
         snapshot: &mut impl ReadableSnapshot,
         role_label: &Label,
+        storage_counters: StorageCounters,
     ) -> Result<Option<RBACRole>, Box<ConceptReadError>> {
         todo!("Also move above to the readable snapshot impl block")
     }
 
+    pub fn put_rbac_role(
+        &self,
+        snapshot: &mut impl WritableSnapshot,
+        role_label: &Label,
+        storage_counters: StorageCounters,
+    ) -> Result<RBACRole, Box<ConceptWriteError>> {
+        todo!()
+    }
+
     pub fn delete_rbac_role(
         &self,
-        snapshot: &mut impl ReadableSnapshot,
-        role_label: &Label,
-    ) -> Result<Option<RBACRole>, Box<ConceptReadError>> {
+        snapshot: &mut impl WritableSnapshot,
+        role: &RBACRole,
+        storage_counters: StorageCounters,
+    ) -> Result<(), Box<ConceptWriteError>> {
         todo!("Delete all access, properties and the 'vertex'")
     }
 
@@ -3948,6 +3959,7 @@ impl TypeManager {
         snapshot: &mut impl WritableSnapshot,
         role: &RBACRole,
         type_: impl TypeAPI,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptWriteError>> {
         todo!()
     }
@@ -3957,6 +3969,7 @@ impl TypeManager {
         snapshot: &mut impl WritableSnapshot,
         role: &RBACRole,
         type_: impl TypeAPI,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptWriteError>> {
         todo!()
     }
@@ -3966,6 +3979,7 @@ impl TypeManager {
         snapshot: &mut impl WritableSnapshot,
         role: &RBACRole,
         type_: impl TypeAPI,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptWriteError>> {
         todo!()
     }
@@ -3975,6 +3989,7 @@ impl TypeManager {
         snapshot: &mut impl WritableSnapshot,
         role: &RBACRole,
         type_: impl TypeAPI,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptWriteError>> {
         todo!()
     }

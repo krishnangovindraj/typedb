@@ -24,21 +24,26 @@ use encoding::{
 };
 use error::typedb_error;
 use function::{FunctionError, function_manager::FunctionManager};
+use resource::profile::StorageCounters;
 use ir::{LiteralParseError, translation::tokens::translate_annotation_category};
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 use typeql::{
     common::{Span, Spanned, error::TypeQLError, token::Keyword},
     query::schema::Undefine,
     schema::{
-        definable::type_::{
-            CapabilityBase,
-            capability::{
-                Alias as TypeQLAlias, Owns as TypeQLOwns, Plays as TypeQLPlays, Relates as TypeQLRelates,
-                Sub as TypeQLSub, ValueType as TypeQLValueType,
+        definable::{
+            rbac::RBACTypeAccess,
+            type_::{
+                CapabilityBase,
+                capability::{
+                    Alias as TypeQLAlias, Owns as TypeQLOwns, Plays as TypeQLPlays, Relates as TypeQLRelates,
+                    Sub as TypeQLSub, ValueType as TypeQLValueType,
+                },
             },
         },
         undefinable::{
-            AnnotationCapability, AnnotationType, CapabilityType, Function, Specialise, Struct, Undefinable,
+            AnnotationCapability, AnnotationType, CapabilityType, Function, RBACAccessFrom, Specialise, Struct,
+            Undefinable,
         },
     },
     type_::Label as TypeQLLabel,
@@ -57,6 +62,7 @@ use crate::{
         get_value_type_status,
     },
 };
+use crate::define::DefineError;
 
 fn checked_identifier(identifier: &typeql::Identifier) -> Result<&str, UndefineError> {
     identifier.as_str_unreserved().map_err(|_source| {
@@ -79,6 +85,7 @@ pub(crate) fn execute(
     process_type_annotation_undefinitions(snapshot, type_manager, &undefine.undefinables)?;
     process_type_undefinitions(snapshot, type_manager, thing_manager, &undefine.undefinables)?;
     process_struct_undefinitions(snapshot, type_manager, thing_manager, &undefine.undefinables)?;
+    process_role_undefinitions(snapshot, type_manager, &undefine.undefinables)?;
     Ok(())
 }
 
@@ -920,6 +927,83 @@ fn undefine_struct(
     })
 }
 
+fn process_role_undefinitions(
+    snapshot: &mut impl WritableSnapshot,
+    type_manager: &TypeManager,
+    undefinables: &[Undefinable],
+) -> Result<(), UndefineError> {
+    // Process removed accesses before processsing deleted role vertices
+    filter_variants!(Undefinable::RBACAccess : undefinables)
+        .try_for_each(|rbac_access| undefine_rbac_access(snapshot, type_manager, rbac_access))?;
+    filter_variants!(Undefinable::RBACRole : undefinables)
+        .try_for_each(|label| undefine_rbac_role(snapshot, type_manager, label))?;
+    Ok(())
+}
+
+fn undefine_rbac_role(
+    snapshot: &mut impl WritableSnapshot,
+    type_manager: &TypeManager,
+    label: &TypeQLLabel,
+) -> Result<(), UndefineError> {
+    let role_label = Label::parse_from(checked_identifier(&label.ident)?, label.span());
+    let resolved_role = type_manager
+        .get_rbac_role(snapshot, &role_label, StorageCounters::DISABLED)
+        .map_err(|typedb_source| UndefineError::UnexpectedConceptRead { typedb_source })?
+        .ok_or_else(|| UndefineError::DefinitionResolution {
+            typedb_source: Box::new(SymbolResolutionError::RBACRoleNotFound {
+                label: role_label.clone(),
+                source_span: label.span(),
+            }),
+        })?;
+    type_manager
+        .delete_rbac_role(snapshot, &resolved_role, StorageCounters::DISABLED)
+        .map_err(|typedb_source| {
+            UndefineError::RBACRoleDeleteError { label: role_label.clone(), typedb_source, source_span: label.span() }
+        })?;
+    Ok(())
+}
+
+fn undefine_rbac_access(
+    snapshot: &mut impl WritableSnapshot,
+    type_manager: &TypeManager,
+    rbac_access: &RBACAccessFrom,
+) -> Result<(), UndefineError> {
+    let role_label = Label::parse_from(checked_identifier(&rbac_access.from.ident)?, rbac_access.from.span());
+    let resolved_role = type_manager
+        .get_rbac_role(snapshot, &role_label, StorageCounters::DISABLED)
+        .map_err(|typedb_source| UndefineError::UnexpectedConceptRead { typedb_source })?
+        .ok_or_else(|| UndefineError::DefinitionResolution {
+            typedb_source: Box::new(SymbolResolutionError::RBACRoleNotFound {
+                label: role_label,
+                source_span: rbac_access.from.span(),
+            }),
+        })?;
+    match &rbac_access.access {
+        RBACTypeAccess::Reads(types) => types.iter().try_for_each(|type_label| {
+            let type_label = Label::parse_from(checked_identifier(&type_label.ident)?, type_label.span());
+            let resolved_type = resolve_typeql_type(snapshot, type_manager, &type_label)
+                .map_err(|typedb_source| UndefineError::DefinitionResolution { typedb_source })?;
+            type_manager
+                .remove_rbac_read_access(snapshot, &resolved_role, resolved_type, StorageCounters::DISABLED)
+                .map_err(|typedb_source| UndefineError::RBACAccessRemoveError {
+                    source_span: rbac_access.span(),
+                    typedb_source,
+                })
+        }),
+        RBACTypeAccess::Writes(types) => types.iter().try_for_each(|type_label| {
+            let type_label = Label::parse_from(checked_identifier(&type_label.ident)?, type_label.span());
+            let resolved_type = resolve_typeql_type(snapshot, type_manager, &type_label)
+                .map_err(|typedb_source| UndefineError::DefinitionResolution { typedb_source })?;
+            type_manager
+                .remove_rbac_write_access(snapshot, &resolved_role, resolved_type, StorageCounters::DISABLED)
+                .map_err(|typedb_source| UndefineError::RBACAccessRemoveError {
+                    source_span: rbac_access.span(),
+                    typedb_source,
+                })
+        }),
+    }
+}
+
 fn check_can_and_need_undefine_sub<T: TypeAPI>(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
@@ -1267,6 +1351,19 @@ typedb_error! {
             "The reserved keyword '{identifier}' cannot be used as an identifier.",
             identifier: typeql::Identifier,
             source_span: Option<Span>,
+        ),
+        RBACRoleDeleteError(
+            38,
+            "Error removing the RBAC role '{label}'.",
+            label: Label,
+            source_span: Option<Span>,
+            typedb_source: Box<ConceptWriteError>
+        ),
+        RBACAccessRemoveError(
+            39,
+            "Error removing RBAC access.",
+            source_span: Option<Span>,
+            typedb_source: Box<ConceptWriteError>
         ),
     }
 }

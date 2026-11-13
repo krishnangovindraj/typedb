@@ -562,5 +562,6 @@ typedb_error! {
         UnexpectedConceptRead(15, "Unexpected concept read error.", typedb_source: Box<ConceptReadError>, source_span: Option<Span>),
         IllegalKeywordAsIdentifier(16, "The reserved keyword '{identifier}' cannot be used as an identifier.", identifier: typeql::Identifier, source_span: Option<Span>),
         SubNotFound(17, "The type '{subtype_label}' does not subtype '{supertype_label}'.", subtype_label: Label, supertype_label: Label, source_span: Option<Span>),
+        RBACRoleNotFound(18, "The RBAC role '{label}' was not found.", label: Label, source_span: Option<Span>),
     }
 }

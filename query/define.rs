@@ -89,9 +89,9 @@ pub(crate) fn execute(
     storage_counters: StorageCounters,
 ) -> Result<(), DefineError> {
     process_struct_definitions(snapshot, type_manager, &define.definables)?;
-    process_type_definitions(snapshot, type_manager, thing_manager, &define.definables, storage_counters)?;
+    process_type_definitions(snapshot, type_manager, thing_manager, &define.definables, storage_counters.clone())?;
     process_function_definitions(snapshot, function_manager, &define.definables)?;
-    process_role_definitions(snapshot, function_manager, &define.definables)?;
+    process_role_definitions(snapshot, type_manager, &define.definables, storage_counters.clone())?;
     Ok(())
 }
 
@@ -161,22 +161,77 @@ fn process_role_definitions(
 ) -> Result<(), DefineError> {
     filter_variants!(Definable::RBACDeclaration : definables).try_for_each(|rbac| {
         if rbac.kind.is_some() {
-            type_manager.put_role(rbac.label)?;
+            let role_label = Label::parse_from(checked_identifier(&rbac.label.ident)?, rbac.label.span());
+            type_manager
+                .put_rbac_role(snapshot, &role_label, storage_counters.clone())
+                .map_err(|typedb_source| DefineError::CreateRBACRole {
+                    role_label,
+                    source_span: rbac.span(),
+                    typedb_source
+                })?;
         }
         Ok(())
     })?;
     filter_variants!(Definable::RBACDeclaration : definables).try_for_each(|rbac| {
+        let role_label = Label::parse_from(checked_identifier(&rbac.label.ident)?, rbac.label.span());
+        let resolved_role = type_manager
+            .get_rbac_role(snapshot, &role_label, storage_counters.clone())
+            .map_err(|typedb_source| DefineError::UnexpectedConceptRead { typedb_source })?
+            .ok_or_else(|| DefineError::SymbolResolution {
+                typedb_source: Box::new(SymbolResolutionError::RBACRoleNotFound {
+                    label: role_label.clone(),
+                    source_span: rbac.label.span(),
+                }),
+            })?;
         rbac.type_access.iter().try_for_each(|access| match access {
-            RBACTypeAccess::Reads(types) => types.iter().try_for_each(|type_label| {
+            RBACTypeAccess::Reads(types) => types.iter().try_for_each(|typeql_label| {
+                let type_label = Label::parse_from(checked_identifier(&typeql_label.ident)?, typeql_label.span());
                 let resolved_type = resolve_typeql_type(snapshot, type_manager, &type_label)
                     .map_err(|typedb_source| DefineError::SymbolResolution { typedb_source })?;
-                type_manager.add_rbac_read_access(snapshot, rbac.role, resolved_type)?;
+                match resolved_type {
+                    answer::Type::Entity(t) => {
+                        type_manager.add_rbac_read_access(snapshot, &resolved_role, t, storage_counters.clone())
+                    },
+                    answer::Type::Relation(t) => {
+                        type_manager.add_rbac_read_access(snapshot, &resolved_role, t, storage_counters.clone())
+                    },
+                    answer::Type::Attribute(t) => {
+                        type_manager.add_rbac_read_access(snapshot, &resolved_role, t, storage_counters.clone())
+                    },
+                    answer::Type::RoleType(t) => {
+                        type_manager.add_rbac_read_access(snapshot, &resolved_role, t, storage_counters.clone())
+                    },
+                }.map_err(|typedb_source| DefineError::CreateRBACAccess {
+                        role_label: role_label.clone(),
+                        type_label,
+                        source_span: typeql_label.span(),
+                        typedb_source,
+                    })?;
                 Ok(())
             }),
-            RBACTypeAccess::Writes(types) => types.iter().try_for_each(|type_label| {
+            RBACTypeAccess::Writes(types) => types.iter().try_for_each(|typeql_label| {
+                let type_label = Label::parse_from(checked_identifier(&typeql_label.ident)?, typeql_label.span());
                 let resolved_type = resolve_typeql_type(snapshot, type_manager, &type_label)
                     .map_err(|typedb_source| DefineError::SymbolResolution { typedb_source })?;
-                type_manager.add_rbac_write_access(snapshot, rbac.role, resolved_type)?;
+                match resolved_type {
+                    answer::Type::Entity(t) => {
+                        type_manager.add_rbac_write_access(snapshot, &resolved_role, t, storage_counters.clone())
+                    },
+                    answer::Type::Relation(t) => {
+                        type_manager.add_rbac_write_access(snapshot, &resolved_role, t, storage_counters.clone())
+                    },
+                    answer::Type::Attribute(t) => {
+                        type_manager.add_rbac_write_access(snapshot, &resolved_role, t, storage_counters.clone())
+                    },
+                    answer::Type::RoleType(t) => {
+                        type_manager.add_rbac_write_access(snapshot, &resolved_role, t, storage_counters.clone())
+                    },
+                }.map_err(|typedb_source| DefineError::CreateRBACAccess {
+                    role_label: role_label.clone(),
+                    type_label,
+                    source_span: typeql_label.span(),
+                    typedb_source,
+                })?;
                 Ok(())
             }),
         })
@@ -1453,5 +1508,20 @@ typedb_error! {
             typedb_source: FunctionError
         ),
         IllegalKeywordAsIdentifier(31, "The reserved keyword \"{identifier}\" cannot be used as an identifier.", identifier: typeql::Identifier),
+        CreateRBACRole(
+            32,
+            "An error occured when creating the RBAC role: '{role_label}'",
+            role_label: Label,
+            source_span: Option<Span>,
+            typedb_source: Box<ConceptWriteError>
+        ),
+        CreateRBACAccess(
+            33,
+            "An error occured when granting the RBAC role: '{role_label}' access to the type: '{type_label}'",
+            role_label: Label,
+            type_label: Label,
+            source_span: Option<Span>,
+            typedb_source: Box<ConceptWriteError>
+        ),
     }
 }
