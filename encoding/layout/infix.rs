@@ -48,8 +48,8 @@ pub enum Infix {
     PropertyLinksOrder,
 
     // RBAC infixes
-    RBACAccessReads,
-    RBACAccessWrites,
+    RBACReadObjectVertex,
+    RBACWriteObjectVertex,
 }
 
 macro_rules! infix_functions {
@@ -105,7 +105,7 @@ impl Infix {
         PropertyHasOrder => [100];
         PropertyLinksOrder => [101];
 
-        RBACAccessReads => [200];
-        RBACAccessWrites => [201]
+        RBACReadObjectVertex => [200];
+        RBACWriteObjectVertex => [201]
     );
 }

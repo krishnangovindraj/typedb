@@ -27,6 +27,7 @@ use crate::{
     graph::{
         Typed,
         definition::definition_key::{DefinitionID, DefinitionKey},
+        rbac::RBACRoleVertex,
         type_::{
             Kind,
             vertex::{TypeID, TypeIDUInt, TypeVertex},
@@ -34,9 +35,11 @@ use crate::{
     },
     layout::prefix::Prefix,
 };
+use crate::graph::rbac::RBACRoleId;
 
 pub type TypeVertexAllocator = SchemaIDAllocator<TypeVertex>;
 pub type DefinitionKeyAllocator = SchemaIDAllocator<DefinitionKey>;
+pub type RBACVertexAllocator = SchemaIDAllocator<RBACRoleVertex>;
 
 pub trait SchemaID: Sized {
     const MIN_ID: u64;
@@ -149,5 +152,24 @@ impl SchemaID for DefinitionKey {
 
     fn ids_exhausted_error(prefix: Prefix) -> EncodingError {
         EncodingError::DefinitionIDsExhausted { prefix }
+    }
+}
+impl SchemaID for RBACRoleVertex {
+    const MIN_ID: u64 = u16::MIN as u64;
+    const MAX_ID: u64 = u16::MAX as u64;
+
+    fn object_from_id(prefix: Prefix, id: u64) -> RBACRoleVertex {
+        debug_assert!(prefix == Self::PREFIX);
+        debug_assert!((Self::MIN_ID..=Self::MAX_ID).contains(&id));
+        RBACRoleVertex::new(RBACRoleId(id as u16))
+    }
+
+    fn id_from_key(key: StorageKey<'_, BUFFER_KEY_INLINE>) -> u64 {
+        RBACRoleVertex::decode(Bytes::reference(key.bytes())).role_id().as_u16() as u64
+    }
+
+    fn ids_exhausted_error(prefix: Prefix) -> EncodingError {
+        debug_assert!(prefix == Self::PREFIX);
+        EncodingError::RBACRoleIDsExhausted { }
     }
 }

@@ -5,3 +5,4 @@
  */
 
 pub(crate) mod typeql;
+pub(crate) mod rbac;

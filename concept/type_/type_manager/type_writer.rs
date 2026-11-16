@@ -20,6 +20,7 @@ use encoding::{
     },
     value::{label::Label, value_type::ValueType},
 };
+use encoding::graph::rbac::{RBACAccessKind, RBACRoleTypeAccess};
 use resource::profile::StorageCounters;
 use storage::snapshot::WritableSnapshot;
 
@@ -29,6 +30,7 @@ use crate::{
         Ordering, TypeAPI, attribute_type::AttributeType, owns::Owns, sub::Sub, type_manager::type_reader::TypeReader,
     },
 };
+use crate::rbac::{RBACAccess, RBACRole};
 
 pub struct TypeWriter<Snapshot: WritableSnapshot> {
     snapshot: PhantomData<Snapshot>,
@@ -246,5 +248,54 @@ impl<Snapshot: WritableSnapshot> TypeWriter<Snapshot> {
         P: TypeEdgePropertyEncoding,
     {
         snapshot.delete(P::build_key(edge, suffix).into_storage_key().into_owned_array());
+    }
+
+    pub(crate) fn storage_set_rbac_role_label(
+        snapshot: &mut Snapshot,
+        role: RBACRole,
+        label: Label,
+    ) {
+        // TODO: Delete old one
+        let index_key = NameToRBACRoleDefinitionIndex::build(label.as_str());
+        snapshot.put_val(index_key.into_storage_key().into_owned_array(), ByteArray::copy(&role.vertex().to_bytes()));
+        debug_assert!(TypeReader::get_rbac_role_label(snapshot, role).unwrap().is_none());
+        Self::storage_put_type_vertex_property(snapshot, type_, label.clone());
+
+        let label_to_vertex_key = LabelToTypeVertexIndex::build(label);
+        let vertex_value = ByteArray::from(&*type_.into_vertex().to_bytes());
+        snapshot.put_val(label_to_vertex_key.into_storage_key().into_owned_array(), vertex_value);
+    }
+
+
+    pub(crate) fn storage_put_rbac_role_access(
+        snapshot: &mut Snapshot,
+        role: RBACRole,
+        access: RBACAccess,
+    ) {
+        let to_write = match access {
+            RBACAccess::ReadObject(type_) => {
+                RBACRoleTypeAccess::new(role.vertex(), RBACAccessKind::ReadObjectVertex, type_.vertex())
+            }
+            RBACAccess::WriteObject(type_) => {
+                RBACRoleTypeAccess::new(role.vertex(), RBACAccessKind::WriteObjectVertex, type_.vertex())
+            }
+        };
+        snapshot.put(to_write.into_storage_key().into_owned_array())
+    }
+
+    pub(crate) fn storage_delete_rbac_role_access(
+        snapshot: &mut Snapshot,
+        role: RBACRole,
+        access: RBACAccess,
+    ) {
+        let to_write = match access {
+            RBACAccess::ReadObject(type_) => {
+                RBACRoleTypeAccess::new(role.vertex(), RBACAccessKind::ReadObjectVertex, type_.vertex())
+            }
+            RBACAccess::WriteObject(type_) => {
+                RBACRoleTypeAccess::new(role.vertex(), RBACAccessKind::WriteObjectVertex, type_.vertex())
+            }
+        };
+        snapshot.delete(to_write.into_storage_key().into_owned_array())
     }
 }

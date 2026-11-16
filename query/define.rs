@@ -163,7 +163,7 @@ fn process_role_definitions(
         if rbac.kind.is_some() {
             let role_label = Label::parse_from(checked_identifier(&rbac.label.ident)?, rbac.label.span());
             type_manager
-                .put_rbac_role(snapshot, &role_label, storage_counters.clone())
+                .create_rbac_role(snapshot, &role_label, storage_counters.clone())
                 .map_err(|typedb_source| DefineError::CreateRBACRole {
                     role_label,
                     source_span: rbac.span(),
@@ -190,16 +190,16 @@ fn process_role_definitions(
                     .map_err(|typedb_source| DefineError::SymbolResolution { typedb_source })?;
                 match resolved_type {
                     answer::Type::Entity(t) => {
-                        type_manager.add_rbac_read_access(snapshot, &resolved_role, t, storage_counters.clone())
+                        type_manager.set_rbac_type_access(snapshot, &resolved_role, t, storage_counters.clone())
                     },
                     answer::Type::Relation(t) => {
-                        type_manager.add_rbac_read_access(snapshot, &resolved_role, t, storage_counters.clone())
+                        type_manager.set_rbac_type_access(snapshot, &resolved_role, t, storage_counters.clone())
                     },
                     answer::Type::Attribute(t) => {
-                        type_manager.add_rbac_read_access(snapshot, &resolved_role, t, storage_counters.clone())
+                        type_manager.set_rbac_type_access(snapshot, &resolved_role, t, storage_counters.clone())
                     },
                     answer::Type::RoleType(t) => {
-                        type_manager.add_rbac_read_access(snapshot, &resolved_role, t, storage_counters.clone())
+                        type_manager.set_rbac_type_access(snapshot, &resolved_role, t, storage_counters.clone())
                     },
                 }.map_err(|typedb_source| DefineError::CreateRBACAccess {
                         role_label: role_label.clone(),
@@ -215,16 +215,16 @@ fn process_role_definitions(
                     .map_err(|typedb_source| DefineError::SymbolResolution { typedb_source })?;
                 match resolved_type {
                     answer::Type::Entity(t) => {
-                        type_manager.add_rbac_write_access(snapshot, &resolved_role, t, storage_counters.clone())
+                        type_manager.set_rbac_write_access(snapshot, &resolved_role, t, storage_counters.clone())
                     },
                     answer::Type::Relation(t) => {
-                        type_manager.add_rbac_write_access(snapshot, &resolved_role, t, storage_counters.clone())
+                        type_manager.set_rbac_write_access(snapshot, &resolved_role, t, storage_counters.clone())
                     },
                     answer::Type::Attribute(t) => {
-                        type_manager.add_rbac_write_access(snapshot, &resolved_role, t, storage_counters.clone())
+                        type_manager.set_rbac_write_access(snapshot, &resolved_role, t, storage_counters.clone())
                     },
                     answer::Type::RoleType(t) => {
-                        type_manager.add_rbac_write_access(snapshot, &resolved_role, t, storage_counters.clone())
+                        type_manager.set_rbac_write_access(snapshot, &resolved_role, t, storage_counters.clone())
                     },
                 }.map_err(|typedb_source| DefineError::CreateRBACAccess {
                     role_label: role_label.clone(),

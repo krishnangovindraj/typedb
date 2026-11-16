@@ -29,6 +29,7 @@ pub enum EncodingError {
     UnexpectedEndOfEncodedStruct,
     StructAlreadyHasMaximumNumberOfFields { struct_name: String },
     ObjectIDExhausted { id: u64 },
+    RBACRoleIDsExhausted {},
 }
 
 impl fmt::Display for EncodingError {

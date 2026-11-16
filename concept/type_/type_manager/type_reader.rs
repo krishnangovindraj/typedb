@@ -23,6 +23,7 @@ use encoding::{
     layout::infix::Infix,
     value::{label::Label, value_type::ValueType},
 };
+use encoding::graph::rbac::RBACRoleTypeAccess;
 use resource::{
     constants::{
         concept::RELATION_INDEX_THRESHOLD,
@@ -57,6 +58,7 @@ use crate::{
         sub::Sub,
     },
 };
+use crate::rbac::{RBACAccess, RBACRole};
 
 // non-instantiable
 pub enum TypeReader {}
@@ -622,8 +624,8 @@ impl TypeReader {
                     | Infix::PropertyRelationTypeIndependent
                     | Infix::PropertyHasOrder
                     | Infix::PropertyLinksOrder
-                    | Infix::RBACAccessReads
-                    | Infix::RBACAccessWrites => {
+                    | Infix::RBACReadObjectVertex
+                    | Infix::RBACWriteObjectVertex => {
                         unreachable!("Retrieved unexpected infixes while reading annotations.")
                     }
                 };
@@ -723,8 +725,8 @@ impl TypeReader {
                     | Infix::PropertyRelationTypeIndependent
                     | Infix::PropertyHasOrder
                     | Infix::PropertyLinksOrder
-                    | Infix::RBACAccessReads
-                    | Infix::RBACAccessWrites => {
+                    | Infix::RBACReadObjectVertex
+                    | Infix::RBACWriteObjectVertex => {
                         unreachable!("Retrieved unexpected infixes while reading annotations.")
                     }
                 };
@@ -886,5 +888,41 @@ impl TypeReader {
             CapabilityKind::Sub => (),
         }
         Ok(())
+    }
+
+    pub(crate) fn get_rbac_role_label(
+        snapshot: &impl ReadableSnapshot,
+        role: RBACRole,
+    ) -> Result<Option<Label>, Box<ConceptReadError>> {
+        let key = [];
+        let key = &key;
+        let property = snapshot
+            .get_mapped(
+                Label::build_key(type_, &[]).into_storage_key().as_reference(),
+                |value| PROPERTY::from_key_value_bytes(key, value),
+                StorageCounters::DISABLED,
+            )
+            .map_err(|err| Box::new(ConceptReadError::SnapshotGet { source: err }))?;
+        Ok(property)
+        Self::get_type_property_declared::<Label>(snapshot, type_)
+    }
+
+    pub(crate) fn list_rbac_declared_access(
+        snapshot: &impl ReadableSnapshot,
+        role: &RBACRole
+    ) -> Result<HashSet<RBACAccess>, Box<ConceptReadError>> {
+        snapshot
+            .iterate_range(
+                &KeyRange::new_within(
+                    RBACRoleTypeAccess::build_prefix_role(role.vertex()),
+                    TypeEdge::FIXED_WIDTH_ENCODING
+                ),
+                StorageCounters::DISABLED,
+            )
+            .collect_cloned_hashset(|key, _| {
+                let access = RBACRoleTypeAccess::decode(Bytes::Reference(key.bytes()).into_owned());
+                RBACAccess::new_type_access(access.access_type(), access.type_())
+            })
+            .map_err(|error| Box::new(ConceptReadError::SnapshotIterate { source: error }))
     }
 }

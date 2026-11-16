@@ -23,20 +23,29 @@ pub struct RBACRoleId(u16);
 
 impl RBACRoleId {
     const LENGTH: usize = 2;
+    pub(crate) fn as_u16(&self) -> u16 {
+        self.0
+    }
+}
+
+impl fmt::Debug for RBACRoleId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:04X}", self.0)
+    }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
-pub struct RBACRole {
+pub struct RBACRoleVertex {
     value: u32,
 }
 
-impl fmt::Debug for RBACRole {
+impl fmt::Debug for RBACRoleVertex {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:06X}", self.value)
     }
 }
 
-impl RBACRole {
+impl RBACRoleVertex {
     pub(crate) const KEYSPACE: EncodingKeyspace = EncodingKeyspace::DefaultOptimisedPrefix11;
     pub const FIXED_WIDTH_ENCODING: bool = true;
 
@@ -69,15 +78,19 @@ impl RBACRole {
         be_bytes[1..].copy_from_slice(&bytes);
         Some(Self { value: u32::from_be_bytes(be_bytes) })
     }
+
+    pub fn role_id(&self) -> RBACRoleId {
+        RBACRoleId((self.value & 0xFFFF) as u16)
+    }
 }
 
-impl AsBytes<BUFFER_KEY_INLINE> for RBACRole {
+impl AsBytes<BUFFER_KEY_INLINE> for RBACRoleVertex {
     fn to_bytes(self) -> Bytes<'static, BUFFER_KEY_INLINE> {
         Bytes::Array(ByteArray::copy(&self.value.to_be_bytes()[1..]))
     }
 }
 
-impl Keyable<BUFFER_KEY_INLINE> for RBACRole {
+impl Keyable<BUFFER_KEY_INLINE> for RBACRoleVertex {
     fn keyspace(&self) -> EncodingKeyspace {
         Self::KEYSPACE
     }
@@ -87,12 +100,12 @@ impl Keyable<BUFFER_KEY_INLINE> for RBACRole {
     }
 }
 
-impl Prefixed<BUFFER_KEY_INLINE> for RBACRole {}
+impl Prefixed<BUFFER_KEY_INLINE> for RBACRoleVertex {}
 
 // Properties such as label
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
 pub struct RBACRoleProperty {
-    role: RBACRole,
+    role: RBACRoleVertex,
     infix: Infix,
     suffix: ByteArray<0>,
 }
@@ -102,10 +115,10 @@ impl RBACRoleProperty {
     const PREFIX: Prefix = Prefix::PropertyRBACRole;
     pub const FIXED_WIDTH_ENCODING: bool = Self::PREFIX.fixed_width_keys();
 
-    const LENGTH_NO_SUFFIX: usize = PrefixID::LENGTH + RBACRole::LENGTH + InfixID::LENGTH;
+    const LENGTH_NO_SUFFIX: usize = PrefixID::LENGTH + RBACRoleVertex::LENGTH + InfixID::LENGTH;
     const LENGTH_PREFIX: usize = PrefixID::LENGTH;
 
-    fn new_suffixed<const INLINE_BYTES: usize>(role: RBACRole, infix: Infix, suffix: Bytes<'_, INLINE_BYTES>) -> Self {
+    fn new_suffixed<const INLINE_BYTES: usize>(role: RBACRoleVertex, infix: Infix, suffix: Bytes<'_, INLINE_BYTES>) -> Self {
         Self { role, infix, suffix: ByteArray::copy(&suffix) }
     }
 
@@ -113,7 +126,7 @@ impl RBACRoleProperty {
         debug_assert!(bytes.length() >= Self::LENGTH_NO_SUFFIX);
         debug_assert_eq!(bytes[Self::INDEX_PREFIX], Self::PREFIX.prefix_id().byte);
 
-        let role = RBACRole::decode(bytes.clone().into_range(Self::range_rbac_role()));
+        let role = RBACRoleVertex::decode(bytes.clone().into_range(Self::range_rbac_role()));
         let infix = Infix::from_infix_id(InfixID::new((&bytes[Self::range_infix()]).try_into().unwrap()));
         let suffix = ByteArray::copy(&bytes[Self::LENGTH_NO_SUFFIX..]);
         Self { role, infix, suffix }
@@ -127,7 +140,7 @@ impl RBACRoleProperty {
             return None;
         }
 
-        let role = RBACRole::try_decode(bytes.get(Self::range_rbac_role())?)?;
+        let role = RBACRoleVertex::try_decode(bytes.get(Self::range_rbac_role())?)?;
         let infix = Infix::from_infix_id(InfixID::new((bytes.get(Self::range_infix())?).try_into().ok()?));
         let suffix = ByteArray::copy(bytes.get(Self::LENGTH_NO_SUFFIX..)?);
         Some(Self { role, infix, suffix })
@@ -140,7 +153,7 @@ impl RBACRoleProperty {
         StorageKey::new_ref(Self::KEYSPACE, &PREFIX_BYTES)
     }
 
-    pub fn rbac_role(&self) -> RBACRole {
+    pub fn rbac_role(&self) -> RBACRoleVertex {
         self.role
     }
 
@@ -157,7 +170,7 @@ impl RBACRoleProperty {
     }
 
     const fn range_rbac_role() -> Range<usize> {
-        Self::INDEX_PREFIX + 1..Self::INDEX_PREFIX + 1 + RBACRole::LENGTH
+        Self::INDEX_PREFIX + 1..Self::INDEX_PREFIX + 1 + RBACRoleVertex::LENGTH
     }
 
     const fn range_infix() -> Range<usize> {
@@ -190,54 +203,56 @@ impl Prefixed<BUFFER_KEY_INLINE> for RBACRoleProperty {}
 
 // Accesses
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
-pub enum RBACAccessType {
-    Read,
-    Write,
+pub enum RBACAccessKind {
+    ReadObjectVertex,
+    WriteObjectVertex,
+    // More
 }
 
-impl RBACAccessType {
+impl RBACAccessKind {
     pub fn decode(bytes: [u8; InfixID::LENGTH]) -> Self {
         let infix = Infix::from_infix_id(InfixID::new(bytes));
         match infix {
-            Infix::RBACAccessReads => Self::Read,
-            Infix::RBACAccessWrites => Self::Write,
+            Infix::RBACReadObjectVertex => Self::ReadObjectVertex,
+            Infix::RBACWriteObjectVertex => Self::WriteObjectVertex,
             _other => panic!("Unexpected infix for RBACAccessType: {infix:?}"),
         }
     }
 
     pub(crate) fn infix(&self) -> Infix {
         match self {
-            Self::Read => Infix::RBACAccessReads,
-            Self::Write => Infix::RBACAccessWrites,
+            Self::ReadObjectVertex => Infix::RBACReadObjectVertex,
+            Self::WriteObjectVertex => Infix::RBACWriteObjectVertex,
         }
     }
 
     fn try_decode(bytes: [u8; InfixID::LENGTH]) -> Option<Self> {
         let infix = Infix::from_infix_id(InfixID::new(bytes));
         match infix {
-            Infix::RBACAccessReads => Some(Self::Read),
-            Infix::RBACAccessWrites => Some(Self::Write),
+            Infix::RBACReadObjectVertex => Some(Self::ReadObjectVertex),
+            Infix::RBACWriteObjectVertex => Some(Self::WriteObjectVertex),
             _other => None,
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
-pub struct RBACRoleAccess {
-    role: RBACRole,
-    access_type: RBACAccessType,
+pub struct RBACRoleTypeAccess {
+    role: RBACRoleVertex,
+    access_type: RBACAccessKind,
     type_: TypeVertex,
 }
 
-impl RBACRoleAccess {
+impl RBACRoleTypeAccess {
     const KEYSPACE: EncodingKeyspace = EncodingKeyspace::DefaultOptimisedPrefix11;
     const PREFIX: Prefix = Prefix::RBACAccess;
     pub const FIXED_WIDTH_ENCODING: bool = Self::PREFIX.fixed_width_keys();
 
-    const LENGTH: usize = PrefixID::LENGTH + RBACRole::LENGTH + InfixID::LENGTH + TypeVertex::LENGTH;
+    const LENGTH: usize = PrefixID::LENGTH + RBACRoleVertex::LENGTH + InfixID::LENGTH + TypeVertex::LENGTH;
     const LENGTH_PREFIX: usize = PrefixID::LENGTH;
+    const LENGTH_PREFIX_ROLE: usize = PrefixID::LENGTH + RBACRoleVertex::LENGTH;
 
-    fn new(role: RBACRole, access_type: RBACAccessType, type_: TypeVertex) -> Self {
+    pub fn new(role: RBACRoleVertex, access_type: RBACAccessKind, type_: TypeVertex) -> Self {
         Self { role, access_type, type_ }
     }
 
@@ -245,8 +260,8 @@ impl RBACRoleAccess {
         debug_assert!(bytes.length() >= Self::LENGTH);
         debug_assert_eq!(bytes[Self::INDEX_PREFIX], Self::PREFIX.prefix_id().byte);
 
-        let role = RBACRole::decode(bytes.clone().into_range(Self::range_rbac_role()));
-        let access_type = RBACAccessType::decode((&bytes[Self::range_access_type()]).try_into().unwrap());
+        let role = RBACRoleVertex::decode(bytes.clone().into_range(Self::range_rbac_role()));
+        let access_type = RBACAccessKind::decode((&bytes[Self::range_access_type()]).try_into().unwrap());
         let type_ = TypeVertex::decode(bytes.clone().into_range(Self::range_type()));
         Self { role, access_type, type_ }
     }
@@ -259,24 +274,31 @@ impl RBACRoleAccess {
             return None;
         }
 
-        let role = RBACRole::try_decode(bytes.get(Self::range_rbac_role())?)?;
-        let access_type = RBACAccessType::try_decode((bytes.get(Self::range_access_type())?).try_into().ok()?)?;
+        let role = RBACRoleVertex::try_decode(bytes.get(Self::range_rbac_role())?)?;
+        let access_type = RBACAccessKind::try_decode((bytes.get(Self::range_access_type())?).try_into().ok()?)?;
         let type_ = TypeVertex::try_decode(bytes.get(Self::range_type())?)?;
         Some(Self { role, access_type, type_ })
     }
 
-    pub fn build_prefix() -> StorageKey<'static, { RBACRoleAccess::LENGTH_PREFIX }> {
+    pub fn build_prefix() -> StorageKey<'static, { RBACRoleTypeAccess::LENGTH_PREFIX }> {
         // TODO: is it better to have a const fn that is a reference to owned memory, or
         //       to always induce a tiny copy have a non-const function?
-        const PREFIX_BYTES: [u8; PrefixID::LENGTH] = RBACRoleAccess::PREFIX.prefix_id().to_bytes();
+        const PREFIX_BYTES: [u8; PrefixID::LENGTH] = RBACRoleTypeAccess::PREFIX.prefix_id().to_bytes();
         StorageKey::new_ref(Self::KEYSPACE, &PREFIX_BYTES)
     }
 
-    pub fn rbac_role(&self) -> RBACRole {
+    pub fn build_prefix_role(role: RBACRoleVertex) -> StorageKey<'static, { Self::LENGTH_PREFIX_ROLE }> {
+        let mut bytes = ByteArray::zeros(Self::LENGTH_PREFIX_ROLE);
+        bytes[Self::INDEX_PREFIX] = Self::PREFIX.prefix_id().byte;
+        bytes[Self::range_rbac_role()].copy_from_slice(&role.to_bytes());
+        StorageKey::new_owned(Self::KEYSPACE, bytes)
+    }
+
+    pub fn rbac_role(&self) -> RBACRoleVertex {
         self.role
     }
 
-    pub fn access_type(&self) -> RBACAccessType {
+    pub fn access_type(&self) -> RBACAccessKind {
         self.access_type
     }
 
@@ -285,7 +307,7 @@ impl RBACRoleAccess {
     }
 
     const fn range_rbac_role() -> Range<usize> {
-        Self::INDEX_PREFIX + 1..Self::INDEX_PREFIX + 1 + RBACRole::LENGTH
+        Self::INDEX_PREFIX + 1..Self::INDEX_PREFIX + 1 + RBACRoleVertex::LENGTH
     }
 
     const fn range_access_type() -> Range<usize> {
@@ -297,7 +319,7 @@ impl RBACRoleAccess {
     }
 }
 
-impl AsBytes<BUFFER_KEY_INLINE> for RBACRoleAccess {
+impl AsBytes<BUFFER_KEY_INLINE> for RBACRoleTypeAccess {
     fn to_bytes(self) -> Bytes<'static, BUFFER_KEY_INLINE> {
         let mut array = ByteArray::zeros(Self::LENGTH);
         array[Self::INDEX_PREFIX] = Self::PREFIX.prefix_id().byte;
@@ -308,10 +330,10 @@ impl AsBytes<BUFFER_KEY_INLINE> for RBACRoleAccess {
     }
 }
 
-impl Keyable<BUFFER_KEY_INLINE> for RBACRoleAccess {
+impl Keyable<BUFFER_KEY_INLINE> for RBACRoleTypeAccess {
     fn keyspace(&self) -> EncodingKeyspace {
         Self::KEYSPACE
     }
 }
 
-impl Prefixed<BUFFER_KEY_INLINE> for RBACRoleAccess {}
+impl Prefixed<BUFFER_KEY_INLINE> for RBACRoleTypeAccess {}

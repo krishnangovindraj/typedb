@@ -17,7 +17,6 @@ use encoding::{
         definition::{
             definition_key::DefinitionKey, definition_key_generator::DefinitionKeyGenerator, r#struct::StructDefinition,
         },
-        rbac::RBACRole,
         type_::{Kind, vertex::TypeVertexEncoding, vertex_generator::TypeVertexGenerator},
     },
     layout::prefix::Prefix,
@@ -62,6 +61,7 @@ use crate::{
         type_manager::type_reader::TypeReader,
     },
 };
+use crate::rbac::{RBACAccess, RBACRole};
 
 pub mod type_cache;
 pub mod type_reader;
@@ -1182,6 +1182,48 @@ impl TypeManager {
             struct_definition.format_syntax(&mut syntax, snapshot, self)?;
         }
         Ok(syntax)
+    }
+
+    pub fn get_rbac_role(
+        &self,
+        snapshot: &mut impl ReadableSnapshot,
+        role_label: &Label,
+        storage_counters: StorageCounters,
+    ) -> Result<Option<RBACRole>, Box<ConceptReadError>> {
+        todo!()
+    }
+
+    pub fn has_rbac_read_access(
+        &self,
+        snapshot: &impl ReadableSnapshot,
+        role: &RBACRole,
+        type_: impl TypeAPI,
+        storage_counters: StorageCounters,
+    ) -> Result<bool, Box<ConceptReadError>> {
+        todo!()
+    }
+
+    pub fn has_rbac_write_access(
+        &self,
+        snapshot: &impl ReadableSnapshot,
+        role: &RBACRole,
+        type_: impl TypeAPI,
+        storage_counters: StorageCounters,
+    ) -> Result<bool, Box<ConceptReadError>> {
+        todo!()
+    }
+
+    pub fn list_rbac_declared_access(
+        &self,
+        snapshot: &impl ReadableSnapshot,
+        role: &RBACRole,
+        storage_counters: StorageCounters,
+    ) -> Result<MaybeOwns<'_, HashSet<RBACAccess>>, Box<ConceptReadError>> {
+        if let Some(cache) = &self.type_cache {
+            todo!()
+        } else {
+            Ok(MaybeOwns::Owned(TypeReader::list_rbac_declared_access(snapshot, role)?))
+        }
     }
 }
 
@@ -3927,22 +3969,25 @@ impl TypeManager {
         Ok(())
     }
 
-    pub fn get_rbac_role(
-        &self,
-        snapshot: &mut impl ReadableSnapshot,
-        role_label: &Label,
-        storage_counters: StorageCounters,
-    ) -> Result<Option<RBACRole>, Box<ConceptReadError>> {
-        todo!("Also move above to the readable snapshot impl block")
-    }
-
-    pub fn put_rbac_role(
+    pub fn create_rbac_role(
         &self,
         snapshot: &mut impl WritableSnapshot,
         role_label: &Label,
         storage_counters: StorageCounters,
     ) -> Result<RBACRole, Box<ConceptWriteError>> {
-        todo!()
+        OperationTimeValidation::validate_new_rbac_role_name_uniqueness(snapshot, self, role_label)
+            .map_err(|typedb_source| ConceptWriteError::SchemaValidation { typedb_source })?;
+
+        let role = TypeWriter::storage_put_rbac_role(snapshot, role_label);
+        let type_vertex = self
+            .definition_key_generator
+            .create_role_type(snapshot)
+            .map_err(|err| ConceptWriteError::Encoding { source: err })?;
+        let role_type = RoleType::new(type_vertex);
+
+        TypeWriter::storage_put_label(snapshot, role_type, label);
+        TypeWriter::storage_put_type_vertex_property(snapshot, role_type, ordering);
+        Ok(role)
     }
 
     pub fn delete_rbac_role(
@@ -3954,27 +3999,18 @@ impl TypeManager {
         todo!("Delete all access, properties and the 'vertex'")
     }
 
-    pub fn add_rbac_read_access(
+    pub fn set_rbac_type_access(
         &self,
         snapshot: &mut impl WritableSnapshot,
-        role: &RBACRole,
-        type_: impl TypeAPI,
+        role: RBACRole,
+        access: RBACAccess,
         storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptWriteError>> {
-        todo!()
+        TypeWriter::storage_put_rbac_role_access(snapshot, role, access);
+        Ok(())
     }
 
-    pub fn add_rbac_write_access(
-        &self,
-        snapshot: &mut impl WritableSnapshot,
-        role: &RBACRole,
-        type_: impl TypeAPI,
-        storage_counters: StorageCounters,
-    ) -> Result<(), Box<ConceptWriteError>> {
-        todo!()
-    }
-
-    pub fn remove_rbac_read_access(
+    pub fn unset_rbac_type_access(
         &self,
         snapshot: &mut impl WritableSnapshot,
         role: &RBACRole,
