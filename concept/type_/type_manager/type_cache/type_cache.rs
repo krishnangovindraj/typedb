@@ -9,8 +9,6 @@ use std::{
     sync::Arc,
 };
 
-use crate::rbac::{RBACAccess, RBACRole};
-
 use encoding::{
     graph::definition::{definition_key::DefinitionKey, r#struct::StructDefinition},
     value::{label::Label, value_type::ValueType},
@@ -21,28 +19,31 @@ use storage::{
     snapshot::iterator::SnapshotIteratorError,
 };
 
-use crate::type_::{
-    Independent, KindAPI, Ordering, OwnerAPI, PlayerAPI,
-    attribute_type::AttributeType,
-    constraint::{CapabilityConstraint, Constraint, ConstraintCategory, TypeConstraint},
-    entity_type::EntityType,
-    object_type::ObjectType,
-    owns::{Owns, OwnsAnnotation},
-    plays::{Plays, PlaysAnnotation},
-    relates::{Relates, RelatesAnnotation},
-    relation_type::RelationType,
-    role_type::RoleType,
-    sub::{Sub, SubAnnotation},
-    type_manager::{
-        preload_schema_from,
-        type_reader::TypeReader,
-        type_cache::{
-            kind_cache::{
-                AttributeTypeCache, CommonTypeCache, EntityTypeCache, ObjectCache, OwnsCache, PlaysCache, RelatesCache,
-                RelationTypeCache, RoleTypeCache,
+use crate::{
+    rbac::{RBACAccess, RBACRole},
+    type_::{
+        Independent, KindAPI, Ordering, OwnerAPI, PlayerAPI,
+        attribute_type::AttributeType,
+        constraint::{CapabilityConstraint, Constraint, ConstraintCategory, TypeConstraint},
+        entity_type::EntityType,
+        object_type::ObjectType,
+        owns::{Owns, OwnsAnnotation},
+        plays::{Plays, PlaysAnnotation},
+        relates::{Relates, RelatesAnnotation},
+        relation_type::RelationType,
+        role_type::RoleType,
+        sub::{Sub, SubAnnotation},
+        type_manager::{
+            preload_schema_from,
+            type_cache::{
+                kind_cache::{
+                    AttributeTypeCache, CommonTypeCache, EntityTypeCache, ObjectCache, OwnsCache, PlaysCache,
+                    RelatesCache, RelationTypeCache, RoleTypeCache,
+                },
+                selection::{self, CacheGetter, HasCommonTypeCache, HasObjectCache},
+                struct_definition_cache::StructDefinitionCache,
             },
-            selection::{self, CacheGetter, HasCommonTypeCache, HasObjectCache},
-            struct_definition_cache::StructDefinitionCache,
+            type_reader::TypeReader,
         },
     },
 };

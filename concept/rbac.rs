@@ -13,7 +13,7 @@ use encoding::graph::{
 
 use crate::type_::{TypeAPI, attribute_type::AttributeType, object_type::ObjectType};
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum RBACAccess {
     ReadObject(ObjectType),
     WriteObject(ObjectType),
