@@ -9,6 +9,7 @@
 use answer::Type;
 use concept::{
     error::ConceptReadError,
+    rbac::RBACAccess,
     type_::{
         ObjectTypeAPI, Ordering, OwnerAPI, PlayerAPI, TypeAPI, attribute_type::AttributeType, entity_type::EntityType,
         object_type::ObjectType, owns::Owns, plays::Plays, relates::Relates, relation_type::RelationType,
@@ -27,7 +28,6 @@ use typeql::{
     schema::definable::struct_::Field,
     type_::{BuiltinValueType, NamedType, NamedTypeAny, NamedTypeOptional},
 };
-use concept::rbac::RBACAccess;
 
 macro_rules! filter_variants {
     ($variant:path : $iterable:expr) => {
@@ -572,7 +572,7 @@ pub(crate) fn resolve_rbac_type_access(
 #[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord)]
 pub(super) enum RBACAccessRW {
     Read,
-    Write
+    Write,
 }
 
 typedb_error! {

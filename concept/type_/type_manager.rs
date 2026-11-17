@@ -1186,38 +1186,33 @@ impl TypeManager {
 
     pub fn get_rbac_role(
         &self,
-        snapshot: &mut impl ReadableSnapshot,
+        snapshot: &impl ReadableSnapshot,
         role_name: &str,
-        storage_counters: StorageCounters,
+        _storage_counters: StorageCounters,
     ) -> Result<Option<RBACRole>, Box<ConceptReadError>> {
-        todo!()
+        if let Some(cache) = &self.type_cache {
+            error::todo_must_implement!("cached rbac");
+        } else {
+            TypeReader::get_rbac_role(snapshot, role_name)
+        }
     }
 
-    pub fn has_rbac_read_access(
+    pub fn has_rbac_access(
         &self,
         snapshot: &impl ReadableSnapshot,
         role: &RBACRole,
-        type_: impl TypeAPI,
+        access: RBACAccess,
         storage_counters: StorageCounters,
     ) -> Result<bool, Box<ConceptReadError>> {
-        todo!()
-    }
-
-    pub fn has_rbac_write_access(
-        &self,
-        snapshot: &impl ReadableSnapshot,
-        role: &RBACRole,
-        type_: impl TypeAPI,
-        storage_counters: StorageCounters,
-    ) -> Result<bool, Box<ConceptReadError>> {
-        todo!()
+        let all_accesses = self.list_rbac_declared_access(snapshot, role, storage_counters)?;
+        Ok(all_accesses.contains(&access))
     }
 
     pub fn list_rbac_declared_access(
         &self,
         snapshot: &impl ReadableSnapshot,
         role: &RBACRole,
-        storage_counters: StorageCounters,
+        _storage_counters: StorageCounters,
     ) -> Result<MaybeOwns<'_, HashSet<RBACAccess>>, Box<ConceptReadError>> {
         if let Some(cache) = &self.type_cache {
             todo!()
@@ -3991,7 +3986,7 @@ impl TypeManager {
         &self,
         snapshot: &mut impl WritableSnapshot,
         role: &RBACRole,
-        storage_counters: StorageCounters,
+        _storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptWriteError>> {
         todo!("Delete all access, properties and the 'vertex'")
     }
@@ -4001,7 +3996,7 @@ impl TypeManager {
         snapshot: &mut impl WritableSnapshot,
         role: RBACRole,
         access: RBACAccess,
-        storage_counters: StorageCounters,
+        _storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptWriteError>> {
         TypeWriter::storage_put_rbac_role_access(snapshot, role, access);
         Ok(())
@@ -4012,8 +4007,9 @@ impl TypeManager {
         snapshot: &mut impl WritableSnapshot,
         role: RBACRole,
         access: RBACAccess,
-        storage_counters: StorageCounters,
+        _storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptWriteError>> {
-        todo!()
+        TypeWriter::storage_delete_rbac_role_access(snapshot, role, access);
+        Ok(())
     }
 }

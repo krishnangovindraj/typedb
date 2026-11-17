@@ -48,12 +48,13 @@ use typeql::{
     },
     type_::Label as TypeQLLabel,
 };
+
 use crate::{
     definable_resolution::{
-        SymbolResolutionError, filter_variants, resolve_attribute_type, resolve_object_type, resolve_owns_declared,
-        resolve_plays_declared, resolve_relates, resolve_relates_declared, resolve_relation_type, resolve_role_type,
-        resolve_struct_definition_key, resolve_type, resolve_typeql_type, resolve_value_type,
-        type_ref_to_label_and_ordering, type_to_object_type,
+        RBACAccessRW, SymbolResolutionError, filter_variants, resolve_attribute_type, resolve_object_type,
+        resolve_owns_declared, resolve_plays_declared, resolve_rbac_type_access, resolve_relates,
+        resolve_relates_declared, resolve_relation_type, resolve_role_type, resolve_struct_definition_key,
+        resolve_type, resolve_typeql_type, resolve_value_type, type_ref_to_label_and_ordering, type_to_object_type,
     },
     definable_status::{
         DefinableStatus, DefinableStatusMode, get_capability_annotation_category_status, get_owns_status,
@@ -61,7 +62,6 @@ use crate::{
         get_value_type_status,
     },
 };
-use crate::definable_resolution::{resolve_rbac_type_access, RBACAccessRW};
 
 fn checked_identifier(identifier: &typeql::Identifier) -> Result<&str, UndefineError> {
     identifier.as_str_unreserved().map_err(|_source| {
@@ -976,19 +976,16 @@ fn undefine_rbac_access(
             }),
         })?;
     let (access_kind, types) = match &rbac_access.access {
-        RBACTypeAccess::Reads(types) => (RBACAccessRW::Read, types),
-        RBACTypeAccess::Writes(types) => (RBACAccessRW::Write, types),
+        RBACTypeAccess::ReadTypes(types) => (RBACAccessRW::Read, types),
+        RBACTypeAccess::WriteTypes(types) => (RBACAccessRW::Write, types),
     };
     types.iter().try_for_each(|typeql_label| {
         let type_label = Label::parse_from(checked_identifier(&typeql_label.ident)?, typeql_label.span());
         let access = resolve_rbac_type_access(snapshot, type_manager, access_kind, &type_label)
             .map_err(|typedb_source| UndefineError::DefinitionResolution { typedb_source })?;
-        type_manager
-            .unset_rbac_access(snapshot, resolved_role, access, StorageCounters::DISABLED)
-            .map_err(|typedb_source| UndefineError::RBACAccessRemoveError {
-                source_span: rbac_access.span(),
-                typedb_source,
-            })
+        type_manager.unset_rbac_access(snapshot, resolved_role, access, StorageCounters::DISABLED).map_err(
+            |typedb_source| UndefineError::RBACAccessRemoveError { source_span: rbac_access.span(), typedb_source },
+        )
     })
 }
 

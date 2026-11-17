@@ -42,6 +42,7 @@ impl fmt::Debug for RBACRoleId {
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct RBACRoleVertex {
+    // TODO: To avoid re-using or running out of roles, this should be a full u64 like do we for types.
     value: u32,
 }
 

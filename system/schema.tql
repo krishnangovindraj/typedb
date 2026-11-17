@@ -29,6 +29,7 @@ define
     entity database, owns database-id;
 
     # permissions
+    attribute role-id, value integer;
     relation group-membership,
         relates user,
         relates group;
@@ -49,7 +50,8 @@ define
     relation manage-users sub global-permission;
     relation grant-permissions sub global-permission;
 
-    relation database-permissions@abstract sub global-permission,
+    relation database-permission @abstract,
+        sub global-permission,
         relates database @card(1);
 
     database plays database-permission:database;
