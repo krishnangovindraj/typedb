@@ -11,13 +11,15 @@ use encoding::graph::{
     type_::vertex::TypeVertex,
 };
 
-use crate::type_::{TypeAPI, object_type::ObjectType};
+use crate::type_::{TypeAPI, attribute_type::AttributeType, object_type::ObjectType};
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum RBACAccess {
     ReadObject(ObjectType),
     WriteObject(ObjectType),
     // More to come?
+    ReadAttribute(AttributeType),
+    WriteAttribute(AttributeType),
 }
 
 impl RBACAccess {
@@ -25,6 +27,8 @@ impl RBACAccess {
         match access_kind {
             RBACAccessKind::ReadObjectVertex => Self::ReadObject(ObjectType::new(type_)),
             RBACAccessKind::WriteObjectVertex => Self::WriteObject(ObjectType::new(type_)),
+            RBACAccessKind::ReadAttributeVertex => Self::ReadAttribute(AttributeType::new(type_)),
+            RBACAccessKind::WriteAttributeVertex => Self::WriteAttribute(AttributeType::new(type_)),
         }
     }
 }

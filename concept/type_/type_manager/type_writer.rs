@@ -267,6 +267,12 @@ impl<Snapshot: WritableSnapshot> TypeWriter<Snapshot> {
             RBACAccess::WriteObject(type_) => {
                 RBACRoleTypeAccess::new(role.vertex(), RBACAccessKind::WriteObjectVertex, type_.vertex())
             }
+            RBACAccess::ReadAttribute(type_) => {
+                RBACRoleTypeAccess::new(role.vertex(), RBACAccessKind::ReadAttributeVertex, type_.vertex())
+            }
+            RBACAccess::WriteAttribute(type_) => {
+                RBACRoleTypeAccess::new(role.vertex(), RBACAccessKind::WriteAttributeVertex, type_.vertex())
+            }
         };
         snapshot.put(to_write.into_storage_key().into_owned_array())
     }
@@ -278,6 +284,12 @@ impl<Snapshot: WritableSnapshot> TypeWriter<Snapshot> {
             }
             RBACAccess::WriteObject(type_) => {
                 RBACRoleTypeAccess::new(role.vertex(), RBACAccessKind::WriteObjectVertex, type_.vertex())
+            }
+            RBACAccess::ReadAttribute(type_) => {
+                RBACRoleTypeAccess::new(role.vertex(), RBACAccessKind::ReadAttributeVertex, type_.vertex())
+            }
+            RBACAccess::WriteAttribute(type_) => {
+                RBACRoleTypeAccess::new(role.vertex(), RBACAccessKind::WriteAttributeVertex, type_.vertex())
             }
         };
         snapshot.delete(to_write.into_storage_key().into_owned_array())

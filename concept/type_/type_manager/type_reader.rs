@@ -626,7 +626,9 @@ impl TypeReader {
                     | Infix::PropertyHasOrder
                     | Infix::PropertyLinksOrder
                     | Infix::RBACReadObjectVertex
-                    | Infix::RBACWriteObjectVertex => {
+                    | Infix::RBACWriteObjectVertex
+                    | Infix::RBACReadAttributeVertex
+                    | Infix::RBACWriteAttributeVertex => {
                         unreachable!("Retrieved unexpected infixes while reading annotations.")
                     }
                 };
@@ -727,7 +729,9 @@ impl TypeReader {
                     | Infix::PropertyHasOrder
                     | Infix::PropertyLinksOrder
                     | Infix::RBACReadObjectVertex
-                    | Infix::RBACWriteObjectVertex => {
+                    | Infix::RBACWriteObjectVertex
+                    | Infix::RBACReadAttributeVertex
+                    | Infix::RBACWriteAttributeVertex => {
                         unreachable!("Retrieved unexpected infixes while reading annotations.")
                     }
                 };

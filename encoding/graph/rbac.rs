@@ -16,7 +16,6 @@ use crate::{
         infix::{Infix, InfixID},
         prefix::{Prefix, PrefixID},
     },
-    value::label::Label,
 };
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
@@ -226,6 +225,8 @@ pub enum RBACAccessKind {
     ReadObjectVertex,
     WriteObjectVertex,
     // More
+    ReadAttributeVertex,
+    WriteAttributeVertex,
 }
 
 impl RBACAccessKind {
@@ -234,6 +235,8 @@ impl RBACAccessKind {
         match infix {
             Infix::RBACReadObjectVertex => Self::ReadObjectVertex,
             Infix::RBACWriteObjectVertex => Self::WriteObjectVertex,
+            Infix::RBACReadAttributeVertex => Self::ReadAttributeVertex,
+            Infix::RBACWriteAttributeVertex => Self::WriteAttributeVertex,
             _other => panic!("Unexpected infix for RBACAccessType: {infix:?}"),
         }
     }
@@ -242,6 +245,8 @@ impl RBACAccessKind {
         match self {
             Self::ReadObjectVertex => Infix::RBACReadObjectVertex,
             Self::WriteObjectVertex => Infix::RBACWriteObjectVertex,
+            Self::ReadAttributeVertex => Infix::RBACReadAttributeVertex,
+            Self::WriteAttributeVertex => Infix::RBACWriteAttributeVertex,
         }
     }
 
@@ -250,6 +255,8 @@ impl RBACAccessKind {
         match infix {
             Infix::RBACReadObjectVertex => Some(Self::ReadObjectVertex),
             Infix::RBACWriteObjectVertex => Some(Self::WriteObjectVertex),
+            Infix::RBACReadAttributeVertex => Some(Self::ReadAttributeVertex),
+            Infix::RBACWriteAttributeVertex => Some(Self::WriteAttributeVertex),
             _other => None,
         }
     }

@@ -1189,11 +1189,12 @@ impl TypeManager {
         snapshot: &impl ReadableSnapshot,
         role_name: &str,
         _storage_counters: StorageCounters,
-    ) -> Result<Option<RBACRole>, Box<ConceptReadError>> {
+    ) -> Result<MaybeOwns<'_, Option<RBACRole>>, Box<ConceptReadError>> {
         if let Some(cache) = &self.type_cache {
-            error::todo_must_implement!("cached rbac");
+            // error::todo_must_implement!("cached rbac");
+            Ok(MaybeOwns::Owned(TypeReader::get_rbac_role(snapshot, role_name)?))
         } else {
-            TypeReader::get_rbac_role(snapshot, role_name)
+            Ok(MaybeOwns::Owned(TypeReader::get_rbac_role(snapshot, role_name)?))
         }
     }
 
@@ -1215,7 +1216,8 @@ impl TypeManager {
         _storage_counters: StorageCounters,
     ) -> Result<MaybeOwns<'_, HashSet<RBACAccess>>, Box<ConceptReadError>> {
         if let Some(cache) = &self.type_cache {
-            todo!()
+            // error::todo_must_implement!("cached rbac");
+            Ok(MaybeOwns::Owned(TypeReader::list_rbac_declared_access(snapshot, role)?))
         } else {
             Ok(MaybeOwns::Owned(TypeReader::list_rbac_declared_access(snapshot, role)?))
         }
@@ -3968,7 +3970,7 @@ impl TypeManager {
         &self,
         snapshot: &mut impl WritableSnapshot,
         name: &str,
-        storage_counters: StorageCounters,
+        _storage_counters: StorageCounters,
     ) -> Result<RBACRole, Box<ConceptWriteError>> {
         OperationTimeValidation::validate_rbac_role_name_uniqueness(snapshot, name)
             .map_err(|typedb_source| ConceptWriteError::SchemaValidation { typedb_source })?;
@@ -3988,7 +3990,7 @@ impl TypeManager {
         role: &RBACRole,
         _storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptWriteError>> {
-        todo!("Delete all access, properties and the 'vertex'")
+        error::todo_must_implement!("Delete all access, properties and the 'vertex'")
     }
 
     pub fn set_rbac_access(

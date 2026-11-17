@@ -559,9 +559,10 @@ pub(crate) fn resolve_rbac_type_access(
 
         (Access::Read, Type::Relation(t)) => RBACAccess::ReadObject(ObjectType::Relation(t)),
         (Access::Write, Type::Relation(t)) => RBACAccess::WriteObject(ObjectType::Relation(t)),
-        (_, Type::Attribute(_)) => {
-            error::todo_must_implement!("decide if we want");
-        }
+
+        (Access::Read, Type::Attribute(t)) => RBACAccess::ReadAttribute(t),
+        (Access::Write, Type::Attribute(t)) => RBACAccess::WriteAttribute(t),
+
         (_, Type::RoleType(_)) => {
             error::todo_must_implement!("decide if we want");
         }

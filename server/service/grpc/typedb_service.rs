@@ -362,23 +362,38 @@ impl typedb_protocol::type_db_server::TypeDb for GRPCTypeDBService {
         .await
     }
 
-    async fn grant(&self, request: Request<typedb_protocol::permissions::grant_permission::Req>) -> Result<Response<typedb_protocol::permissions::grant_permission::Res>, Status> {
+    async fn grant(
+        &self,
+        request: Request<typedb_protocol::permissions::grant_permission::Req>,
+    ) -> Result<Response<typedb_protocol::permissions::grant_permission::Res>, Status> {
         error::todo_must_implement!("todo")
     }
 
-    async fn list_permissions(&self, request: Request<typedb_protocol::permissions::list_permissions::Req>) -> Result<Response<typedb_protocol::permissions::list_permissions::Res>, Status> {
+    async fn list_permissions(
+        &self,
+        request: Request<typedb_protocol::permissions::list_permissions::Req>,
+    ) -> Result<Response<typedb_protocol::permissions::list_permissions::Res>, Status> {
         error::todo_must_implement!("todo")
     }
 
-    async fn list_user_groups(&self, request: Request<typedb_protocol::permissions::list_user_groups::Req>) -> Result<Response<typedb_protocol::permissions::list_user_groups::Res>, Status> {
+    async fn list_user_groups(
+        &self,
+        request: Request<typedb_protocol::permissions::list_user_groups::Req>,
+    ) -> Result<Response<typedb_protocol::permissions::list_user_groups::Res>, Status> {
         error::todo_must_implement!("todo")
     }
 
-    async fn list_user_group_membership(&self, request: Request<typedb_protocol::permissions::list_user_group_membership::Req>) -> Result<Response<typedb_protocol::permissions::list_user_group_membership::Res>, Status> {
+    async fn list_user_group_membership(
+        &self,
+        request: Request<typedb_protocol::permissions::list_user_group_membership::Req>,
+    ) -> Result<Response<typedb_protocol::permissions::list_user_group_membership::Res>, Status> {
         error::todo_must_implement!("todo")
     }
 
-    async fn list_user_group_members(&self, request: Request<typedb_protocol::permissions::list_user_group_members::Req>) -> Result<Response<typedb_protocol::permissions::list_user_group_members::Res>, Status> {
+    async fn list_user_group_members(
+        &self,
+        request: Request<typedb_protocol::permissions::list_user_group_members::Req>,
+    ) -> Result<Response<typedb_protocol::permissions::list_user_group_members::Res>, Status> {
         error::todo_must_implement!("todo")
     }
 

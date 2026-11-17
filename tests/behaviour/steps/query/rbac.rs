@@ -4,18 +4,16 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use concept::{
+    rbac::{RBACAccess, RBACRole},
+    type_::object_type::ObjectType,
+};
 use cucumber::gherkin::Step;
 use encoding::value::label::Label;
 use macro_rules_attribute::apply;
-use concept::rbac::{RBACAccess, RBACRole};
-use concept::type_::object_type::ObjectType;
 use resource::profile::StorageCounters;
 
-use crate::{
-    Context, generic_step,
-    transaction_context::with_read_tx,
-    util::iter_table_map,
-};
+use crate::{Context, generic_step, transaction_context::with_read_tx, util::iter_table_map};
 
 #[apply(generic_step)]
 #[step(expr = "list rbac declared access for role: {word}")]
@@ -35,8 +33,14 @@ async fn rbac_role_has_direct_grants(context: &mut Context, role_name: String, s
 }
 
 #[apply(generic_step)]
-#[step(expr = "rbac role {word} has {word} access on type '{word}': {boolean}")]
-async fn rbac_role_has_access_on_type(context: &mut Context, role_name: String, access: String, type_name: String, expected_has_access: params::Boolean) {
+#[step(expr = "rbac role '{word}' has {word} access on type '{word}': {boolean}")]
+async fn rbac_role_has_access_on_type(
+    context: &mut Context,
+    role_name: String,
+    access: String,
+    type_name: String,
+    expected_has_access: params::Boolean,
+) {
     with_read_tx!(context, |tx| {
         let role = tx
             .type_manager
@@ -59,7 +63,8 @@ fn check_rbac_access_on_type(
     type_label: &Label,
     access: &str,
 ) -> bool {
-    let access = if let Some(t) = type_manager.get_entity_type(snapshot, type_label).expect("Error getting entity type") {
+    let access = if let Some(t) = type_manager.get_entity_type(snapshot, type_label).expect("Error getting entity type")
+    {
         match access {
             "read" => RBACAccess::ReadObject(ObjectType::Entity(t)),
             "write" => RBACAccess::WriteObject(ObjectType::Entity(t)),
@@ -71,12 +76,15 @@ fn check_rbac_access_on_type(
             "write" => RBACAccess::WriteObject(ObjectType::Relation(t)),
             other => panic!("Unknown access type '{other}'; expected 'read' or 'write'"),
         }
-    } else if let Some(t) = type_manager.get_attribute_type(snapshot, type_label).expect("Error getting attribute type") {
-        unreachable!("No access for attribute types yet")
+    } else if let Some(t) = type_manager.get_attribute_type(snapshot, type_label).expect("Error getting attribute type")
+    {
+        match access {
+            "read" => RBACAccess::ReadAttribute(t),
+            "write" => RBACAccess::WriteAttribute(t),
+            other => panic!("Unknown access type '{other}'; expected 'read' or 'write'"),
+        }
     } else {
         unreachable!("Could not resolve type {type_label}")
     };
     type_manager.has_rbac_access(snapshot, role, access, StorageCounters::DISABLED).unwrap()
 }
-
-

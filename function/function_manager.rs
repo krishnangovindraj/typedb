@@ -322,7 +322,9 @@ impl FunctionManager {
                     | Infix::PropertyHasOrder
                     | Infix::PropertyLinksOrder
                     | Infix::RBACReadObjectVertex
-                    | Infix::RBACWriteObjectVertex => {
+                    | Infix::RBACWriteObjectVertex
+                    | Infix::RBACReadAttributeVertex
+                    | Infix::RBACWriteAttributeVertex => {
                         unreachable!("Retrieved unexpected infixes while reading annotations.")
                     }
                 }

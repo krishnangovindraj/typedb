@@ -50,6 +50,8 @@ pub enum Infix {
     // RBAC infixes
     RBACReadObjectVertex,
     RBACWriteObjectVertex,
+    RBACReadAttributeVertex,
+    RBACWriteAttributeVertex,
 }
 
 macro_rules! infix_functions {
@@ -106,6 +108,8 @@ impl Infix {
         PropertyLinksOrder => [101];
 
         RBACReadObjectVertex => [200];
-        RBACWriteObjectVertex => [201]
+        RBACWriteObjectVertex => [201];
+        RBACReadAttributeVertex => [202];
+        RBACWriteAttributeVertex => [203]
     );
 }
