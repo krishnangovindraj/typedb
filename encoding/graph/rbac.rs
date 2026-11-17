@@ -16,6 +16,7 @@ use crate::{
         infix::{Infix, InfixID},
         prefix::{Prefix, PrefixID},
     },
+    value::label::Label,
 };
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
@@ -123,7 +124,19 @@ impl RBACRoleProperty {
     const LENGTH_NO_SUFFIX: usize = PrefixID::LENGTH + RBACRoleVertex::LENGTH + InfixID::LENGTH;
     const LENGTH_PREFIX: usize = PrefixID::LENGTH;
 
-    fn new_suffixed<const INLINE_BYTES: usize>(role: RBACRoleVertex, infix: Infix, suffix: Bytes<'_, INLINE_BYTES>) -> Self {
+    pub fn new_key_for_label(role: RBACRoleVertex) -> Self {
+        Self::new_no_suffix(role, Infix::PropertyLabel)
+    }
+
+    fn new_no_suffix(role: RBACRoleVertex, infix: Infix) -> Self {
+        Self { role, infix, suffix: ByteArray::<0>::empty() }
+    }
+
+    fn new_suffixed<const INLINE_BYTES: usize>(
+        role: RBACRoleVertex,
+        infix: Infix,
+        suffix: Bytes<'_, INLINE_BYTES>,
+    ) -> Self {
         Self { role, infix, suffix: ByteArray::copy(&suffix) }
     }
 

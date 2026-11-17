@@ -157,6 +157,7 @@ make_prefix_enum! {
     IndexLabelToType => 182 = 0xB6, Width::Variable, Domain::Schema;
     IndexNameToDefinitionStruct => 183 = 0xB7, Width::Variable, Domain::Schema;
     IndexNameToDefinitionFunction => 184 = 0xB8, Width::Variable, Domain::Schema;
+    IndexNameToRBACRole => 185 = 0xB9, Width::Variable, Domain::Schema;
 
     IndexValueToStruct => 190 = 0xBE, Width::Variable, Domain::Data;
     // Reserved: 200-255 = 0xC8-0xFF

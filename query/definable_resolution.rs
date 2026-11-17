@@ -20,13 +20,14 @@ use encoding::{
     value::{label::Label, value_type::ValueType},
 };
 use error::typedb_error;
-use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
+use storage::snapshot::ReadableSnapshot;
 use typeql::{
     TypeRef, TypeRefAny,
     common::{Span, Spanned, error::TypeQLError},
     schema::definable::struct_::Field,
     type_::{BuiltinValueType, NamedType, NamedTypeAny, NamedTypeOptional},
 };
+use concept::rbac::RBACAccess;
 
 macro_rules! filter_variants {
     ($variant:path : $iterable:expr) => {
@@ -88,7 +89,7 @@ pub(crate) fn get_struct_field_value_type_optionality(
 }
 
 pub(crate) fn resolve_typeql_type(
-    snapshot: &impl WritableSnapshot,
+    snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
     label: &Label,
 ) -> Result<Type, Box<SymbolResolutionError>> {
@@ -106,7 +107,7 @@ pub(crate) fn resolve_typeql_type(
 }
 
 pub(crate) fn try_resolve_typeql_type(
-    snapshot: &impl WritableSnapshot,
+    snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
     label: &Label,
 ) -> Result<Option<Type>, Box<ConceptReadError>> {
@@ -544,6 +545,36 @@ pub(crate) fn try_resolve_plays_role_label(
     }
 }
 
+pub(crate) fn resolve_rbac_type_access(
+    snapshot: &impl ReadableSnapshot,
+    type_manager: &TypeManager,
+    access_kind: RBACAccessRW,
+    type_label: &Label,
+) -> Result<RBACAccess, Box<SymbolResolutionError>> {
+    use RBACAccessRW as Access;
+    let resolved_type = resolve_typeql_type(snapshot, type_manager, &type_label)?;
+    let access = match (access_kind, resolved_type) {
+        (Access::Read, Type::Entity(t)) => RBACAccess::ReadObject(ObjectType::Entity(t)),
+        (Access::Write, Type::Entity(t)) => RBACAccess::WriteObject(ObjectType::Entity(t)),
+
+        (Access::Read, Type::Relation(t)) => RBACAccess::ReadObject(ObjectType::Relation(t)),
+        (Access::Write, Type::Relation(t)) => RBACAccess::WriteObject(ObjectType::Relation(t)),
+        (_, Type::Attribute(_)) => {
+            error::todo_must_implement!("decide if we want");
+        }
+        (_, Type::RoleType(_)) => {
+            error::todo_must_implement!("decide if we want");
+        }
+    };
+    Ok(access)
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord)]
+pub(super) enum RBACAccessRW {
+    Read,
+    Write
+}
+
 typedb_error! {
     pub SymbolResolutionError(component = "Symbol resolution", prefix = "SYR") {
         TypeNotFound(1, "The type '{label}' was not found.", label: Label, source_span: Option<Span>),
@@ -562,6 +593,6 @@ typedb_error! {
         UnexpectedConceptRead(15, "Unexpected concept read error.", typedb_source: Box<ConceptReadError>, source_span: Option<Span>),
         IllegalKeywordAsIdentifier(16, "The reserved keyword '{identifier}' cannot be used as an identifier.", identifier: typeql::Identifier, source_span: Option<Span>),
         SubNotFound(17, "The type '{subtype_label}' does not subtype '{supertype_label}'.", subtype_label: Label, supertype_label: Label, source_span: Option<Span>),
-        RBACRoleNotFound(18, "The RBAC role '{label}' was not found.", label: Label, source_span: Option<Span>),
+        RBACRoleNotFound(18, "The RBAC role '{name}' was not found.", name: String, source_span: Option<Span>),
     }
 }

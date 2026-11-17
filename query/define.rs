@@ -45,7 +45,6 @@ use typeql::{
     token,
     token::Keyword,
 };
-
 use crate::{
     definable_resolution::{
         SymbolResolutionError, filter_variants, get_struct_field_value_type_optionality, resolve_attribute_type,
@@ -59,6 +58,7 @@ use crate::{
         get_value_type_status,
     },
 };
+use crate::definable_resolution::{resolve_rbac_type_access, RBACAccessRW};
 
 fn checked_identifier(identifier: &typeql::Identifier) -> Result<&str, DefineError> {
     identifier.as_str_unreserved().map_err(|_source| {
@@ -161,79 +161,43 @@ fn process_role_definitions(
 ) -> Result<(), DefineError> {
     filter_variants!(Definable::RBACDeclaration : definables).try_for_each(|rbac| {
         if rbac.kind.is_some() {
-            let role_label = Label::parse_from(checked_identifier(&rbac.label.ident)?, rbac.label.span());
-            type_manager
-                .create_rbac_role(snapshot, &role_label, storage_counters.clone())
-                .map_err(|typedb_source| DefineError::CreateRBACRole {
-                    role_label,
-                    source_span: rbac.span(),
-                    typedb_source
-                })?;
+            let role_name = checked_identifier(&rbac.label.ident)?;
+            type_manager.create_rbac_role(snapshot, role_name, storage_counters.clone()).map_err(
+                |typedb_source| DefineError::CreateRBACRole {
+                    role_name: role_name.to_owned(), source_span: rbac.span(), typedb_source
+                },
+            )?;
         }
         Ok(())
     })?;
     filter_variants!(Definable::RBACDeclaration : definables).try_for_each(|rbac| {
-        let role_label = Label::parse_from(checked_identifier(&rbac.label.ident)?, rbac.label.span());
+        let role_name = checked_identifier(&rbac.label.ident)?;
         let resolved_role = type_manager
-            .get_rbac_role(snapshot, &role_label, storage_counters.clone())
+            .get_rbac_role(snapshot, &role_name, storage_counters.clone())
             .map_err(|typedb_source| DefineError::UnexpectedConceptRead { typedb_source })?
             .ok_or_else(|| DefineError::SymbolResolution {
                 typedb_source: Box::new(SymbolResolutionError::RBACRoleNotFound {
-                    label: role_label.clone(),
+                    name: role_name.to_owned(),
                     source_span: rbac.label.span(),
                 }),
             })?;
-        rbac.type_access.iter().try_for_each(|access| match access {
-            RBACTypeAccess::Reads(types) => types.iter().try_for_each(|typeql_label| {
+        rbac.type_access.iter().try_for_each(|access| {
+            let (access_kind, types) = match access {
+                RBACTypeAccess::Reads(types) => (RBACAccessRW::Read, types),
+                RBACTypeAccess::Writes(types) => (RBACAccessRW::Write, types),
+            };
+            types.iter().try_for_each(|typeql_label| {
                 let type_label = Label::parse_from(checked_identifier(&typeql_label.ident)?, typeql_label.span());
-                let resolved_type = resolve_typeql_type(snapshot, type_manager, &type_label)
+                let access = resolve_rbac_type_access(snapshot, type_manager, access_kind, &type_label)
                     .map_err(|typedb_source| DefineError::SymbolResolution { typedb_source })?;
-                match resolved_type {
-                    answer::Type::Entity(t) => {
-                        type_manager.set_rbac_type_access(snapshot, &resolved_role, t, storage_counters.clone())
-                    },
-                    answer::Type::Relation(t) => {
-                        type_manager.set_rbac_type_access(snapshot, &resolved_role, t, storage_counters.clone())
-                    },
-                    answer::Type::Attribute(t) => {
-                        type_manager.set_rbac_type_access(snapshot, &resolved_role, t, storage_counters.clone())
-                    },
-                    answer::Type::RoleType(t) => {
-                        type_manager.set_rbac_type_access(snapshot, &resolved_role, t, storage_counters.clone())
-                    },
-                }.map_err(|typedb_source| DefineError::CreateRBACAccess {
-                        role_label: role_label.clone(),
+                type_manager.set_rbac_access(snapshot, resolved_role, access, storage_counters.clone())
+                    .map_err(|typedb_source| DefineError::CreateRBACAccess {
+                        role_name: role_name.to_owned(),
                         type_label,
                         source_span: typeql_label.span(),
                         typedb_source,
-                    })?;
-                Ok(())
-            }),
-            RBACTypeAccess::Writes(types) => types.iter().try_for_each(|typeql_label| {
-                let type_label = Label::parse_from(checked_identifier(&typeql_label.ident)?, typeql_label.span());
-                let resolved_type = resolve_typeql_type(snapshot, type_manager, &type_label)
-                    .map_err(|typedb_source| DefineError::SymbolResolution { typedb_source })?;
-                match resolved_type {
-                    answer::Type::Entity(t) => {
-                        type_manager.set_rbac_write_access(snapshot, &resolved_role, t, storage_counters.clone())
-                    },
-                    answer::Type::Relation(t) => {
-                        type_manager.set_rbac_write_access(snapshot, &resolved_role, t, storage_counters.clone())
-                    },
-                    answer::Type::Attribute(t) => {
-                        type_manager.set_rbac_write_access(snapshot, &resolved_role, t, storage_counters.clone())
-                    },
-                    answer::Type::RoleType(t) => {
-                        type_manager.set_rbac_write_access(snapshot, &resolved_role, t, storage_counters.clone())
-                    },
-                }.map_err(|typedb_source| DefineError::CreateRBACAccess {
-                    role_label: role_label.clone(),
-                    type_label,
-                    source_span: typeql_label.span(),
-                    typedb_source,
-                })?;
-                Ok(())
-            }),
+                    })
+            })
         })
     })?;
     Ok(())
@@ -1510,15 +1474,15 @@ typedb_error! {
         IllegalKeywordAsIdentifier(31, "The reserved keyword \"{identifier}\" cannot be used as an identifier.", identifier: typeql::Identifier),
         CreateRBACRole(
             32,
-            "An error occured when creating the RBAC role: '{role_label}'",
-            role_label: Label,
+            "An error occured when creating the RBAC role: '{role_name}'",
+            role_name: String,
             source_span: Option<Span>,
             typedb_source: Box<ConceptWriteError>
         ),
         CreateRBACAccess(
             33,
-            "An error occured when granting the RBAC role: '{role_label}' access to the type: '{type_label}'",
-            role_label: Label,
+            "An error occured when granting the RBAC role: '{role_name}' access to the type: '{type_label}'",
+            role_name: String,
             type_label: Label,
             source_span: Option<Span>,
             typedb_source: Box<ConceptWriteError>

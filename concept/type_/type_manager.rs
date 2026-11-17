@@ -35,6 +35,7 @@ use validation::{commit_time_validation::CommitTimeValidation, operation_time_va
 
 use crate::{
     error::{ConceptReadError, ConceptWriteError},
+    rbac::{RBACAccess, RBACRole},
     thing::thing_manager::ThingManager,
     type_::{
         Capability, Independent, KindAPI, ObjectTypeAPI, Ordering, OwnerAPI, PlayerAPI, TypeAPI, TypeQLSyntax,
@@ -61,7 +62,6 @@ use crate::{
         type_manager::type_reader::TypeReader,
     },
 };
-use crate::rbac::{RBACAccess, RBACRole};
 
 pub mod type_cache;
 pub mod type_reader;
@@ -1187,7 +1187,7 @@ impl TypeManager {
     pub fn get_rbac_role(
         &self,
         snapshot: &mut impl ReadableSnapshot,
-        role_label: &Label,
+        role_name: &str,
         storage_counters: StorageCounters,
     ) -> Result<Option<RBACRole>, Box<ConceptReadError>> {
         todo!()
@@ -3972,21 +3972,18 @@ impl TypeManager {
     pub fn create_rbac_role(
         &self,
         snapshot: &mut impl WritableSnapshot,
-        role_label: &Label,
+        name: &str,
         storage_counters: StorageCounters,
     ) -> Result<RBACRole, Box<ConceptWriteError>> {
-        OperationTimeValidation::validate_new_rbac_role_name_uniqueness(snapshot, self, role_label)
+        OperationTimeValidation::validate_rbac_role_name_uniqueness(snapshot, name)
             .map_err(|typedb_source| ConceptWriteError::SchemaValidation { typedb_source })?;
 
-        let role = TypeWriter::storage_put_rbac_role(snapshot, role_label);
-        let type_vertex = self
+        let role_vertex = self
             .definition_key_generator
             .create_rbac_role(snapshot)
             .map_err(|err| ConceptWriteError::Encoding { source: err })?;
-        let role_type = RoleType::new(type_vertex);
-
-        TypeWriter::storage_put_rbac_role_label(snapshot, role_type, label);
-        TypeWriter::storage_put_rbac_role_property(snapshot, role_type, ordering);
+        let role = RBACRole::new(role_vertex);
+        TypeWriter::storage_set_rbac_role_name(snapshot, role, name);
         Ok(role)
     }
 
@@ -3999,7 +3996,7 @@ impl TypeManager {
         todo!("Delete all access, properties and the 'vertex'")
     }
 
-    pub fn set_rbac_type_access(
+    pub fn set_rbac_access(
         &self,
         snapshot: &mut impl WritableSnapshot,
         role: RBACRole,
@@ -4010,52 +4007,13 @@ impl TypeManager {
         Ok(())
     }
 
-    pub fn unset_rbac_type_access(
+    pub fn unset_rbac_access(
         &self,
         snapshot: &mut impl WritableSnapshot,
-        role: &RBACRole,
-        type_: impl TypeAPI,
+        role: RBACRole,
+        access: RBACAccess,
         storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptWriteError>> {
         todo!()
-    }
-
-    pub fn remove_rbac_write_access(
-        &self,
-        snapshot: &mut impl WritableSnapshot,
-        role: &RBACRole,
-        type_: impl TypeAPI,
-        storage_counters: StorageCounters,
-    ) -> Result<(), Box<ConceptWriteError>> {
-        todo!()
-    }
-
-    pub fn has_rbac_read_access(
-        &self,
-        snapshot: &impl ReadableSnapshot,
-        role: &RBACRole,
-        type_: impl TypeAPI,
-        storage_counters: StorageCounters,
-    ) -> Result<bool, Box<ConceptReadError>> {
-        todo!()
-    }
-
-    pub fn has_rbac_write_access(
-        &self,
-        snapshot: &impl ReadableSnapshot,
-        role: &RBACRole,
-        type_: impl TypeAPI,
-        storage_counters: StorageCounters,
-    ) -> Result<bool, Box<ConceptReadError>> {
-        todo!()
-    }
-
-    pub fn list_rbac_granted_accesses(
-        &self,
-        snapshot: &impl ReadableSnapshot,
-        role: &RBACRole,
-        storage_counters: StorageCounters,
-    ) -> Result<Vec<()>, > {
-
     }
 }

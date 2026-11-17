@@ -214,6 +214,7 @@ impl CommitDeltas {
                 | Some(DecodableKey::IndexLabelToType(_))
                 | Some(DecodableKey::IndexNameToDefinitionStruct(_))
                 | Some(DecodableKey::IndexNameToDefinitionFunction(_))
+                | Some(DecodableKey::IndexNameToRBACRole(_))
                 | Some(DecodableKey::IndexValueToStruct(_))
                 | Some(DecodableKey::DefinitionStruct(_))
                 | Some(DecodableKey::DefinitionFunction(_))

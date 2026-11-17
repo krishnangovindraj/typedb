@@ -27,7 +27,7 @@ use crate::{
     graph::{
         Typed,
         definition::definition_key::{DefinitionID, DefinitionKey},
-        rbac::RBACRoleVertex,
+        rbac::{RBACRoleId, RBACRoleVertex},
         type_::{
             Kind,
             vertex::{TypeID, TypeIDUInt, TypeVertex},
@@ -35,7 +35,6 @@ use crate::{
     },
     layout::prefix::Prefix,
 };
-use crate::graph::rbac::RBACRoleId;
 
 pub type TypeVertexAllocator = SchemaIDAllocator<TypeVertex>;
 pub type DefinitionKeyAllocator = SchemaIDAllocator<DefinitionKey>;
@@ -171,6 +170,6 @@ impl SchemaID for RBACRoleVertex {
 
     fn ids_exhausted_error(prefix: Prefix) -> EncodingError {
         debug_assert!(prefix == Self::PREFIX);
-        EncodingError::RBACRoleIDsExhausted { }
+        EncodingError::RBACRoleIDsExhausted {}
     }
 }

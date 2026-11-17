@@ -24,8 +24,8 @@ use encoding::{
 };
 use error::typedb_error;
 use function::{FunctionError, function_manager::FunctionManager};
-use resource::profile::StorageCounters;
 use ir::{LiteralParseError, translation::tokens::translate_annotation_category};
+use resource::profile::StorageCounters;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 use typeql::{
     common::{Span, Spanned, error::TypeQLError, token::Keyword},
@@ -48,7 +48,6 @@ use typeql::{
     },
     type_::Label as TypeQLLabel,
 };
-
 use crate::{
     definable_resolution::{
         SymbolResolutionError, filter_variants, resolve_attribute_type, resolve_object_type, resolve_owns_declared,
@@ -62,7 +61,7 @@ use crate::{
         get_value_type_status,
     },
 };
-use crate::define::DefineError;
+use crate::definable_resolution::{resolve_rbac_type_access, RBACAccessRW};
 
 fn checked_identifier(identifier: &typeql::Identifier) -> Result<&str, UndefineError> {
     identifier.as_str_unreserved().map_err(|_source| {
@@ -945,21 +944,19 @@ fn undefine_rbac_role(
     type_manager: &TypeManager,
     label: &TypeQLLabel,
 ) -> Result<(), UndefineError> {
-    let role_label = Label::parse_from(checked_identifier(&label.ident)?, label.span());
+    let role_name = checked_identifier(&label.ident)?;
     let resolved_role = type_manager
-        .get_rbac_role(snapshot, &role_label, StorageCounters::DISABLED)
+        .get_rbac_role(snapshot, &role_name, StorageCounters::DISABLED)
         .map_err(|typedb_source| UndefineError::UnexpectedConceptRead { typedb_source })?
         .ok_or_else(|| UndefineError::DefinitionResolution {
             typedb_source: Box::new(SymbolResolutionError::RBACRoleNotFound {
-                label: role_label.clone(),
+                name: role_name.to_owned(),
                 source_span: label.span(),
             }),
         })?;
-    type_manager
-        .delete_rbac_role(snapshot, &resolved_role, StorageCounters::DISABLED)
-        .map_err(|typedb_source| {
-            UndefineError::RBACRoleDeleteError { label: role_label.clone(), typedb_source, source_span: label.span() }
-        })?;
+    type_manager.delete_rbac_role(snapshot, &resolved_role, StorageCounters::DISABLED).map_err(|typedb_source| {
+        UndefineError::RBACRoleDeleteError { name: role_name.to_owned(), typedb_source, source_span: label.span() }
+    })?;
     Ok(())
 }
 
@@ -968,40 +965,31 @@ fn undefine_rbac_access(
     type_manager: &TypeManager,
     rbac_access: &RBACAccessFrom,
 ) -> Result<(), UndefineError> {
-    let role_label = Label::parse_from(checked_identifier(&rbac_access.from.ident)?, rbac_access.from.span());
+    let role_name = checked_identifier(&rbac_access.from.ident)?;
     let resolved_role = type_manager
-        .get_rbac_role(snapshot, &role_label, StorageCounters::DISABLED)
+        .get_rbac_role(snapshot, &role_name, StorageCounters::DISABLED)
         .map_err(|typedb_source| UndefineError::UnexpectedConceptRead { typedb_source })?
         .ok_or_else(|| UndefineError::DefinitionResolution {
             typedb_source: Box::new(SymbolResolutionError::RBACRoleNotFound {
-                label: role_label,
+                name: role_name.to_owned(),
                 source_span: rbac_access.from.span(),
             }),
         })?;
-    match &rbac_access.access {
-        RBACTypeAccess::Reads(types) => types.iter().try_for_each(|type_label| {
-            let type_label = Label::parse_from(checked_identifier(&type_label.ident)?, type_label.span());
-            let resolved_type = resolve_typeql_type(snapshot, type_manager, &type_label)
-                .map_err(|typedb_source| UndefineError::DefinitionResolution { typedb_source })?;
-            type_manager
-                .remove_rbac_read_access(snapshot, &resolved_role, resolved_type, StorageCounters::DISABLED)
-                .map_err(|typedb_source| UndefineError::RBACAccessRemoveError {
-                    source_span: rbac_access.span(),
-                    typedb_source,
-                })
-        }),
-        RBACTypeAccess::Writes(types) => types.iter().try_for_each(|type_label| {
-            let type_label = Label::parse_from(checked_identifier(&type_label.ident)?, type_label.span());
-            let resolved_type = resolve_typeql_type(snapshot, type_manager, &type_label)
-                .map_err(|typedb_source| UndefineError::DefinitionResolution { typedb_source })?;
-            type_manager
-                .remove_rbac_write_access(snapshot, &resolved_role, resolved_type, StorageCounters::DISABLED)
-                .map_err(|typedb_source| UndefineError::RBACAccessRemoveError {
-                    source_span: rbac_access.span(),
-                    typedb_source,
-                })
-        }),
-    }
+    let (access_kind, types) = match &rbac_access.access {
+        RBACTypeAccess::Reads(types) => (RBACAccessRW::Read, types),
+        RBACTypeAccess::Writes(types) => (RBACAccessRW::Write, types),
+    };
+    types.iter().try_for_each(|typeql_label| {
+        let type_label = Label::parse_from(checked_identifier(&typeql_label.ident)?, typeql_label.span());
+        let access = resolve_rbac_type_access(snapshot, type_manager, access_kind, &type_label)
+            .map_err(|typedb_source| UndefineError::DefinitionResolution { typedb_source })?;
+        type_manager
+            .unset_rbac_access(snapshot, resolved_role, access, StorageCounters::DISABLED)
+            .map_err(|typedb_source| UndefineError::RBACAccessRemoveError {
+                source_span: rbac_access.span(),
+                typedb_source,
+            })
+    })
 }
 
 fn check_can_and_need_undefine_sub<T: TypeAPI>(
@@ -1354,8 +1342,8 @@ typedb_error! {
         ),
         RBACRoleDeleteError(
             38,
-            "Error removing the RBAC role '{label}'.",
-            label: Label,
+            "Error deleting the RBAC role '{name}'.",
+            name: String,
             source_span: Option<Span>,
             typedb_source: Box<ConceptWriteError>
         ),

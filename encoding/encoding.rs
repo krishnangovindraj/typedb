@@ -21,7 +21,7 @@ use storage::{
 use crate::{
     graph::{
         definition::{definition_key::DefinitionKey, function::FunctionDefinition, r#struct::StructDefinition},
-        rbac::{RBACRoleVertex, RBACRoleTypeAccess, RBACRoleProperty},
+        rbac::{RBACRoleProperty, RBACRoleTypeAccess, RBACRoleVertex},
         thing::{
             ThingVertex,
             edge::{ThingEdgeHas, ThingEdgeHasReverse, ThingEdgeIndexedRelation, ThingEdgeLinks},
@@ -232,6 +232,8 @@ pub enum DecodableKey {
     IndexLabelToType(Label),
     IndexNameToDefinitionStruct(String),
     IndexNameToDefinitionFunction(String),
+    IndexNameToRBACRole(String),
+
     IndexValueToStruct(StructIndexEntryKey),
 
     RBACRole(RBACRoleVertex),
@@ -284,6 +286,9 @@ impl DecodableKey {
             )),
             Prefix::IndexNameToDefinitionFunction => Some(Self::IndexNameToDefinitionFunction(
                 IdentifierIndex::<FunctionDefinition>::new(Bytes::reference(bytes)).identifier().as_str().to_owned(),
+            )),
+            Prefix::IndexNameToRBACRole => Some(Self::IndexNameToRBACRole(
+                IdentifierIndex::<RBACRoleVertex>::new(Bytes::reference(bytes)).identifier().as_str().to_owned(),
             )),
             Prefix::IndexValueToStruct => Some(Self::IndexValueToStruct(StructIndexEntryKey::new(Bytes::copy(bytes)))),
 

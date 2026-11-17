@@ -5,10 +5,13 @@
  */
 
 use std::fmt;
-use encoding::graph::rbac::{RBACAccessKind, RBACRoleVertex};
-use encoding::graph::type_::vertex::TypeVertex;
-use crate::type_::object_type::ObjectType;
-use crate::type_::TypeAPI;
+
+use encoding::graph::{
+    rbac::{RBACAccessKind, RBACRoleVertex},
+    type_::vertex::TypeVertex,
+};
+
+use crate::type_::{TypeAPI, object_type::ObjectType};
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum RBACAccess {
@@ -18,7 +21,7 @@ pub enum RBACAccess {
 }
 
 impl RBACAccess {
-    pub(crate) fn new_type_access(access_kind: RBACAccessKind, type_: TypeVertex) -> Self {
+    pub fn new_type_access(access_kind: RBACAccessKind, type_: TypeVertex) -> Self {
         match access_kind {
             RBACAccessKind::ReadObjectVertex => Self::ReadObject(ObjectType::new(type_)),
             RBACAccessKind::WriteObjectVertex => Self::WriteObject(ObjectType::new(type_)),
@@ -36,7 +39,6 @@ impl fmt::Debug for RBACRole {
         write!(f, "Entity[{:?}]", self.vertex.role_id())
     }
 }
-
 
 impl RBACRole {
     // Do we need to copy the type manager methods here for consistency w/ concepts?

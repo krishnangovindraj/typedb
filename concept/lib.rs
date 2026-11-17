@@ -10,9 +10,9 @@
 
 pub mod error;
 pub mod iterator;
+pub mod rbac;
 pub mod thing;
 pub mod type_;
-mod rbac;
 
 pub trait ConceptAPI: Eq + PartialEq + 'static {}
 

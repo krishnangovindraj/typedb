@@ -615,6 +615,7 @@ impl Statistics {
                 | Some(DecodableKey::IndexLabelToType(_))
                 | Some(DecodableKey::IndexNameToDefinitionStruct(_))
                 | Some(DecodableKey::IndexNameToDefinitionFunction(_))
+                | Some(DecodableKey::IndexNameToRBACRole(_))
                 | Some(DecodableKey::IndexValueToStruct(_))
                 | Some(DecodableKey::RBACRole(_))
                 | Some(DecodableKey::RBACAccess(_)) => (),

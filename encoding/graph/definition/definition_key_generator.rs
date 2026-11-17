@@ -8,11 +8,13 @@ use storage::snapshot::WritableSnapshot;
 use crate::{
     Keyable,
     error::EncodingError,
-    graph::{common::schema_id_allocator::DefinitionKeyAllocator, definition::definition_key::DefinitionKey},
+    graph::{
+        common::schema_id_allocator::{DefinitionKeyAllocator, RBACVertexAllocator},
+        definition::definition_key::DefinitionKey,
+        rbac::RBACRoleVertex,
+    },
     layout::prefix::Prefix,
 };
-use crate::graph::common::schema_id_allocator::RBACVertexAllocator;
-use crate::graph::rbac::RBACRoleVertex;
 
 #[derive(Debug)]
 pub struct DefinitionKeyGenerator {

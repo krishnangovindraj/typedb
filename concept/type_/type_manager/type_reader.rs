@@ -12,21 +12,22 @@ use encoding::{
     error::EncodingError,
     graph::{
         definition::{DefinitionValueEncoding, definition_key::DefinitionKey, r#struct::StructDefinition},
+        rbac::{RBACRoleProperty, RBACRoleTypeAccess, RBACRoleVertex},
         type_::{
             CapabilityKind,
             edge::{TypeEdge, TypeEdgeEncoding},
-            index::{IdentifierIndex, LabelToTypeVertexIndex, NameToStructDefinitionIndex},
+            index::{IdentifierIndex, LabelToTypeVertexIndex, NameToRBACRoleVertexIndex, NameToStructDefinitionIndex},
             property::{TypeEdgeProperty, TypeEdgePropertyEncoding, TypeVertexProperty, TypeVertexPropertyEncoding},
             vertex::{PrefixedTypeVertexEncoding, TypeVertex, TypeVertexEncoding},
         },
     },
     layout::infix::Infix,
-    value::{label::Label, value_type::ValueType},
+    value::{label::Label, string_bytes::StringBytes, value_type::ValueType},
 };
-use encoding::graph::rbac::RBACRoleTypeAccess;
 use resource::{
     constants::{
         concept::RELATION_INDEX_THRESHOLD,
+        encoding::LABEL_SCOPED_NAME_STRING_INLINE,
         snapshot::{BUFFER_KEY_INLINE, BUFFER_VALUE_INLINE},
     },
     profile::StorageCounters,
@@ -38,6 +39,7 @@ use storage::{
 
 use crate::{
     error::ConceptReadError,
+    rbac::{RBACAccess, RBACRole},
     type_::{
         Capability, Independent, KindAPI, Ordering, TypeAPI,
         annotation::{
@@ -58,7 +60,6 @@ use crate::{
         sub::Sub,
     },
 };
-use crate::rbac::{RBACAccess, RBACRole};
 
 // non-instantiable
 pub enum TypeReader {}
@@ -890,32 +891,44 @@ impl TypeReader {
         Ok(())
     }
 
+    pub(crate) fn get_rbac_role(
+        snapshot: &impl ReadableSnapshot,
+        name: &str,
+    ) -> Result<Option<RBACRole>, Box<ConceptReadError>> {
+        let key = NameToRBACRoleVertexIndex::build(name).into_storage_key();
+        match snapshot.get::<BUFFER_KEY_INLINE>(key.as_reference(), StorageCounters::DISABLED) {
+            Err(error) => Err(Box::new(ConceptReadError::SnapshotGet { source: error })),
+            Ok(None) => Ok(None),
+            Ok(Some(value)) => Ok(Some(RBACRole::new(RBACRoleVertex::decode(Bytes::Array(value))))),
+        }
+    }
+
     pub(crate) fn get_rbac_role_label(
         snapshot: &impl ReadableSnapshot,
         role: RBACRole,
     ) -> Result<Option<Label>, Box<ConceptReadError>> {
-        let key = [];
-        let key = &key;
         let property = snapshot
             .get_mapped(
-                Label::build_key(type_, &[]).into_storage_key().as_reference(),
-                |value| PROPERTY::from_key_value_bytes(key, value),
+                RBACRoleProperty::new_key_for_label(role.vertex()).into_storage_key().as_reference(),
+                |value| {
+                    let string_bytes = StringBytes::new(Bytes::<{ LABEL_SCOPED_NAME_STRING_INLINE }>::Reference(value));
+                    Label::parse_from_bytes(string_bytes)
+                },
                 StorageCounters::DISABLED,
             )
             .map_err(|err| Box::new(ConceptReadError::SnapshotGet { source: err }))?;
         Ok(property)
-        Self::get_type_property_declared::<Label>(snapshot, type_)
     }
 
     pub(crate) fn list_rbac_declared_access(
         snapshot: &impl ReadableSnapshot,
-        role: &RBACRole
+        role: &RBACRole,
     ) -> Result<HashSet<RBACAccess>, Box<ConceptReadError>> {
         snapshot
             .iterate_range(
                 &KeyRange::new_within(
                     RBACRoleTypeAccess::build_prefix_role(role.vertex()),
-                    TypeEdge::FIXED_WIDTH_ENCODING
+                    TypeEdge::FIXED_WIDTH_ENCODING,
                 ),
                 StorageCounters::DISABLED,
             )
