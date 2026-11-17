@@ -9,6 +9,8 @@ use std::{
     sync::Arc,
 };
 
+use crate::rbac::{RBACAccess, RBACRole};
+
 use encoding::{
     graph::definition::{definition_key::DefinitionKey, r#struct::StructDefinition},
     value::{label::Label, value_type::ValueType},
@@ -33,6 +35,7 @@ use crate::type_::{
     sub::{Sub, SubAnnotation},
     type_manager::{
         preload_schema_from,
+        type_reader::TypeReader,
         type_cache::{
             kind_cache::{
                 AttributeTypeCache, CommonTypeCache, EntityTypeCache, ObjectCache, OwnsCache, PlaysCache, RelatesCache,
@@ -71,6 +74,9 @@ pub struct TypeCache {
     role_types_by_name: HashMap<String, Vec<RoleType>>,
     // specific caches to simplify architectures
     independent_attribute_types: Arc<HashSet<AttributeType>>,
+
+    rbac_roles_index_name: HashMap<String, RBACRole>,
+    rbac_role_access: HashMap<RBACRole, HashSet<RBACAccess>>,
 }
 
 selection::impl_cache_getter!(EntityTypeCache, EntityType, entity_types);
@@ -135,6 +141,17 @@ impl TypeCache {
             role_types_by_name.get_mut(label.name.as_str()).unwrap().push(*role_type);
         }
 
+        let all_rbac_roles = TypeReader::get_all_rbac_roles(&snapshot).unwrap();
+        let mut rbac_roles_index_name = HashMap::new();
+        let mut rbac_role_access = HashMap::new();
+        for role in all_rbac_roles {
+            if let Some(label) = TypeReader::get_rbac_role_label(&snapshot, role).unwrap() {
+                rbac_roles_index_name.insert(label.name.as_str().to_owned(), role);
+            }
+            let access = TypeReader::list_rbac_declared_access(&snapshot, &role).unwrap();
+            rbac_role_access.insert(role, access);
+        }
+
         Ok(TypeCache {
             open_sequence_number,
             entity_types: entity_type_caches,
@@ -154,6 +171,9 @@ impl TypeCache {
             role_types_by_name,
 
             independent_attribute_types: Arc::new(independent_attribute_types),
+
+            rbac_roles_index_name,
+            rbac_role_access,
         })
     }
 
@@ -527,6 +547,14 @@ impl TypeCache {
 
     pub(crate) fn get_independent_attribute_types(&self) -> Arc<HashSet<AttributeType>> {
         self.independent_attribute_types.clone()
+    }
+
+    pub(crate) fn get_rbac_role(&self, name: &str) -> Option<RBACRole> {
+        self.rbac_roles_index_name.get(name).copied()
+    }
+
+    pub(crate) fn get_rbac_role_access(&self, role: &RBACRole) -> &HashSet<RBACAccess> {
+        self.rbac_role_access.get(role).unwrap()
     }
 }
 

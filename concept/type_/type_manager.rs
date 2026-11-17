@@ -1191,8 +1191,7 @@ impl TypeManager {
         _storage_counters: StorageCounters,
     ) -> Result<MaybeOwns<'_, Option<RBACRole>>, Box<ConceptReadError>> {
         if let Some(cache) = &self.type_cache {
-            // error::todo_must_implement!("cached rbac");
-            Ok(MaybeOwns::Owned(TypeReader::get_rbac_role(snapshot, role_name)?))
+            Ok(MaybeOwns::Owned(cache.get_rbac_role(role_name)))
         } else {
             Ok(MaybeOwns::Owned(TypeReader::get_rbac_role(snapshot, role_name)?))
         }
@@ -1216,8 +1215,7 @@ impl TypeManager {
         _storage_counters: StorageCounters,
     ) -> Result<MaybeOwns<'_, HashSet<RBACAccess>>, Box<ConceptReadError>> {
         if let Some(cache) = &self.type_cache {
-            // error::todo_must_implement!("cached rbac");
-            Ok(MaybeOwns::Owned(TypeReader::list_rbac_declared_access(snapshot, role)?))
+            Ok(MaybeOwns::Borrowed(cache.get_rbac_role_access(role)))
         } else {
             Ok(MaybeOwns::Owned(TypeReader::list_rbac_declared_access(snapshot, role)?))
         }

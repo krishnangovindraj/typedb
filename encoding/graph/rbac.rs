@@ -88,6 +88,11 @@ impl RBACRoleVertex {
     pub fn role_id(&self) -> RBACRoleId {
         RBACRoleId((self.value & 0xFFFF) as u16)
     }
+
+    pub fn build_prefix() -> StorageKey<'static, { RBACRoleVertex::LENGTH_PREFIX }> {
+        const PREFIX_BYTES: [u8; PrefixID::LENGTH] = RBACRoleVertex::PREFIX.prefix_id().to_bytes();
+        StorageKey::new_ref(Self::KEYSPACE, &PREFIX_BYTES)
+    }
 }
 
 impl AsBytes<BUFFER_KEY_INLINE> for RBACRoleVertex {

@@ -895,6 +895,18 @@ impl TypeReader {
         Ok(())
     }
 
+    pub(crate) fn get_all_rbac_roles(
+        snapshot: &impl ReadableSnapshot,
+    ) -> Result<Vec<RBACRole>, Box<ConceptReadError>> {
+        snapshot
+            .iterate_range(
+                &KeyRange::new_within(RBACRoleVertex::build_prefix(), RBACRoleVertex::FIXED_WIDTH_ENCODING),
+                StorageCounters::DISABLED,
+            )
+            .collect_cloned_vec(|key, _| RBACRole::new(RBACRoleVertex::decode(Bytes::copy(key.bytes()))))
+            .map_err(|error| Box::new(ConceptReadError::SnapshotIterate { source: error }))
+    }
+
     pub(crate) fn get_rbac_role(
         snapshot: &impl ReadableSnapshot,
         name: &str,
