@@ -12,6 +12,7 @@ use crate::{
     layout::prefix::Prefix,
 };
 use crate::graph::common::schema_id_allocator::RBACVertexAllocator;
+use crate::graph::rbac::RBACRoleVertex;
 
 #[derive(Debug)]
 pub struct DefinitionKeyGenerator {
@@ -38,7 +39,7 @@ impl DefinitionKeyGenerator {
     pub fn reset(&mut self) {
         self.next_struct.reset();
         self.next_function.reset();
-        self.next_rbac_role().reset();
+        self.next_rbac_role.reset();
     }
 
     pub fn create_struct<Snapshot: WritableSnapshot>(
@@ -62,7 +63,7 @@ impl DefinitionKeyGenerator {
     pub fn create_rbac_role<Snapshot: WritableSnapshot>(
         &self,
         snapshot: &mut Snapshot,
-    ) -> Result<RBACVertexAllocator, EncodingError> {
+    ) -> Result<RBACRoleVertex, EncodingError> {
         let rbac_role_vertex = self.next_rbac_role.allocate(snapshot)?;
         snapshot.put(rbac_role_vertex.clone().into_storage_key().into_owned_array());
         Ok(rbac_role_vertex)

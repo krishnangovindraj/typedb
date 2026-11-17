@@ -23,6 +23,11 @@ pub struct RBACRoleId(u16);
 
 impl RBACRoleId {
     const LENGTH: usize = 2;
+
+    pub(crate) fn new(id: u16) -> Self {
+        Self(id)
+    }
+
     pub(crate) fn as_u16(&self) -> u16 {
         self.0
     }

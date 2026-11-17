@@ -3981,12 +3981,12 @@ impl TypeManager {
         let role = TypeWriter::storage_put_rbac_role(snapshot, role_label);
         let type_vertex = self
             .definition_key_generator
-            .create_role_type(snapshot)
+            .create_rbac_role(snapshot)
             .map_err(|err| ConceptWriteError::Encoding { source: err })?;
         let role_type = RoleType::new(type_vertex);
 
-        TypeWriter::storage_put_label(snapshot, role_type, label);
-        TypeWriter::storage_put_type_vertex_property(snapshot, role_type, ordering);
+        TypeWriter::storage_put_rbac_role_label(snapshot, role_type, label);
+        TypeWriter::storage_put_rbac_role_property(snapshot, role_type, ordering);
         Ok(role)
     }
 
@@ -4028,5 +4028,34 @@ impl TypeManager {
         storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptWriteError>> {
         todo!()
+    }
+
+    pub fn has_rbac_read_access(
+        &self,
+        snapshot: &impl ReadableSnapshot,
+        role: &RBACRole,
+        type_: impl TypeAPI,
+        storage_counters: StorageCounters,
+    ) -> Result<bool, Box<ConceptReadError>> {
+        todo!()
+    }
+
+    pub fn has_rbac_write_access(
+        &self,
+        snapshot: &impl ReadableSnapshot,
+        role: &RBACRole,
+        type_: impl TypeAPI,
+        storage_counters: StorageCounters,
+    ) -> Result<bool, Box<ConceptReadError>> {
+        todo!()
+    }
+
+    pub fn list_rbac_granted_accesses(
+        &self,
+        snapshot: &impl ReadableSnapshot,
+        role: &RBACRole,
+        storage_counters: StorageCounters,
+    ) -> Result<Vec<()>, > {
+
     }
 }

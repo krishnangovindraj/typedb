@@ -58,6 +58,7 @@ impl Error for EncodingError {
             Self::UnexpectedEndOfEncodedStruct => None,
             Self::StructPathIncomplete { .. } => None,
             Self::ObjectIDExhausted { .. } => None,
+            Self::RBACRoleIDsExhausted {  } => None,
         }
     }
 }

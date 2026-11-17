@@ -154,6 +154,7 @@ impl SchemaID for DefinitionKey {
         EncodingError::DefinitionIDsExhausted { prefix }
     }
 }
+
 impl SchemaID for RBACRoleVertex {
     const MIN_ID: u64 = u16::MIN as u64;
     const MAX_ID: u64 = u16::MAX as u64;
@@ -161,7 +162,7 @@ impl SchemaID for RBACRoleVertex {
     fn object_from_id(prefix: Prefix, id: u64) -> RBACRoleVertex {
         debug_assert!(prefix == Self::PREFIX);
         debug_assert!((Self::MIN_ID..=Self::MAX_ID).contains(&id));
-        RBACRoleVertex::new(RBACRoleId(id as u16))
+        RBACRoleVertex::new(RBACRoleId::new(id as u16))
     }
 
     fn id_from_key(key: StorageKey<'_, BUFFER_KEY_INLINE>) -> u64 {
