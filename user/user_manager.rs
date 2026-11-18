@@ -16,7 +16,9 @@ use system::{
 };
 use uuid::Uuid;
 
-use crate::errors::{PermissionGrantError, UserCreateError, UserDeleteError, UserGetError, UserUpdateError};
+use crate::errors::{
+    PermissionGrantError, PermissionListError, UserCreateError, UserDeleteError, UserGetError, UserUpdateError,
+};
 
 #[derive(Debug)]
 pub struct UserManager {
@@ -139,7 +141,7 @@ impl UserManager {
         grantee: &Grantee,
         granted_permission: &GrantedPermission,
     ) -> Result<(), PermissionGrantError> {
-        let create_result = self
+        let grant_result = self
             .transaction_util
             .write_transaction(move |snapshot, type_mgr, thing_mgr, fn_mgr, query_mgr, _db, _tx_opts| {
                 rbac_repository::grant(
@@ -153,10 +155,19 @@ impl UserManager {
                 )
             })
             .1;
-        match create_result {
+        match grant_result {
             Ok(Ok(())) => Ok(()),
             Ok(Err(typedb_source)) => Err(PermissionGrantError::SystemDB { typedb_source }),
             Err(_) => Err(PermissionGrantError::Unexpected {}),
+        }
+    }
+
+    pub fn list_permissions(&self, grantee: &Grantee) -> Result<Vec<GrantedPermission>, PermissionListError> {
+        let list_result =
+            self.transaction_util.read_transaction(move |tx| rbac_repository::list_permissions(tx, grantee));
+        match list_result {
+            Ok(permissions) => Ok(permissions),
+            Err(typedb_source) => Err(PermissionListError::SystemDB { typedb_source }),
         }
     }
 }

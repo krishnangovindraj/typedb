@@ -194,9 +194,14 @@ pub mod user_repository {
 }
 
 pub mod rbac_repository {
-    use std::sync::Arc;
+    use std::{
+        collections::{HashMap, HashSet},
+        sync::Arc,
+    };
 
+    use answer::variable_value::VariableValue;
     use concept::{thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
+    use database::transaction::TransactionRead;
     use function::function_manager::FunctionManager;
     use query::query_manager::QueryManager;
     use storage::{durability_client::WALClient, snapshot::WriteSnapshot};
@@ -205,12 +210,36 @@ pub mod rbac_repository {
     use crate::{
         concepts::{DatabaseUid, GrantedPermission, Grantee, RoleUid},
         repositories::{is_valid_typeql_value, user_repository::SystemDBError},
-        util::query_util::execute_write_pipeline,
+        util::query_util::{execute_read_pipeline, execute_write_pipeline},
     };
 
+    const GRANTEE_NAME_VALUE_VARIABLE: &'static str = "grantee-name-value";
+    const DATABASE_ID_VALUE_VARIABLE: &'static str = "database-id-value";
+    const ROLE_ID_VALUE_VARIABLE: &'static str = "role-id-value";
+    const PERMISSION_LABEL_VALUE_VARIABLE: &'static str = "permission-type";
+
+    const GRANTEE_TYPE_VARIABLE: &'static str = "grantee-type";
+    const PERMISSION_TYPE_VARIABLE: &'static str = "permission-type";
+
     const DATABASE_VARIABLE: &'static str = "database";
-    const GRANTED_PERMISSION_VARIABLE: &'static str = "granted-variable";
     const GRANTEE_VARIABLE: &'static str = "grantee";
+    const GRANTED_PERMISSION_VARIABLE: &'static str = "granted-variable";
+
+    pub fn list_permissions(
+        tx: TransactionRead<WALClient>,
+        grantee: &Grantee,
+    ) -> Result<Vec<GrantedPermission>, SystemDBError> {
+        let unexpected_error_msg = "An unexpected error occurred while listing user permissions";
+        let query_string = build_list_permissions_query(grantee)?;
+        let query = parse_query(query_string.as_str()).expect(unexpected_error_msg);
+        let (_tx, result) = execute_read_pipeline(tx, query.into_structure().into_pipeline(), &query_string);
+        let rows: Vec<HashMap<String, VariableValue>> = match result {
+            Ok(rows) => rows,
+            Err(_) => return Err(SystemDBError::QueryFailed {}),
+        };
+        let permissions = rows.into_iter().filter_map(|row| try_valid_granted_permission_from_row(row)).collect();
+        Ok(permissions)
+    }
 
     pub fn grant(
         snapshot: WriteSnapshot<WALClient>,
@@ -221,17 +250,10 @@ pub mod rbac_repository {
         grantee: &Grantee,
         granted_permission: &GrantedPermission,
     ) -> (Result<(), SystemDBError>, Arc<WriteSnapshot<WALClient>>) {
-        let grantee_type = grantee.type_to_typeql_value_string();
-        let grantee_name = grantee.name_to_typeql_value_string();
-        if !is_valid_typeql_value(grantee_name.as_str()) {
-            return (Err(SystemDBError::IllegalQueryInput {}), Arc::new(snapshot));
-        }
-        let permission_stub = permission_typeql_stub(&granted_permission);
-        let query_string = format!(
-            r#"
-            match $u isa {grantee_type}, has name "{grantee_name}";
-            put {permission_stub}"#,
-        );
+        let query_string = match build_grant_permission_query(grantee, granted_permission) {
+            Ok(query_string) => query_string,
+            Err(err) => return (Err(err), Arc::new(snapshot)),
+        };
         let Ok(query) = parse_query(query_string.as_str()) else {
             return (Err(SystemDBError::UnexpectedParseFailed {}), Arc::new(snapshot));
         };
@@ -242,55 +264,167 @@ pub mod rbac_repository {
             function_manager,
             query_manager,
             query.into_structure().into_pipeline(),
-            &query_string,
+            query_string.as_str(),
         );
         (Ok(()), snapshot)
     }
 
-    fn permission_typeql_stub(granted_permission: &GrantedPermission) -> String {
-        let permission_type = granted_permission.type_to_typeql_string();
-        match granted_permission {
-            GrantedPermission::ManageDatabases
-            | GrantedPermission::ManageUsers
-            | GrantedPermission::GrantPermissions => global_permission_typeql_stub(permission_type),
-            GrantedPermission::TransactionRead { database }
-            | GrantedPermission::TransactionWrite { database }
-            | GrantedPermission::SchemaTypes { database }
-            | GrantedPermission::SchemaRoles { database } => database_permission_typeql_stub(permission_type, database),
-            GrantedPermission::Role { database, role } => role_permission_typeql_stub(permission_type, database, role),
+    fn check_valid_value<T: AsRef<str>>(value: T) -> Result<T, SystemDBError> {
+        match is_valid_typeql_value(value.as_ref()) {
+            true => Ok(value),
+            false => Err(SystemDBError::IllegalQueryInput {}),
         }
     }
 
-    fn global_permission_typeql_stub(permission: &str) -> String {
-        format!(
-            r#"
-            ${GRANTED_PERMISSION_VARIABLE} isa {permission},
-                links (grantee: ${GRANTEE_VARIABLE});
-            "#
-        )
+    fn try_valid_granted_permission_from_row(row: HashMap<String, VariableValue>) -> Option<GrantedPermission> {
+        fn extract_database_value(database_id_value_opt: &VariableValue<'_>) -> Option<DatabaseUid> {
+            let VariableValue::Value(database_id_value) = database_id_value_opt else {
+                debug_assert!(
+                    false,
+                    "Unexpected VariableValue for database_id: {}",
+                    database_id_value_opt.variant_name()
+                );
+                return None;
+            };
+            match uuid::Uuid::parse_str(database_id_value.unwrap_string_ref()) {
+                Err(err) => {
+                    debug_assert!(
+                        false,
+                        "DatabaseUid did not parse: {}. Reason: {}",
+                        database_id_value_opt.as_value().unwrap_string_ref(),
+                        err.to_string()
+                    );
+                    None
+                }
+                Ok(uuid) => Some(DatabaseUid(uuid)),
+            }
+        }
+        fn extract_role_value(role_id_value_opt: &VariableValue<'_>) -> Option<RoleUid> {
+            let VariableValue::Value(role_id_value) = role_id_value_opt else {
+                debug_assert!(false, "Unexpected VariableValue for role_id: {}", role_id_value_opt.variant_name());
+                return None;
+            };
+            Some(RoleUid(role_id_value.to_owned().unwrap_integer() as u64))
+        }
+        let permission_value =
+            row.get(PERMISSION_LABEL_VALUE_VARIABLE).expect("Expected permission label value").as_value();
+        let database_id_value_opt = row.get(DATABASE_ID_VALUE_VARIABLE).expect("Expected database id value");
+        let role_id_value_opt = row.get(ROLE_ID_VALUE_VARIABLE).expect("Expected role id value");
+        match permission_value.unwrap_string_ref() {
+            "manage-databases" => Some(GrantedPermission::ManageDatabases),
+            "manage-users" => Some(GrantedPermission::ManageUsers),
+            "grant-permissions" => Some(GrantedPermission::GrantPermissions),
+            "transaction-read" => {
+                debug_assert!(role_id_value_opt.is_none());
+                let database = extract_database_value(database_id_value_opt)?;
+                Some(GrantedPermission::TransactionRead { database })
+            }
+            "transaction-write" => {
+                debug_assert!(role_id_value_opt.is_none());
+                let database = extract_database_value(database_id_value_opt)?;
+                Some(GrantedPermission::TransactionWrite { database })
+            }
+            "schema-types" => {
+                debug_assert!(role_id_value_opt.is_none());
+                let database = extract_database_value(database_id_value_opt)?;
+                Some(GrantedPermission::SchemaTypes { database })
+            }
+            "schema-roles" => {
+                debug_assert!(role_id_value_opt.is_none());
+                let database = extract_database_value(database_id_value_opt)?;
+                Some(GrantedPermission::SchemaRoles { database })
+            }
+            "role-assignment" => {
+                let database = extract_database_value(database_id_value_opt)?;
+                let role = extract_role_value(role_id_value_opt)?;
+                Some(GrantedPermission::Role { database, role })
+            }
+            _other => {
+                debug_assert!(false, "Unrecognised permission label: {_other}");
+                None
+            }
+        }
     }
 
-    fn database_permission_typeql_stub(permission: &str, database: &DatabaseUid) -> String {
-        let database_id = database.to_typeql_value_string();
-        format!(
+    fn build_list_permissions_query(grantee: &Grantee) -> Result<String, SystemDBError> {
+        let grantee_type = check_valid_value(grantee.type_to_typeql_value_string())?;
+        let grantee_name = check_valid_value(grantee.name_to_typeql_value_string())?;
+        let query_string = format!(
             r#"
-            ${DATABASE_VARIABLE} isa database, has database-id "{database_id}";
-            ${GRANTED_PERMISSION_VARIABLE} isa {permission},
-                links (grantee: ${GRANTEE_VARIABLE}, database: ${DATABASE_VARIABLE});
-        "#
-        )
+            match
+                let ${GRANTEE_NAME_VALUE_VARIABLE} = "{grantee_name}";
+                ${GRANTEE_TYPE_VARIABLE} label {grantee_type};
+            match
+                # grantee
+                ${GRANTEE_VARIABLE} isa! ${GRANTEE_TYPE_VARIABLE}, has name == ${GRANTEE_NAME_VALUE_VARIABLE};
+
+                # permission type
+                ${GRANTED_PERMISSION_VARIABLE} isa! ${PERMISSION_TYPE_VARIABLE}, links (grantee: ${GRANTEE_VARIABLE});
+                let ${PERMISSION_LABEL_VALUE_VARIABLE} = label(${PERMISSION_TYPE_VARIABLE});
+                try {{ # database if it has one
+                    ${DATABASE_VARIABLE} isa database, has database-id $database-id;
+                    ${GRANTED_PERMISSION_VARIABLE} links (database: ${DATABASE_VARIABLE});
+                    let ${DATABASE_ID_VALUE_VARIABLE} = $database-id;
+                    try {{
+                        # role if it has one
+                        ${GRANTED_PERMISSION_VARIABLE} has role-id == $role-id-attr;
+                        let ${ROLE_ID_VALUE_VARIABLE} = $role-id-attr;
+                    }};
+                }};
+                select ${PERMISSION_LABEL_VALUE_VARIABLE}, ${DATABASE_ID_VALUE_VARIABLE}, ${ROLE_ID_VALUE_VARIABLE},
+            "#,
+        );
+        Ok(query_string)
     }
 
-    fn role_permission_typeql_stub(permission: &str, database: &DatabaseUid, role: &RoleUid) -> String {
-        let database_id = database.to_typeql_value_string();
-        let role_id = role.to_typeql_value_string();
-        format!(
+    fn build_grant_permission_query(
+        grantee: &Grantee,
+        granted_permission: &GrantedPermission,
+    ) -> Result<String, SystemDBError> {
+        let grantee_type = check_valid_value(grantee.type_to_typeql_value_string())?;
+        let grantee_name = check_valid_value(grantee.name_to_typeql_value_string())?;
+
+        let permission_stub = format!(
             r#"
-            ${DATABASE_VARIABLE} isa database, has database-id "{database_id}";
-            ${GRANTED_PERMISSION_VARIABLE} isa {permission},
-                links (grantee: ${GRANTEE_VARIABLE}, database: ${DATABASE_VARIABLE}),
-                has role-id {role_id};
+            ${GRANTED_PERMISSION_VARIABLE} isa! ${PERMISSION_TYPE_VARIABLE}, links (grantee: ${GRANTEE_VARIABLE});
         "#
-        )
+        );
+        let (database_value_stub, database_put_stub) = match granted_permission.database() {
+            None => ("".to_owned(), "".to_owned()),
+            Some(database_id) => (
+                format!(r#"let ${DATABASE_ID_VALUE_VARIABLE} = "{id}";"#, id = database_id.0),
+                format!(
+                    r#"
+                    ${DATABASE_VARIABLE} isa database, has database-id == ${DATABASE_ID_VALUE_VARIABLE};
+                    ${GRANTED_PERMISSION_VARIABLE} links (database: ${DATABASE_VARIABLE});
+                "#
+                ),
+            ),
+        };
+        let (role_value_stub, role_put_stub) = match granted_permission.role() {
+            None => ("".to_owned(), "".to_owned()),
+            Some(role_id) => (
+                format!(r#"let ${ROLE_ID_VALUE_VARIABLE} = {id};"#, id = role_id.0),
+                format!("${GRANTED_PERMISSION_VARIABLE} has role-id == ${ROLE_ID_VALUE_VARIABLE};"),
+            ),
+        };
+
+        let query_string = format!(
+            r#"
+            match
+                ${PERMISSION_TYPE_VARIABLE} label {grantee_type};
+                let ${GRANTEE_NAME_VALUE_VARIABLE} = "{grantee_name}";
+                ${GRANTEE_TYPE_VARIABLE} label {grantee_type};
+                {database_value_stub}
+                {role_value_stub}
+            match
+                ${GRANTEE_VARIABLE} isa! ${GRANTEE_TYPE_VARIABLE}, has name == ${GRANTEE_NAME_VALUE_VARIABLE};
+            put
+                {permission_stub}
+                {database_put_stub}
+                {role_put_stub}
+        "#
+        );
+        Ok(query_string)
     }
 }

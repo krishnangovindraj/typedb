@@ -54,6 +54,7 @@ typedb_error! {
 typedb_error! {
     pub PermissionListError(component = "Permission management", prefix="UPG") {
         Unexpected(1, "An unexpected error has occurred while listing user permissions."),
+        SystemDB(2, "An error occured while managing user permissions.", typedb_source: SystemDBError),
     }
 }
 

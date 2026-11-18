@@ -59,23 +59,23 @@ pub trait UserOperator: Debug + Send + Sync {
 
     fn is_initialised(&self) -> bool;
 
-    async fn create_group(&self, accessor: Accessor, group_name: &str) -> Result<(), ArcServerStateError>;
-
-    async fn delete_group(&self, accessor: Accessor, group_name: UserGroup) -> Result<(), ArcServerStateError>;
-
-    async fn add_group_member(
-        &self,
-        accessor: Accessor,
-        group_name: UserGroup,
-        member: Grantee,
-    ) -> Result<(), ArcServerStateError>;
-
-    async fn remove_group_member(
-        &self,
-        accessor: Accessor,
-        group_name: UserGroup,
-        user_name: Grantee,
-    ) -> Result<(), ArcServerStateError>;
+    // async fn create_group(&self, accessor: Accessor, group_name: &str) -> Result<(), ArcServerStateError>;
+    //
+    // async fn delete_group(&self, accessor: Accessor, group_name: UserGroup) -> Result<(), ArcServerStateError>;
+    //
+    // async fn add_group_member(
+    //     &self,
+    //     accessor: Accessor,
+    //     group_name: UserGroup,
+    //     member: Grantee,
+    // ) -> Result<(), ArcServerStateError>;
+    //
+    // async fn remove_group_member(
+    //     &self,
+    //     accessor: Accessor,
+    //     group_name: UserGroup,
+    //     user_name: Grantee,
+    // ) -> Result<(), ArcServerStateError>;
 
     async fn grant_permission(
         &self,
@@ -88,7 +88,7 @@ pub trait UserOperator: Debug + Send + Sync {
         &self,
         accessor: Accessor,
         grantee: Grantee,
-    ) -> Result<HashSet<GrantedPermission>, ArcServerStateError>;
+    ) -> Result<Vec<GrantedPermission>, ArcServerStateError>;
 }
 
 #[derive(Debug)]
@@ -271,32 +271,32 @@ impl UserOperator for LocalUserOperator {
         user_manager.contains(DEFAULT_USER_NAME).unwrap_or(false)
     }
 
-    async fn create_group(&self, accessor: Accessor, group_name: &str) -> Result<(), ArcServerStateError> {
-        error::todo_must_implement!("todo")
-    }
-
-    async fn delete_group(&self, accessor: Accessor, group_name: UserGroup) -> Result<(), ArcServerStateError> {
-        error::todo_must_implement!("todo")
-    }
-
-    async fn add_group_member(
-        &self,
-        accessor: Accessor,
-        group_name: UserGroup,
-        member: Grantee,
-    ) -> Result<(), ArcServerStateError> {
-        error::todo_must_implement!("todo")
-    }
-
-    async fn remove_group_member(
-        &self,
-        accessor: Accessor,
-        group_name: UserGroup,
-        user_name: Grantee,
-    ) -> Result<(), ArcServerStateError> {
-        error::todo_must_implement!("todo")
-    }
-
+    // async fn create_group(&self, accessor: Accessor, group_name: &str) -> Result<(), ArcServerStateError> {
+    //     error::todo_must_implement!("todo")
+    // }
+    //
+    // async fn delete_group(&self, accessor: Accessor, group_name: UserGroup) -> Result<(), ArcServerStateError> {
+    //     error::todo_must_implement!("todo")
+    // }
+    //
+    // async fn add_group_member(
+    //     &self,
+    //     accessor: Accessor,
+    //     group_name: UserGroup,
+    //     member: Grantee,
+    // ) -> Result<(), ArcServerStateError> {
+    //     error::todo_must_implement!("todo")
+    // }
+    //
+    // async fn remove_group_member(
+    //     &self,
+    //     accessor: Accessor,
+    //     group_name: UserGroup,
+    //     user_name: Grantee,
+    // ) -> Result<(), ArcServerStateError> {
+    //     error::todo_must_implement!("todo")
+    // }
+    //
     async fn grant_permission(
         &self,
         accessor: Accessor,
@@ -308,7 +308,7 @@ impl UserOperator for LocalUserOperator {
         }
 
         let user_manager = self.get_user_manager().map_err(arc_server_state_err)?;
-        user_manager.grant_permission(&grantee, permission).map_err(|typedb_source| {
+        user_manager.grant_permission(&grantee, &permission).map_err(|typedb_source| {
             arc_server_state_err(LocalServerStateError::PermissionCannotBeGranted { typedb_source })
         })
     }
@@ -317,14 +317,14 @@ impl UserOperator for LocalUserOperator {
         &self,
         accessor: Accessor,
         grantee: Grantee,
-    ) -> Result<HashSet<GrantedPermission>, ArcServerStateError> {
+    ) -> Result<Vec<GrantedPermission>, ArcServerStateError> {
         if !PermissionManager::exec_list_permissions_permitted(accessor.as_str()) {
             return Err(Arc::new(LocalServerStateError::OperationNotPermitted {}));
         }
 
         let user_manager = self.get_user_manager().map_err(arc_server_state_err)?;
         user_manager.list_permissions(&grantee).map_err(|typedb_source| {
-            arc_server_state_err(LocalServerStateError::PermissionCannotBeGranted { typedb_source })
+            arc_server_state_err(LocalServerStateError::PermissionsCannotBeListed { typedb_source })
         })
     }
 }

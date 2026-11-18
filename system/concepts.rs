@@ -59,10 +59,10 @@ pub enum Grantee {
     UserGroup(UserGroup),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RoleUid(pub u64);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DatabaseUid(pub Uuid);
 
 #[derive(Debug)]
@@ -122,7 +122,33 @@ impl GrantedPermission {
             GrantedPermission::TransactionWrite { .. } => "transaction-write",
             GrantedPermission::SchemaTypes { .. } => "schema-types",
             GrantedPermission::SchemaRoles { .. } => "schema-roles",
-            GrantedPermission::Role { .. } => "",
+            GrantedPermission::Role { .. } => "role-assignment",
+        }
+    }
+
+    pub(crate) fn database(&self) -> Option<DatabaseUid> {
+        match self {
+            GrantedPermission::ManageDatabases
+            | GrantedPermission::ManageUsers
+            | GrantedPermission::GrantPermissions => None,
+            GrantedPermission::TransactionRead { database }
+            | GrantedPermission::TransactionWrite { database }
+            | GrantedPermission::SchemaTypes { database }
+            | GrantedPermission::SchemaRoles { database }
+            | GrantedPermission::Role { database, .. } => Some(database.clone()),
+        }
+    }
+
+    pub(crate) fn role(&self) -> Option<RoleUid> {
+        match self {
+            GrantedPermission::ManageDatabases
+            | GrantedPermission::ManageUsers
+            | GrantedPermission::GrantPermissions
+            | GrantedPermission::TransactionRead { .. }
+            | GrantedPermission::TransactionWrite { .. }
+            | GrantedPermission::SchemaTypes { .. }
+            | GrantedPermission::SchemaRoles { .. } => None,
+            GrantedPermission::Role { role, .. } => Some(role.clone()),
         }
     }
 }
