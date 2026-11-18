@@ -6,6 +6,10 @@
 
 pub const SCHEMA: &str = include_str!("schema.tql");
 
+fn is_valid_typeql_value(value: &str) -> bool {
+    typeql::common::identifier::is_valid_label(value)
+}
+
 pub mod user_repository {
     use std::{collections::HashMap, sync::Arc};
 
@@ -14,14 +18,15 @@ pub mod user_repository {
     use database::transaction::TransactionRead;
     use error::typedb_error;
     use function::function_manager::FunctionManager;
-    use query::query_manager::QueryManager;
+    use query::{error::QueryError, query_manager::QueryManager};
     use storage::{durability_client::WALClient, snapshot::WriteSnapshot};
     use thing_manager::ThingManager;
-    use typeql::{common::identifier::is_valid_label, parse_query};
+    use typeql::parse_query;
     use uuid::Uuid;
 
     use crate::{
         concepts::{Credential, PasswordHash, User},
+        repositories::is_valid_typeql_value,
         util::{
             answer_util::get_string,
             query_util::{execute_read_pipeline, execute_write_pipeline},
@@ -162,6 +167,74 @@ pub mod user_repository {
             username = username
         );
         let query = parse_query(&query_string).expect(unexpected_error_msg);
+        let (result, snapshot) = execute_write_pipeline(
+            snapshot,
+            type_manager,
+            thing_manager,
+            function_manager,
+            query_manager,
+            query.into_structure().into_pipeline(),
+            &query_string,
+        );
+        match result {
+            Ok(_) => (Ok(()), snapshot),
+            Err(typedb_source) => (Err(SystemDBError::QueryFailedBecause { typedb_source }), snapshot),
+        }
+    }
+
+    typedb_error! {
+        pub SystemDBError(component = "System database", prefix = "SDB") {
+            EmptyUpdate(1, "There is nothing to update"),
+            IllegalQueryInput(2, "The specified input contains one or more illegal character(s)"),
+            QueryFailed(3, "System database query could not be executed. The system database may not be fully initialised yet."),
+            UnexpectedParseFailed(4, "Parsing a system database query failed unexpectedly"),
+            QueryFailedBecause(5, "System database query could not be executed.", typedb_source: Box<QueryError>),
+        }
+    }
+}
+
+pub mod rbac_repository {
+    use std::sync::Arc;
+
+    use concept::{thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
+    use function::function_manager::FunctionManager;
+    use query::query_manager::QueryManager;
+    use storage::{durability_client::WALClient, snapshot::WriteSnapshot};
+    use typeql::parse_query;
+
+    use crate::{
+        concepts::{DatabaseUid, GrantedPermission, Grantee, RoleUid},
+        repositories::{is_valid_typeql_value, user_repository::SystemDBError},
+        util::query_util::execute_write_pipeline,
+    };
+
+    const DATABASE_VARIABLE: &'static str = "database";
+    const GRANTED_PERMISSION_VARIABLE: &'static str = "granted-variable";
+    const GRANTEE_VARIABLE: &'static str = "grantee";
+
+    pub fn grant(
+        snapshot: WriteSnapshot<WALClient>,
+        type_manager: &TypeManager,
+        thing_manager: Arc<ThingManager>,
+        function_manager: Arc<FunctionManager>,
+        query_manager: &QueryManager,
+        grantee: &Grantee,
+        granted_permission: &GrantedPermission,
+    ) -> (Result<(), SystemDBError>, Arc<WriteSnapshot<WALClient>>) {
+        let grantee_type = grantee.type_to_typeql_value_string();
+        let grantee_name = grantee.name_to_typeql_value_string();
+        if !is_valid_typeql_value(grantee_name.as_str()) {
+            return (Err(SystemDBError::IllegalQueryInput {}), Arc::new(snapshot));
+        }
+        let permission_stub = permission_typeql_stub(&granted_permission);
+        let query_string = format!(
+            r#"
+            match $u isa {grantee_type}, has name "{grantee_name}";
+            put {permission_stub}"#,
+        );
+        let Ok(query) = parse_query(query_string.as_str()) else {
+            return (Err(SystemDBError::UnexpectedParseFailed {}), Arc::new(snapshot));
+        };
         let (_, snapshot) = execute_write_pipeline(
             snapshot,
             type_manager,
@@ -174,15 +247,50 @@ pub mod user_repository {
         (Ok(()), snapshot)
     }
 
-    pub fn is_valid_typeql_value(value: &str) -> bool {
-        is_valid_label(value)
+    fn permission_typeql_stub(granted_permission: &GrantedPermission) -> String {
+        let permission_type = granted_permission.type_to_typeql_string();
+        match granted_permission {
+            GrantedPermission::ManageDatabases
+            | GrantedPermission::ManageUsers
+            | GrantedPermission::GrantPermissions => global_permission_typeql_stub(permission_type),
+            GrantedPermission::TransactionRead { database }
+            | GrantedPermission::TransactionWrite { database }
+            | GrantedPermission::SchemaTypes { database }
+            | GrantedPermission::SchemaRoles { database } => database_permission_typeql_stub(permission_type, database),
+            GrantedPermission::Role { database, role } => role_permission_typeql_stub(permission_type, database, role),
+        }
     }
 
-    typedb_error! {
-        pub SystemDBError(component = "System database", prefix = "SDB") {
-            EmptyUpdate(1, "There is nothing to update"),
-            IllegalQueryInput(2, "The specified input contains one or more illegal character(s)"),
-            QueryFailed(3, "System database query could not be executed. The system database may not be fully initialised yet."),
-        }
+    fn global_permission_typeql_stub(permission: &str) -> String {
+        format!(
+            r#"
+            ${GRANTED_PERMISSION_VARIABLE} isa {permission},
+                links (grantee: ${GRANTEE_VARIABLE});
+            "#
+        )
+    }
+
+    fn database_permission_typeql_stub(permission: &str, database: &DatabaseUid) -> String {
+        let database_id = database.to_typeql_value_string();
+        format!(
+            r#"
+            ${DATABASE_VARIABLE} isa database, has database-id "{database_id}";
+            ${GRANTED_PERMISSION_VARIABLE} isa {permission},
+                links (grantee: ${GRANTEE_VARIABLE}, database: ${DATABASE_VARIABLE});
+        "#
+        )
+    }
+
+    fn role_permission_typeql_stub(permission: &str, database: &DatabaseUid, role: &RoleUid) -> String {
+        let database_id = database.to_typeql_value_string();
+        let role_id = role.to_typeql_value_string();
+        format!(
+            r#"
+            ${DATABASE_VARIABLE} isa database, has database-id "{database_id}";
+            ${GRANTED_PERMISSION_VARIABLE} isa {permission},
+                links (grantee: ${GRANTEE_VARIABLE}, database: ${DATABASE_VARIABLE}),
+                has role-id {role_id};
+        "#
+        )
     }
 }

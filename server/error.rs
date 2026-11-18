@@ -141,6 +141,8 @@ typedb_error! {
         DatabaseImportFinaliseFailed(24, "Unable to finalise database import.", typedb_source: DatabaseCreateError),
         DatabaseImportDiscardFailed(25, "Unable to discard database import.", typedb_source: DatabaseDeleteError),
         ConcurrentImportLimitReached(27, "Too many concurrent imports (limit {limit}). Retry later.", limit: usize),
+        PermissionCannotBeGranted(28, "Unable to grant permission", typedb_source: PermissionError),
+        PermissionsCannotBeListed(28, "Unable to list permissions", typedb_source: PermissionError),
     }
 }
 

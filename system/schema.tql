@@ -28,8 +28,7 @@ define
     attribute database-id, value string;
     entity database, owns database-id;
 
-    # permissions
-    attribute role-id, value integer;
+    # user-groups
     relation group-membership,
         relates user,
         relates group;
@@ -40,6 +39,7 @@ define
     user plays group-membership:user;
     user-group plays group-membership:group;
 
+    # permissions
     relation global-permission @abstract,
         relates granted-to @card(1);
 
@@ -61,5 +61,6 @@ define
     relation schema-types sub database-permission;
     relation schema-roles sub database-permission;
 
+    attribute role-id, value integer;
     relation role-assignment, sub database-permission,
         owns role-id @card(1);

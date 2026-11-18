@@ -10,13 +10,13 @@ use database::Database;
 use resource::constants::server::DEFAULT_USER_NAME;
 use storage::durability_client::WALClient;
 use system::{
-    concepts::{Credential, User},
-    repositories::{user_repository, user_repository::SystemDBError},
+    concepts::{Credential, GrantedPermission, Grantee, User},
+    repositories::{rbac_repository, user_repository, user_repository::SystemDBError},
     util::transaction_util::TransactionUtil,
 };
 use uuid::Uuid;
 
-use crate::errors::{UserCreateError, UserDeleteError, UserGetError, UserUpdateError};
+use crate::errors::{PermissionGrantError, UserCreateError, UserDeleteError, UserGetError, UserUpdateError};
 
 #[derive(Debug)]
 pub struct UserManager {
@@ -36,7 +36,10 @@ impl UserManager {
         self.transaction_util.read_transaction(|tx| {
             user_repository::get(tx, username).map_err(|query_error| match query_error {
                 SystemDBError::IllegalQueryInput { .. } => UserGetError::IllegalUsername {},
-                SystemDBError::EmptyUpdate { .. } | SystemDBError::QueryFailed { .. } => UserGetError::Unexpected {},
+                SystemDBError::EmptyUpdate { .. }
+                | SystemDBError::QueryFailed { .. }
+                | SystemDBError::QueryFailedBecause { .. }
+                | SystemDBError::UnexpectedParseFailed {} => UserGetError::Unexpected {},
             })
         })
     }
@@ -128,6 +131,32 @@ impl UserManager {
             Ok(Ok(())) => Ok(()),
             Ok(Err(_)) => Err(UserDeleteError::IllegalUsername {}),
             Err(_) => Err(UserDeleteError::Unexpected {}),
+        }
+    }
+
+    pub fn grant_permission(
+        &self,
+        grantee: &Grantee,
+        granted_permission: &GrantedPermission,
+    ) -> Result<(), PermissionGrantError> {
+        let create_result = self
+            .transaction_util
+            .write_transaction(move |snapshot, type_mgr, thing_mgr, fn_mgr, query_mgr, _db, _tx_opts| {
+                rbac_repository::grant(
+                    snapshot,
+                    &type_mgr,
+                    thing_mgr.clone(),
+                    fn_mgr.clone(),
+                    &query_mgr,
+                    grantee,
+                    granted_permission,
+                )
+            })
+            .1;
+        match create_result {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(typedb_source)) => Err(PermissionGrantError::SystemDB { typedb_source }),
+            Err(_) => Err(PermissionGrantError::Unexpected {}),
         }
     }
 }

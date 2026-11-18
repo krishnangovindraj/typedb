@@ -5,6 +5,7 @@
  */
 
 use error::typedb_error;
+use system::repositories::user_repository::SystemDBError;
 
 typedb_error! {
     pub UserGetError(component = "User get", prefix = "USG") {
@@ -40,6 +41,19 @@ typedb_error! {
         UserNotFound(3, "User not found."),
         Unexpected(4, "An unexpected error has occurred in the process of deleting a user."),
         GetFailed(5, "Failed to check user existence.", typedb_source: UserGetError),
+    }
+}
+
+typedb_error! {
+    pub PermissionGrantError(component = "Permission management", prefix="UPG") {
+        Unexpected(1, "An unexpected error has occurred while managing user permissions."),
+        SystemDB(2, "An error occured while managing user permissions.", typedb_source: SystemDBError),
+    }
+}
+
+typedb_error! {
+    pub PermissionListError(component = "Permission management", prefix="UPG") {
+        Unexpected(1, "An unexpected error has occurred while listing user permissions."),
     }
 }
 

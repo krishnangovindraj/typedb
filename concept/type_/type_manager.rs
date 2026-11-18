@@ -1197,17 +1197,6 @@ impl TypeManager {
         }
     }
 
-    pub fn has_rbac_access(
-        &self,
-        snapshot: &impl ReadableSnapshot,
-        role: &RBACRole,
-        access: RBACAccess,
-        storage_counters: StorageCounters,
-    ) -> Result<bool, Box<ConceptReadError>> {
-        let all_accesses = self.list_rbac_declared_access(snapshot, role, storage_counters)?;
-        Ok(all_accesses.contains(&access))
-    }
-
     pub fn list_rbac_declared_access(
         &self,
         snapshot: &impl ReadableSnapshot,
