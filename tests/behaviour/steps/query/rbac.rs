@@ -13,9 +13,51 @@ use concept::{
 use cucumber::gherkin::Step;
 use encoding::value::label::Label;
 use macro_rules_attribute::apply;
-use resource::profile::StorageCounters;
+use params::{SystemPermissionParam, HasOrDoesnt};
+use resource::{constants::server::DEFAULT_USER_NAME, profile::StorageCounters};
+use server::authentication::Accessor;
+use system::concepts::{Credential, DatabaseUid, SystemPermission, Grantee, RoleUid, User};
 
 use crate::{Context, generic_step, transaction_context::with_read_tx, util::iter_table_map};
+
+fn admin_accessor() -> Accessor {
+    Accessor(DEFAULT_USER_NAME.to_owned())
+}
+
+fn resolve_database_uid(_name: &str) -> DatabaseUid {
+    todo!("Look up DatabaseUid for '{_name}' from the system database")
+}
+
+fn resolve_role_uid(_database: &str, _role: &str) -> RoleUid {
+    todo!("Look up RoleUid for role '{_role}' in database '{_database}'")
+}
+
+fn permission_param_to_granted(param: SystemPermissionParam) -> SystemPermission {
+    match param {
+        SystemPermissionParam::Role { database, role } => SystemPermission::Role {
+            database: resolve_database_uid(&database),
+            role: resolve_role_uid(&database, &role),
+        },
+        SystemPermissionParam::Permission { kind, database } => match kind.as_str() {
+            "manage-databases" => SystemPermission::ManageDatabases,
+            "manage-users" => SystemPermission::ManageUsers,
+            "grant-permissions" => SystemPermission::GrantPermissions,
+            "transaction-read" => {
+                SystemPermission::TransactionRead { database: resolve_database_uid(database.as_deref().unwrap()) }
+            }
+            "transaction-write" => {
+                SystemPermission::TransactionWrite { database: resolve_database_uid(database.as_deref().unwrap()) }
+            }
+            "schema-types" => {
+                SystemPermission::SchemaTypes { database: resolve_database_uid(database.as_deref().unwrap()) }
+            }
+            "schema-roles" => {
+                SystemPermission::SchemaRoles { database: resolve_database_uid(database.as_deref().unwrap()) }
+            }
+            other => panic!("Unknown permission kind '{other}'"),
+        },
+    }
+}
 
 #[apply(generic_step)]
 #[step(expr = "list rbac declared access for role: {word}")]
@@ -109,4 +151,74 @@ fn check_rbac_access_on_type(
     let access = resolve_rbac_access(type_manager, snapshot, type_label, access)
         .unwrap_or_else(|| panic!("Could not resolve type '{type_label}'"));
     check_role_has_access(snapshot, type_manager, role, &access, StorageCounters::DISABLED).unwrap()
+}
+
+#[apply(generic_step)]
+#[step(expr = "create user with username {string}, password {string}")]
+async fn create_user(context: &mut Context, username: String, password: String) {
+    context
+        .server_state()
+        .users()
+        .create(admin_accessor(), User::new(username), Credential::new_password(&password), None, None)
+        .await
+        .expect("Failed to create user");
+}
+
+#[apply(generic_step)]
+#[step(expr = "grant user {string} permission: {permission}")]
+async fn grant_user_permission(context: &mut Context, username: String, permission: SystemPermissionParam) {
+    let grantee = Grantee::User(User::new(username));
+    let granted = permission_param_to_granted(permission);
+    context
+        .server_state()
+        .users()
+        .grant_permission(admin_accessor(), grantee, granted)
+        .await
+        .expect("Failed to grant permission");
+}
+
+#[apply(generic_step)]
+#[step(expr = "user {string} {has_or_doesnt} permission: {permission}")]
+async fn user_has_permission(context: &mut Context, username: String, has_or_doesnt: HasOrDoesnt, permission: SystemPermissionParam) {
+    let grantee = Grantee::User(User::new(username));
+    let expected = permission_param_to_granted(permission);
+    let permissions = context
+        .server_state()
+        .users()
+        .list_permissions(admin_accessor(), grantee)
+        .await
+        .expect("Failed to list permissions");
+    has_or_doesnt.check_contains(&permissions, &expected);
+}
+
+#[apply(generic_step)]
+#[step(expr = "grant user {string} database role: {permission}")]
+async fn grant_user_database_role(context: &mut Context, username: String, permission: SystemPermissionParam) {
+    let grantee = Grantee::User(User::new(username));
+    let granted = permission_param_to_granted(permission);
+    context
+        .server_state()
+        .users()
+        .grant_permission(admin_accessor(), grantee, granted)
+        .await
+        .expect("Failed to grant database role");
+}
+
+#[apply(generic_step)]
+#[step(expr = "user {string} {has_or_doesnt} database role: {permission}")]
+async fn user_has_database_role(
+    context: &mut Context,
+    username: String,
+    has_or_doesnt: HasOrDoesnt,
+    permission: SystemPermissionParam,
+) {
+    let grantee = Grantee::User(User::new(username));
+    let expected = permission_param_to_granted(permission);
+    let permissions = context
+        .server_state()
+        .users()
+        .list_permissions(admin_accessor(), grantee)
+        .await
+        .expect("Failed to list permissions");
+    has_or_doesnt.check_contains(&permissions, &expected);
 }

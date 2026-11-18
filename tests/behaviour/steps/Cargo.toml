@@ -90,6 +90,9 @@
 	[dependencies.storage]
 		workspace = true
 
+	[dependencies.system]
+		workspace = true
+
 	[dependencies.test_utils]
 		workspace = true
 

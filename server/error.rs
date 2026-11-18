@@ -23,9 +23,7 @@ use storage::{StorageCommitError, snapshot::SnapshotError};
 use tokio_rustls::rustls::{
     pki_types::pem::Error as RustlsCertError, server::VerifierBuilderError as RustlsVerifierError,
 };
-use user::errors::{
-    PermissionGrantError, PermissionListError, UserCreateError, UserDeleteError, UserGetError, UserUpdateError,
-};
+use user::errors::{PermissionGrantError, PermissionListError, RoleGrantError, RoleListError, UserCreateError, UserDeleteError, UserGetError, UserUpdateError};
 
 use crate::{
     authentication::{AuthenticationError, token_manager::TokenManagerError},
@@ -143,8 +141,10 @@ typedb_error! {
         DatabaseImportFinaliseFailed(24, "Unable to finalise database import.", typedb_source: DatabaseCreateError),
         DatabaseImportDiscardFailed(25, "Unable to discard database import.", typedb_source: DatabaseDeleteError),
         ConcurrentImportLimitReached(27, "Too many concurrent imports (limit {limit}). Retry later.", limit: usize),
-        PermissionCannotBeGranted(28, "Unable to grant permission", typedb_source: PermissionGrantError),
-        PermissionsCannotBeListed(29, "Unable to list permission", typedb_source: PermissionListError),
+        PermissionCannotBeGranted(28, "Unable to grant permission.", typedb_source: PermissionGrantError),
+        PermissionsCannotBeListed(29, "Unable to list permission.", typedb_source: PermissionListError),
+        RoleCannotBeGranted(30, "Unable to grant role.", typedb_source: RoleGrantError),
+        RolesCannotBeListed(31, "Unable to list roles.", typedb_source: RoleListError),
     }
 }
 
@@ -187,7 +187,9 @@ impl ServerStateError for LocalServerStateError {
             | Self::DatabaseImportFinaliseFailed { .. }
             | Self::DatabaseImportDiscardFailed { .. }
             | Self::PermissionCannotBeGranted { .. }
-            | Self::PermissionsCannotBeListed { .. } => InvalidRequest,
+            | Self::PermissionsCannotBeListed { .. }
+            | Self::RoleCannotBeGranted { .. }
+            | Self::RolesCannotBeListed { .. } => InvalidRequest,
             Self::NotInitialised { .. } | Self::ConcurrentImportLimitReached { .. } => Unavailable,
         }
     }
@@ -291,6 +293,12 @@ impl ServerStateError for LocalServerStateError {
             },
             Self::PermissionsCannotBeListed { typedb_source } => match typedb_source {
                 PermissionListError::Unexpected { .. } | PermissionListError::SystemDB { .. } => System,
+            },
+            Self::RoleCannotBeGranted { typedb_source } => match typedb_source {
+                RoleGrantError::Unexpected { .. } | RoleGrantError::SystemDB { .. } => System,
+            },
+            Self::RolesCannotBeListed { typedb_source } => match typedb_source {
+                RoleListError::Unexpected { .. } | RoleListError::SystemDB { .. } => System,
             },
             Self::NotInitialised { .. }
             | Self::FailedToOpenPrerequisiteTransaction { .. }

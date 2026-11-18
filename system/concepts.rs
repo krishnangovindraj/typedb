@@ -7,7 +7,7 @@
 use pwhash::bcrypt;
 use uuid::Uuid;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct User {
     pub name: String,
 }
@@ -48,25 +48,25 @@ impl PasswordHash {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UserGroup {
     pub name: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Grantee {
     User(User),
     UserGroup(UserGroup),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct RoleUid(pub u64);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct DatabaseUid(pub Uuid);
 
-#[derive(Debug)]
-pub enum GrantedPermission {
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum SystemPermission {
     ManageDatabases,
     ManageUsers,
     GrantPermissions,
@@ -75,13 +75,24 @@ pub enum GrantedPermission {
     TransactionWrite { database: DatabaseUid },
     SchemaTypes { database: DatabaseUid },
     SchemaRoles { database: DatabaseUid },
-    Role { database: DatabaseUid, role: RoleUid },
 }
 
-#[derive(Debug)]
-pub struct Grant {
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct PermissionGrant {
     grantee: Grantee,
-    permission: GrantedPermission,
+    permission: SystemPermission,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct SchemaDefinedRole {
+    pub(crate) database: DatabaseUid,
+    pub(crate) role: RoleUid,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct RoleGrant {
+    grantee: Grantee,
+    role: SchemaDefinedRole,
 }
 
 impl Grantee {
@@ -112,43 +123,28 @@ impl DatabaseUid {
     }
 }
 
-impl GrantedPermission {
+impl SystemPermission {
     pub(crate) fn type_to_typeql_string(&self) -> &str {
         match self {
-            GrantedPermission::ManageDatabases => "manage-databases",
-            GrantedPermission::ManageUsers => "manage-users",
-            GrantedPermission::GrantPermissions => "grant-permissions",
-            GrantedPermission::TransactionRead { .. } => "transaction-read",
-            GrantedPermission::TransactionWrite { .. } => "transaction-write",
-            GrantedPermission::SchemaTypes { .. } => "schema-types",
-            GrantedPermission::SchemaRoles { .. } => "schema-roles",
-            GrantedPermission::Role { .. } => "role-assignment",
+            SystemPermission::ManageDatabases => "manage-databases",
+            SystemPermission::ManageUsers => "manage-users",
+            SystemPermission::GrantPermissions => "grant-permissions",
+            SystemPermission::TransactionRead { .. } => "transaction-read",
+            SystemPermission::TransactionWrite { .. } => "transaction-write",
+            SystemPermission::SchemaTypes { .. } => "schema-types",
+            SystemPermission::SchemaRoles { .. } => "schema-roles",
         }
     }
 
     pub(crate) fn database(&self) -> Option<DatabaseUid> {
         match self {
-            GrantedPermission::ManageDatabases
-            | GrantedPermission::ManageUsers
-            | GrantedPermission::GrantPermissions => None,
-            GrantedPermission::TransactionRead { database }
-            | GrantedPermission::TransactionWrite { database }
-            | GrantedPermission::SchemaTypes { database }
-            | GrantedPermission::SchemaRoles { database }
-            | GrantedPermission::Role { database, .. } => Some(database.clone()),
-        }
-    }
-
-    pub(crate) fn role(&self) -> Option<RoleUid> {
-        match self {
-            GrantedPermission::ManageDatabases
-            | GrantedPermission::ManageUsers
-            | GrantedPermission::GrantPermissions
-            | GrantedPermission::TransactionRead { .. }
-            | GrantedPermission::TransactionWrite { .. }
-            | GrantedPermission::SchemaTypes { .. }
-            | GrantedPermission::SchemaRoles { .. } => None,
-            GrantedPermission::Role { role, .. } => Some(role.clone()),
+            SystemPermission::ManageDatabases
+            | SystemPermission::ManageUsers
+            | SystemPermission::GrantPermissions => None,
+            SystemPermission::TransactionRead { database }
+            | SystemPermission::TransactionWrite { database }
+            | SystemPermission::SchemaTypes { database }
+            | SystemPermission::SchemaRoles { database } => Some(database.clone()),
         }
     }
 }

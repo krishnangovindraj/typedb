@@ -44,6 +44,7 @@ typedb_error! {
     }
 }
 
+// Do we really need a different error class per operation?
 typedb_error! {
     pub PermissionGrantError(component = "Permission management", prefix="UPG") {
         Unexpected(1, "An unexpected error has occurred while managing user permissions."),
@@ -52,7 +53,21 @@ typedb_error! {
 }
 
 typedb_error! {
-    pub PermissionListError(component = "Permission management", prefix="UPG") {
+    pub PermissionListError(component = "Permission listing", prefix="UPL") {
+        Unexpected(1, "An unexpected error has occurred while listing user permissions."),
+        SystemDB(2, "An error occured while managing user permissions.", typedb_source: SystemDBError),
+    }
+}
+
+typedb_error! {
+    pub RoleGrantError(component = "Role management", prefix="URG") {
+        Unexpected(1, "An unexpected error has occurred while listing user permissions."),
+        SystemDB(2, "An error occured while managing user permissions.", typedb_source: SystemDBError),
+    }
+}
+
+typedb_error! {
+    pub RoleListError(component = "Role Listing", prefix="URL") {
         Unexpected(1, "An unexpected error has occurred while listing user permissions."),
         SystemDB(2, "An error occured while managing user permissions.", typedb_source: SystemDBError),
     }

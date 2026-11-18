@@ -5337,6 +5337,7 @@ dependencies = [
  "serde_json",
  "server",
  "storage",
+ "system",
  "test_utils",
  "tokio",
  "typeql",

@@ -36,4 +36,12 @@ impl PermissionManager {
     pub fn exec_list_permissions_permitted(accessor: &str) -> bool {
         accessor == DEFAULT_USER_NAME
     }
+
+    pub fn exec_grant_role_permitted(accessor: &str) -> bool {
+        accessor == DEFAULT_USER_NAME
+    }
+
+    pub fn exec_list_roles_permitted(accessor: &str) -> bool {
+        accessor == DEFAULT_USER_NAME
+    }
 }

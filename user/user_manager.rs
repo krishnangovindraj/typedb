@@ -10,15 +10,13 @@ use database::Database;
 use resource::constants::server::DEFAULT_USER_NAME;
 use storage::durability_client::WALClient;
 use system::{
-    concepts::{Credential, GrantedPermission, Grantee, User},
+    concepts::{Credential, SystemPermission, Grantee, User},
     repositories::{rbac_repository, user_repository, user_repository::SystemDBError},
     util::transaction_util::TransactionUtil,
 };
 use uuid::Uuid;
-
-use crate::errors::{
-    PermissionGrantError, PermissionListError, UserCreateError, UserDeleteError, UserGetError, UserUpdateError,
-};
+use system::concepts::SchemaDefinedRole;
+use crate::errors::{PermissionGrantError, PermissionListError, RoleGrantError, RoleListError, UserCreateError, UserDeleteError, UserGetError, UserUpdateError};
 
 #[derive(Debug)]
 pub struct UserManager {
@@ -139,12 +137,12 @@ impl UserManager {
     pub fn grant_permission(
         &self,
         grantee: &Grantee,
-        granted_permission: &GrantedPermission,
+        granted_permission: &SystemPermission,
     ) -> Result<(), PermissionGrantError> {
         let grant_result = self
             .transaction_util
             .write_transaction(move |snapshot, type_mgr, thing_mgr, fn_mgr, query_mgr, _db, _tx_opts| {
-                rbac_repository::grant(
+                rbac_repository::grant_permission(
                     snapshot,
                     &type_mgr,
                     thing_mgr.clone(),
@@ -162,12 +160,47 @@ impl UserManager {
         }
     }
 
-    pub fn list_permissions(&self, grantee: &Grantee) -> Result<Vec<GrantedPermission>, PermissionListError> {
+    pub fn list_permissions(&self, grantee: &Grantee) -> Result<Vec<SystemPermission>, PermissionListError> {
         let list_result =
             self.transaction_util.read_transaction(move |tx| rbac_repository::list_permissions(tx, grantee));
         match list_result {
             Ok(permissions) => Ok(permissions),
             Err(typedb_source) => Err(PermissionListError::SystemDB { typedb_source }),
+        }
+    }
+
+    pub fn grant_role(
+        &self,
+        grantee: &Grantee,
+        granted_role: &SchemaDefinedRole,
+    ) -> Result<(), RoleGrantError> {
+        let grant_result = self
+            .transaction_util
+            .write_transaction(move |snapshot, type_mgr, thing_mgr, fn_mgr, query_mgr, _db, _tx_opts| {
+                rbac_repository::grant_role(
+                    snapshot,
+                    &type_mgr,
+                    thing_mgr.clone(),
+                    fn_mgr.clone(),
+                    &query_mgr,
+                    grantee,
+                    granted_role,
+                )
+            })
+            .1;
+        match grant_result {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(typedb_source)) => Err(RoleGrantError::SystemDB { typedb_source }),
+            Err(_) => Err(RoleGrantError::Unexpected {}),
+        }
+    }
+
+    pub fn list_roles(&self, grantee: &Grantee) -> Result<Vec<SchemaDefinedRole>, RoleListError> {
+        let list_result =
+            self.transaction_util.read_transaction(move |tx| rbac_repository::list_roles(tx, grantee));
+        match list_result {
+            Ok(permissions) => Ok(permissions),
+            Err(typedb_source) => Err(RoleListError::SystemDB { typedb_source }),
         }
     }
 }

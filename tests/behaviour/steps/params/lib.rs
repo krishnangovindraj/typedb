@@ -333,6 +333,46 @@ impl FromStr for ContainsOrDoesnt {
     }
 }
 
+
+#[derive(Debug, Parameter)]
+#[param(name = "has_or_doesnt", regex = "(has|have|does not have|do not have)")]
+pub enum HasOrDoesnt {
+    Has,
+    DoesNotHave,
+}
+
+impl HasOrDoesnt {
+    pub fn check_contains<T: PartialEq + fmt::Debug>(&self, haystack: &[T], needle: &T) {
+        let expected_has = self.expected_has();
+        assert_eq!(
+            expected_has,
+            haystack.contains(needle),
+            "{:?} {} {:?} ",
+            haystack,
+            if expected_has { "should have contained" } else { "should not have contained" },
+            needle
+        );
+    }
+
+    pub fn expected_has(&self) -> bool {
+        match self {
+            HasOrDoesnt::Has => true,
+            HasOrDoesnt::DoesNotHave => false,
+        }
+    }
+}
+
+impl FromStr for HasOrDoesnt {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "has" | "have" => Self::Has,
+            "does not have" | "do not have" => Self::DoesNotHave,
+            invalid => return Err(format!("Invalid `ContainsOrDoesnt`: {invalid}")),
+        })
+    }
+}
+
 #[derive(Debug, Parameter)]
 #[param(name = "type_label", regex = r"[A-Za-z0-9_:-]+")]
 pub struct Label {
@@ -900,6 +940,34 @@ impl FromStr for WithGiven {
             " with given rows" => Self::True,
             "" => Self::False,
             invalid => return Err(format!("Invalid `WithGiven`: {invalid}")),
+        })
+    }
+}
+
+const PERMISSION_KINDS: &[&str] =
+    &["manage-databases", "manage-users", "grant-permissions", "transaction-read", "transaction-write", "schema-types", "schema-roles"];
+
+/// Parses `manage-users`, `transaction-read:mydb`, or `mydb:my-role` (database role).
+/// A `word:word` value is treated as a database role when the left side isn't a known permission kind.
+#[derive(Debug, Parameter)]
+#[param(name = "permission", regex = r"[a-z][a-z0-9_-]*(?::[a-z0-9_-]+)?")]
+pub enum SystemPermissionParam {
+    Permission { kind: String, database: Option<String> },
+    Role { database: String, role: String },
+}
+
+impl FromStr for SystemPermissionParam {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.split_once(':') {
+            None => Self::Permission { kind: s.to_owned(), database: None },
+            Some((kind, rest)) => {
+                if PERMISSION_KINDS.contains(&kind) {
+                    Self::Permission { kind: kind.to_owned(), database: Some(rest.to_owned()) }
+                } else {
+                    Self::Role { database: kind.to_owned(), role: rest.to_owned() }
+                }
+            }
         })
     }
 }
