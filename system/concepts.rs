@@ -6,6 +6,7 @@
 
 use pwhash::bcrypt;
 use uuid::Uuid;
+use database::database::DatabaseUid;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct User {
@@ -63,9 +64,6 @@ pub enum Grantee {
 pub struct RoleUid(pub u64);
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct DatabaseUid(pub Uuid);
-
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum SystemPermission {
     ManageDatabases,
     ManageUsers,
@@ -108,18 +106,6 @@ impl Grantee {
             Grantee::User(user) => user.name.to_string(),
             Grantee::UserGroup(group) => group.name.to_string(),
         }
-    }
-}
-
-impl RoleUid {
-    pub(crate) fn to_typeql_value_string(&self) -> String {
-        self.0.to_string()
-    }
-}
-
-impl DatabaseUid {
-    pub(crate) fn to_typeql_value_string(&self) -> String {
-        self.0.to_string()
     }
 }
 

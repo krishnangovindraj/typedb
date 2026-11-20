@@ -951,23 +951,23 @@ const PERMISSION_KINDS: &[&str] =
 /// A `word:word` value is treated as a database role when the left side isn't a known permission kind.
 #[derive(Debug, Parameter)]
 #[param(name = "permission", regex = r"[a-z][a-z0-9_-]*(?::[a-z0-9_-]+)?")]
-pub enum SystemPermissionParam {
-    Permission { kind: String, database: Option<String> },
-    Role { database: String, role: String },
+pub struct SystemPermissionParam {
+    pub kind: String,
+    pub database: Option<String>
 }
 
 impl FromStr for SystemPermissionParam {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s.split_once(':') {
-            None => Self::Permission { kind: s.to_owned(), database: None },
+        match s.split_once(':') {
+            None => Ok(Self { kind: s.to_owned(), database: None }),
             Some((kind, rest)) => {
                 if PERMISSION_KINDS.contains(&kind) {
-                    Self::Permission { kind: kind.to_owned(), database: Some(rest.to_owned()) }
+                    Ok(Self { kind: kind.to_owned(), database: Some(rest.to_owned()) })
                 } else {
-                    Self::Role { database: kind.to_owned(), role: rest.to_owned() }
+                    Err(format!("BDD got unrecongnised SystemPermissionParam kind '{kind}'"))
                 }
             }
-        })
+        }
     }
 }

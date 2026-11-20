@@ -13,10 +13,11 @@ use concept::{
 use cucumber::gherkin::Step;
 use encoding::value::label::Label;
 use macro_rules_attribute::apply;
+use database::database::DatabaseUid;
 use params::{SystemPermissionParam, HasOrDoesnt};
 use resource::{constants::server::DEFAULT_USER_NAME, profile::StorageCounters};
 use server::authentication::Accessor;
-use system::concepts::{Credential, DatabaseUid, SystemPermission, Grantee, RoleUid, User};
+use system::concepts::{Credential, SystemPermission, Grantee, RoleUid, User};
 
 use crate::{Context, generic_step, transaction_context::with_read_tx, util::iter_table_map};
 
@@ -24,38 +25,38 @@ fn admin_accessor() -> Accessor {
     Accessor(DEFAULT_USER_NAME.to_owned())
 }
 
-fn resolve_database_uid(_name: &str) -> DatabaseUid {
-    todo!("Look up DatabaseUid for '{_name}' from the system database")
+async fn resolve_database_uid(context: &Context, name: &str) -> DatabaseUid {
+    let server = context.server.as_ref().unwrap().lock().unwrap();
+    let db_opt = server.server_state().databases().get(name).await;
+    db_opt.unwrap().expect("Database with name '{name}' not found ").database_id()
 }
 
 fn resolve_role_uid(_database: &str, _role: &str) -> RoleUid {
     todo!("Look up RoleUid for role '{_role}' in database '{_database}'")
 }
 
-fn permission_param_to_granted(param: SystemPermissionParam) -> SystemPermission {
-    match param {
-        SystemPermissionParam::Role { database, role } => SystemPermission::Role {
-            database: resolve_database_uid(&database),
-            role: resolve_role_uid(&database, &role),
-        },
-        SystemPermissionParam::Permission { kind, database } => match kind.as_str() {
-            "manage-databases" => SystemPermission::ManageDatabases,
-            "manage-users" => SystemPermission::ManageUsers,
-            "grant-permissions" => SystemPermission::GrantPermissions,
-            "transaction-read" => {
-                SystemPermission::TransactionRead { database: resolve_database_uid(database.as_deref().unwrap()) }
-            }
-            "transaction-write" => {
-                SystemPermission::TransactionWrite { database: resolve_database_uid(database.as_deref().unwrap()) }
-            }
-            "schema-types" => {
-                SystemPermission::SchemaTypes { database: resolve_database_uid(database.as_deref().unwrap()) }
-            }
-            "schema-roles" => {
-                SystemPermission::SchemaRoles { database: resolve_database_uid(database.as_deref().unwrap()) }
-            }
-            other => panic!("Unknown permission kind '{other}'"),
-        },
+async fn permission_param_to_system_permission(context: &Context, param: SystemPermissionParam) -> SystemPermission {
+    let database = match &param.database {
+        None => None,
+        Some(db) => Some(resolve_database_uid(context, db.as_str()).await),
+    };
+    match param.kind.as_str() {
+        "manage-databases" => SystemPermission::ManageDatabases,
+        "manage-users" => SystemPermission::ManageUsers,
+        "grant-permissions" => SystemPermission::GrantPermissions,
+        "transaction-read" => {
+            SystemPermission::TransactionRead { database: database.unwrap() }
+        }
+        "transaction-write" => {
+            SystemPermission::TransactionWrite { database: database.unwrap() }
+        }
+        "schema-types" => {
+            SystemPermission::SchemaTypes { database: database.unwrap() }
+        }
+        "schema-roles" => {
+            SystemPermission::SchemaRoles { database: database.unwrap() }
+        }
+        other => panic!("Unknown permission kind '{other}'"),
     }
 }
 
@@ -168,7 +169,7 @@ async fn create_user(context: &mut Context, username: String, password: String) 
 #[step(expr = "grant user {string} permission: {permission}")]
 async fn grant_user_permission(context: &mut Context, username: String, permission: SystemPermissionParam) {
     let grantee = Grantee::User(User::new(username));
-    let granted = permission_param_to_granted(permission);
+    let granted = permission_param_to_system_permission(context, permission).await;
     context
         .server_state()
         .users()
@@ -181,7 +182,7 @@ async fn grant_user_permission(context: &mut Context, username: String, permissi
 #[step(expr = "user {string} {has_or_doesnt} permission: {permission}")]
 async fn user_has_permission(context: &mut Context, username: String, has_or_doesnt: HasOrDoesnt, permission: SystemPermissionParam) {
     let grantee = Grantee::User(User::new(username));
-    let expected = permission_param_to_granted(permission);
+    let expected = permission_param_to_system_permission(context, permission).await;
     let permissions = context
         .server_state()
         .users()
@@ -195,7 +196,7 @@ async fn user_has_permission(context: &mut Context, username: String, has_or_doe
 #[step(expr = "grant user {string} database role: {permission}")]
 async fn grant_user_database_role(context: &mut Context, username: String, permission: SystemPermissionParam) {
     let grantee = Grantee::User(User::new(username));
-    let granted = permission_param_to_granted(permission);
+    let granted = permission_param_to_system_permission(context, permission).await;
     context
         .server_state()
         .users()
@@ -213,7 +214,7 @@ async fn user_has_database_role(
     permission: SystemPermissionParam,
 ) {
     let grantee = Grantee::User(User::new(username));
-    let expected = permission_param_to_granted(permission);
+    let expected = permission_param_to_system_permission(context, permission).await;
     let permissions = context
         .server_state()
         .users()

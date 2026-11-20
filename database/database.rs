@@ -4,18 +4,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::{
-    collections::{BTreeMap, VecDeque},
-    ffi::OsString,
-    fmt, fs, io, mem,
-    path::{Path, PathBuf},
-    sync::{
-        Arc, Mutex, MutexGuard, RwLock, TryLockError,
-        mpsc::{Receiver, SyncSender, sync_channel},
-    },
-    time::{Duration, Instant},
-};
-
 use concept::{
     thing::{
         cleanup::{CleanupIntervals, CleanupRecord},
@@ -50,6 +38,18 @@ use itertools::Itertools;
 use options::MvccCleanupStrategy;
 use query::query_cache::QueryCache;
 use resource::constants::database::{CHECKPOINT_INTERVAL, CLEANUP_WAKEUP_INTERVAL, STATISTICS_UPDATE_INTERVAL};
+use std::hash::Hash;
+use std::{
+    collections::{BTreeMap, VecDeque},
+    ffi::OsString,
+    fmt, fs, io, mem,
+    path::{Path, PathBuf},
+    sync::{
+        Arc, Mutex, MutexGuard, RwLock, TryLockError,
+        mpsc::{Receiver, SyncSender, sync_channel},
+    },
+    time::{Duration, Instant},
+};
 use storage::{
     MVCCStorage, StorageDeleteError, StorageOpenError, StorageResetError,
     durability_client::{DurabilityClient, DurabilityClientError, WALClient},
@@ -76,6 +76,9 @@ pub(super) struct Schema {
     pub(super) type_cache: Arc<TypeCache>,
     pub(super) function_cache: Arc<FunctionCache>,
 }
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct DatabaseUid(pub u64);
 
 type ReservationRequestId = u64;
 
@@ -563,6 +566,14 @@ impl Database<WALClient> {
         database.prepare_for_writes().map_err(|typedb_source| DatabaseOpenError::Encoding { source: typedb_source })?;
         event!(Level::TRACE, "Finished loading database '{}'", &name);
         Ok(database)
+    }
+
+    pub fn database_id(&self) -> DatabaseUid {
+        // TODO: Replace with one read from the properties file.
+        use std::hash::{DefaultHasher, Hasher};
+        let mut s = DefaultHasher::new();
+        self.name.hash(&mut s);
+        DatabaseUid((s.finish() >> 1))
     }
 
     fn checkpoint(&self) -> Result<(), CheckpointCreateError> {
