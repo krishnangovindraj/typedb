@@ -947,13 +947,30 @@ impl FromStr for WithGiven {
 const PERMISSION_KINDS: &[&str] =
     &["manage-databases", "manage-users", "grant-permissions", "transaction-read", "transaction-write", "schema-types", "schema-roles"];
 
-/// Parses `manage-users`, `transaction-read:mydb`, or `mydb:my-role` (database role).
-/// A `word:word` value is treated as a database role when the left side isn't a known permission kind.
+/// Parses `manage-users`, `transaction-read:mydb`.
 #[derive(Debug, Parameter)]
 #[param(name = "permission", regex = r"[a-z][a-z0-9_-]*(?::[a-z0-9_-]+)?")]
 pub struct SystemPermissionParam {
     pub kind: String,
-    pub database: Option<String>
+    pub database: Option<String>,
+}
+
+/// Parses `mydb:my-role`.
+#[derive(Debug, Parameter)]
+#[param(name = "schema_defined_role", regex = r"[a-z0-9_-]+:[a-z0-9_-]+")]
+pub struct SchemaDefinedRoleParam {
+    pub database: String,
+    pub role: String,
+}
+
+impl FromStr for SchemaDefinedRoleParam {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (database, role) = s
+            .split_once(':')
+            .ok_or_else(|| format!("Invalid `SchemaDefinedRoleParam` (expected 'db:role'): {s}"))?;
+        Ok(Self { database: database.to_owned(), role: role.to_owned() })
+    }
 }
 
 impl FromStr for SystemPermissionParam {
