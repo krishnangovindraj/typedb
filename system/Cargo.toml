@@ -24,6 +24,9 @@
 	[dependencies.database]
 		workspace = true
 
+	[dependencies.encoding]
+		workspace = true
+
 	[dependencies.error]
 		workspace = true
 

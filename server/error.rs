@@ -289,16 +289,16 @@ impl ServerStateError for LocalServerStateError {
                 | DatabaseExportError::TransactionCloseInterrupt { .. } => System,
             },
             Self::PermissionCannotBeGranted { typedb_source } => match typedb_source {
-                PermissionGrantError::Unexpected { .. } | PermissionGrantError::SystemDB { .. } => System,
+                PermissionGrantError::UnexpectedDataCommit { .. } | PermissionGrantError::UnexpectedSystemDB { .. } => System,
             },
             Self::PermissionsCannotBeListed { typedb_source } => match typedb_source {
-                PermissionListError::Unexpected { .. } | PermissionListError::SystemDB { .. } => System,
+                PermissionListError::UnexpectedSystemDB { .. } => System,
             },
             Self::RoleCannotBeGranted { typedb_source } => match typedb_source {
-                RoleGrantError::Unexpected { .. } | RoleGrantError::SystemDB { .. } => System,
+                RoleGrantError::UnexpectedDataCommit { .. } | RoleGrantError::UnexpectedSystemDB { .. } => System,
             },
             Self::RolesCannotBeListed { typedb_source } => match typedb_source {
-                RoleListError::Unexpected { .. } | RoleListError::SystemDB { .. } => System,
+                RoleListError::UnexpectedSystemDB { .. } => System,
             },
             Self::NotInitialised { .. }
             | Self::FailedToOpenPrerequisiteTransaction { .. }

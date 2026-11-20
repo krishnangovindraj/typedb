@@ -34,7 +34,7 @@ impl DefinitionKeyGenerator {
         Self {
             next_struct: DefinitionKeyAllocator::new(Prefix::DefinitionStruct),
             next_function: DefinitionKeyAllocator::new(Prefix::DefinitionFunction),
-            next_rbac_role: RBACVertexAllocator::new(Prefix::RBACRole),
+            next_rbac_role: RBACVertexAllocator::new(),
         }
     }
 

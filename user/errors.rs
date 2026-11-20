@@ -3,7 +3,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-
+use database::transaction::DataCommitError;
 use error::typedb_error;
 use system::repositories::user_repository::SystemDBError;
 
@@ -47,29 +47,27 @@ typedb_error! {
 // Do we really need a different error class per operation?
 typedb_error! {
     pub PermissionGrantError(component = "Permission management", prefix="UPG") {
-        Unexpected(1, "An unexpected error has occurred while managing user permissions."),
-        SystemDB(2, "An error occured while managing user permissions.", typedb_source: SystemDBError),
+        UnexpectedSystemDB(1, "An unexpected error occurred while granting user permissions.", typedb_source: SystemDBError),
+        UnexpectedDataCommit(2, "An unexpected error has occurred while granting user permissions.", typedb_source: DataCommitError),
     }
 }
 
 typedb_error! {
     pub PermissionListError(component = "Permission listing", prefix="UPL") {
-        Unexpected(1, "An unexpected error has occurred while listing user permissions."),
-        SystemDB(2, "An error occured while managing user permissions.", typedb_source: SystemDBError),
+        UnexpectedSystemDB(1, "An unexpected error occurred while listing user permissions.", typedb_source: SystemDBError),
     }
 }
 
 typedb_error! {
     pub RoleGrantError(component = "Role management", prefix="URG") {
-        Unexpected(1, "An unexpected error has occurred while listing user permissions."),
-        SystemDB(2, "An error occured while managing user permissions.", typedb_source: SystemDBError),
+        UnexpectedSystemDB(1, "An unexpected error occurred while granting the role to the user.", typedb_source: SystemDBError),
+        UnexpectedDataCommit(2, "An unexpected error occurred while granting the role to the user.", typedb_source: DataCommitError),
     }
 }
 
 typedb_error! {
     pub RoleListError(component = "Role Listing", prefix="URL") {
-        Unexpected(1, "An unexpected error has occurred while listing user permissions."),
-        SystemDB(2, "An error occured while managing user permissions.", typedb_source: SystemDBError),
+        UnexpectedSystemDB(1, "An unexpected error occurred while listing user roles.", typedb_source: SystemDBError),
     }
 }
 

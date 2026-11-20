@@ -20,6 +20,7 @@ rust_library(
         "//concept",
         "//database",
         "//common/error",
+        "//encoding",
         "//executor",
         "//function",
         "//query",

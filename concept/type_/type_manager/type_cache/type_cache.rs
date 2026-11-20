@@ -13,6 +13,7 @@ use encoding::{
     graph::definition::{definition_key::DefinitionKey, r#struct::StructDefinition},
     value::{label::Label, value_type::ValueType},
 };
+use encoding::graph::rbac::RBACRoleId;
 use error::typedb_error;
 use storage::{
     MVCCStorage, durability_client::DurabilityClient, sequence_number::SequenceNumber,

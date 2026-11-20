@@ -58,7 +58,7 @@ pub mod user_repository {
         let (tx, result) = execute_read_pipeline(tx, query.into_structure().into_pipeline(), &query_str);
         let mut rows: Vec<HashMap<String, VariableValue>> = match result {
             Ok(rows) => rows,
-            Err(_) => return Err(SystemDBError::QueryFailed {}),
+            Err(typedb_source) => return Err(SystemDBError::QueryFailed { typedb_source }),
         };
         if !rows.is_empty() {
             let row = rows.pop().expect(unexpected_error_msg);
@@ -178,7 +178,7 @@ pub mod user_repository {
         );
         match result {
             Ok(_) => (Ok(()), snapshot),
-            Err(typedb_source) => (Err(SystemDBError::QueryFailedBecause { typedb_source }), snapshot),
+            Err(typedb_source) => (Err(SystemDBError::QueryFailed { typedb_source }), snapshot),
         }
     }
 
@@ -186,9 +186,8 @@ pub mod user_repository {
         pub SystemDBError(component = "System database", prefix = "SDB") {
             EmptyUpdate(1, "There is nothing to update"),
             IllegalQueryInput(2, "The specified input contains one or more illegal character(s)"),
-            QueryFailed(3, "System database query could not be executed. The system database may not be fully initialised yet."),
-            UnexpectedParseFailed(4, "Parsing a system database query failed unexpectedly"),
-            QueryFailedBecause(5, "System database query could not be executed.", typedb_source: Box<QueryError>),
+            QueryFailed(3, "System database query could not be executed. The system database may not be fully initialised yet.", typedb_source: Box<QueryError>),
+            UnexpectedParseFailed(4, "Parsing a system database query failed unexpectedly", typedb_source: typeql::Error),
         }
     }
 }
@@ -207,8 +206,9 @@ pub mod rbac_repository {
     use storage::{durability_client::WALClient, snapshot::WriteSnapshot};
     use typeql::parse_query;
     use database::database::DatabaseUid;
+    use encoding::graph::rbac::RBACRoleId;
     use crate::{
-        concepts::{SystemPermission, Grantee, RoleUid},
+        concepts::{SystemPermission, Grantee},
         repositories::{is_valid_typeql_value, user_repository::SystemDBError},
         util::query_util::{execute_read_pipeline, execute_write_pipeline},
     };
@@ -221,7 +221,6 @@ pub mod rbac_repository {
     const GRANTEE_TYPE_VARIABLE: &'static str = "grantee-type";
     const PERMISSION_TYPE_VARIABLE: &'static str = "permission-type";
 
-    const DATABASE_VARIABLE: &'static str = "database";
     const GRANTEE_VARIABLE: &'static str = "grantee";
     const GRANTED_PERMISSION_VARIABLE: &'static str = "granted-permission";
 
@@ -241,8 +240,11 @@ pub mod rbac_repository {
             Ok(query_string) => query_string,
             Err(err) => return (Err(err), Arc::new(snapshot)),
         };
-        let Ok(query) = parse_query(query_string.as_str()) else {
-            return (Err(SystemDBError::UnexpectedParseFailed {}), Arc::new(snapshot));
+        let query = match parse_query(query_string.as_str()) {
+            Ok(query) => query,
+            Err(typedb_source) => {
+                return (Err(SystemDBError::UnexpectedParseFailed { typedb_source }), Arc::new(snapshot));
+            }
         };
         let (result, snapshot) = execute_write_pipeline(
             snapshot,
@@ -259,7 +261,7 @@ pub mod rbac_repository {
                 (Ok(()), snapshot)
             }
             Err(typedb_source) => {
-                (Err(SystemDBError::QueryFailedBecause { typedb_source }), snapshot)
+                (Err(SystemDBError::QueryFailed { typedb_source }), snapshot)
             }
         }
     }
@@ -274,7 +276,7 @@ pub mod rbac_repository {
         let (_tx, result) = execute_read_pipeline(tx, query.into_structure().into_pipeline(), &query_string);
         let rows: Vec<HashMap<String, VariableValue>> = match result {
             Ok(rows) => rows,
-            Err(typedb_source) => return Err(SystemDBError::QueryFailedBecause { typedb_source }),
+            Err(typedb_source) => return Err(SystemDBError::QueryFailed { typedb_source }),
         };
         let permissions = rows.into_iter().filter_map(|row| try_valid_granted_permission_from_row(row)).collect();
         Ok(permissions)
@@ -293,8 +295,11 @@ pub mod rbac_repository {
             Ok(query_string) => query_string,
             Err(err) => return (Err(err), Arc::new(snapshot)),
         };
-        let Ok(query) = parse_query(query_string.as_str()) else {
-            return (Err(SystemDBError::UnexpectedParseFailed {}), Arc::new(snapshot));
+        let query = match parse_query(query_string.as_str()) {
+            Ok(query) => query,
+            Err(typedb_source) => {
+                return (Err(SystemDBError::UnexpectedParseFailed { typedb_source }), Arc::new(snapshot));
+            }
         };
         let (result, snapshot) = execute_write_pipeline(
             snapshot,
@@ -311,7 +316,7 @@ pub mod rbac_repository {
                 (Ok(()), snapshot)
             }
             Err(typedb_source) => {
-                (Err(SystemDBError::QueryFailedBecause { typedb_source }), snapshot)
+                (Err(SystemDBError::QueryFailed { typedb_source }), snapshot)
             }
         }
     }
@@ -327,7 +332,7 @@ pub mod rbac_repository {
         let (_tx, result) = execute_read_pipeline(tx, query.into_structure().into_pipeline(), &query_string);
         let rows: Vec<HashMap<String, VariableValue>> = match result {
             Ok(rows) => rows,
-            Err(typedb_source) => return Err(SystemDBError::QueryFailedBecause { typedb_source }),
+            Err(typedb_source) => return Err(SystemDBError::QueryFailed { typedb_source }),
         };
         let roles = rows.into_iter().filter_map(|row| try_valid_granted_role_from_row(row)).collect();
         Ok(roles)
@@ -344,8 +349,8 @@ pub mod rbac_repository {
         DatabaseUid(database_id_value.as_value().to_owned().unwrap_integer() as u64)
     }
 
-    fn extract_role_value(role_id_value: &VariableValue<'_>) -> RoleUid {
-        RoleUid(role_id_value.as_value().to_owned().unwrap_integer() as u64)
+    fn extract_role_value(role_id_value: &VariableValue<'_>) -> RBACRoleId {
+        RBACRoleId::from_system_db_id(role_id_value.as_value().to_owned().unwrap_integer())
     }
 
     fn try_valid_granted_permission_from_row(row: HashMap<String, VariableValue>) -> Option<SystemPermission> {
@@ -390,7 +395,7 @@ pub mod rbac_repository {
 
         let database = extract_database_value(database_id_value);
         let role = extract_role_value(role_id_value);
-        Some(SchemaDefinedRole { database, role })
+        Some(SchemaDefinedRole { database, role_id: role })
     }
 
     fn build_list_permissions_query(grantee: &Grantee) -> Result<String, SystemDBError> {
@@ -409,8 +414,7 @@ pub mod rbac_repository {
                 ${GRANTED_PERMISSION_VARIABLE} isa! ${PERMISSION_TYPE_VARIABLE}, links (grantee: ${GRANTEE_VARIABLE});
                 let ${PERMISSION_LABEL_VALUE_VARIABLE} = label(${PERMISSION_TYPE_VARIABLE});
                 try {{ # database if it has one
-                    ${DATABASE_VARIABLE} isa database, has database-id $database-id;
-                    ${GRANTED_PERMISSION_VARIABLE} links (database: ${DATABASE_VARIABLE});
+                    ${GRANTED_PERMISSION_VARIABLE} has database-id $database-id;
                     let ${DATABASE_ID_VALUE_VARIABLE} = $database-id;
                 }};
                 select ${PERMISSION_LABEL_VALUE_VARIABLE}, ${DATABASE_ID_VALUE_VARIABLE};
@@ -436,12 +440,7 @@ pub mod rbac_repository {
             None => ("".to_owned(), "".to_owned()),
             Some(database_id) => (
                 format!(r#"let ${DATABASE_ID_VALUE_VARIABLE} = {id};"#, id = database_id.0),
-                format!(
-                    r#"
-                    ${DATABASE_VARIABLE} isa database, has database-id == ${DATABASE_ID_VALUE_VARIABLE};
-                    ${GRANTED_PERMISSION_VARIABLE} links (database: ${DATABASE_VARIABLE});
-                "#
-                ),
+                format!(r#"${GRANTED_PERMISSION_VARIABLE} has database-id == ${DATABASE_ID_VALUE_VARIABLE};"#),
             ),
         };
 
@@ -476,9 +475,9 @@ pub mod rbac_repository {
 
                 # permission type
                 ${GRANTED_ROLE_VARIABLE} isa! role-assignment,
-                    links (grantee: ${GRANTEE_VARIABLE}, database: ${DATABASE_VARIABLE}),
+                    links (grantee: ${GRANTEE_VARIABLE}),
+                    has database-id $database-id,
                     has role-id $role-id;
-                ${DATABASE_VARIABLE} isa database, has database-id $database-id;
                 let ${DATABASE_ID_VALUE_VARIABLE} = $database-id;
                 let ${ROLE_ID_VALUE_VARIABLE} = $role-id;
                 select ${DATABASE_ID_VALUE_VARIABLE}, ${ROLE_ID_VALUE_VARIABLE};
@@ -494,7 +493,7 @@ pub mod rbac_repository {
         let grantee_type = check_valid_value(grantee.type_to_typeql_value_string())?;
         let grantee_name = check_valid_value(grantee.name_to_typeql_value_string())?;
         let database_id = &granted_role.database.0;
-        let role_id = &granted_role.role.0;
+        let role_id = &granted_role.role_id.to_system_db_id();
         let query_string = format!(
             r#"
             match
@@ -503,12 +502,12 @@ pub mod rbac_repository {
                 let ${DATABASE_ID_VALUE_VARIABLE} = {database_id};
                 let ${ROLE_ID_VALUE_VARIABLE} = {role_id};
             match
-                ${DATABASE_VARIABLE} isa database, has database-id == ${DATABASE_ID_VALUE_VARIABLE};
                 ${GRANTEE_VARIABLE} isa! ${GRANTEE_TYPE_VARIABLE}, has name == ${GRANTEE_NAME_VALUE_VARIABLE};
             put
                ${GRANTED_ROLE_VARIABLE} isa role-assignment,
-                    links (database: ${DATABASE_VARIABLE},
-                    has role-id == {ROLE_ID_VALUE_VARIABLE};
+                    links (grantee: ${GRANTEE_VARIABLE}),
+                    has database-id == ${DATABASE_ID_VALUE_VARIABLE},
+                    has role-id == ${ROLE_ID_VALUE_VARIABLE};
         "#
         );
         Ok(query_string)

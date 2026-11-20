@@ -4,6 +4,20 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::{
+    collections::{BTreeMap, VecDeque},
+    ffi::OsString,
+    fmt, fs,
+    hash::Hash,
+    io, mem,
+    path::{Path, PathBuf},
+    sync::{
+        Arc, Mutex, MutexGuard, RwLock, TryLockError,
+        mpsc::{Receiver, SyncSender, sync_channel},
+    },
+    time::{Duration, Instant},
+};
+
 use concept::{
     thing::{
         cleanup::{CleanupIntervals, CleanupRecord},
@@ -38,18 +52,6 @@ use itertools::Itertools;
 use options::MvccCleanupStrategy;
 use query::query_cache::QueryCache;
 use resource::constants::database::{CHECKPOINT_INTERVAL, CLEANUP_WAKEUP_INTERVAL, STATISTICS_UPDATE_INTERVAL};
-use std::hash::Hash;
-use std::{
-    collections::{BTreeMap, VecDeque},
-    ffi::OsString,
-    fmt, fs, io, mem,
-    path::{Path, PathBuf},
-    sync::{
-        Arc, Mutex, MutexGuard, RwLock, TryLockError,
-        mpsc::{Receiver, SyncSender, sync_channel},
-    },
-    time::{Duration, Instant},
-};
 use storage::{
     MVCCStorage, StorageDeleteError, StorageOpenError, StorageResetError,
     durability_client::{DurabilityClient, DurabilityClientError, WALClient},

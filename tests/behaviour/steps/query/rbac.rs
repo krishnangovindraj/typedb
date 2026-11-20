@@ -15,11 +15,12 @@ use encoding::value::label::Label;
 use macro_rules_attribute::apply;
 use database::database::DatabaseUid;
 use database::transaction::TransactionRead;
+use encoding::graph::rbac::RBACRoleId;
 use options::TransactionOptions;
 use params::{SchemaDefinedRoleParam, SystemPermissionParam, HasOrDoesnt};
 use resource::{constants::server::DEFAULT_USER_NAME, profile::StorageCounters};
 use server::authentication::Accessor;
-use system::concepts::{Credential, SystemPermission, SchemaDefinedRole, Grantee, RoleUid, User};
+use system::concepts::{Credential, SystemPermission, SchemaDefinedRole, Grantee, User};
 
 use crate::{Context, generic_step, transaction_context::with_read_tx, util::iter_table_map};
 
@@ -33,22 +34,22 @@ async fn resolve_database_uid(context: &Context, name: &str) -> DatabaseUid {
     db_opt.unwrap().expect("Database with name '{name}' not found ").database_id()
 }
 
-fn resolve_role_uid(context: &Context, database_name: &str, role_name: &str) -> RoleUid {
+async fn resolve_role_uid(context: &Context, database_name: &str, role_name: &str) -> RBACRoleId {
     let server = context.server.as_ref().unwrap().lock().unwrap();
     let db_opt = server.server_state().databases().get(database_name).await;
     let database = db_opt.unwrap().expect("Database with name '{name}' not found ");
     let tx = TransactionRead::open(database, TransactionOptions::default()).expect("Should be able to open");
-    let role = tx.type_manager.get_rbac_role(&tx.snapshot, role_name, StorageCounters::DISABLED)
+    let role = tx.type_manager.get_rbac_role(&*tx.snapshot, role_name, StorageCounters::DISABLED)
         .unwrap()
-        .expect(format!("Could not find role '{role_name}' in the database '{database_name}'"));
+        .expect(format!("Could not find role '{role_name}' in the database '{database_name}'").as_str());
     tx.close();
-    role
+    role.vertex().role_id()
 }
 
 async fn schema_defined_role_param_to_typedb(context: &Context, param: SchemaDefinedRoleParam) -> SchemaDefinedRole {
-    let database_uid = resolve_database_uid(context, &param.database).await;
-    let role_uid = resolve_role_uid(&database_uid, &param.role);
-    SchemaDefinedRole::new(database_uid, role_uid)
+    let database = resolve_database_uid(context, param.database.as_str()).await;
+    let role_id = resolve_role_uid(context, param.database.as_str(), &param.role.as_str()).await;
+    SchemaDefinedRole { database, role_id }
 }
 
 async fn permission_param_to_typedb(context: &Context, param: SystemPermissionParam) -> SystemPermission {

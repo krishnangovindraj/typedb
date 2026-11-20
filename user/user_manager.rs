@@ -38,8 +38,7 @@ impl UserManager {
                 SystemDBError::IllegalQueryInput { .. } => UserGetError::IllegalUsername {},
                 SystemDBError::EmptyUpdate { .. }
                 | SystemDBError::QueryFailed { .. }
-                | SystemDBError::QueryFailedBecause { .. }
-                | SystemDBError::UnexpectedParseFailed {} => UserGetError::Unexpected {},
+                | SystemDBError::UnexpectedParseFailed { .. } => UserGetError::Unexpected {},
             })
         })
     }
@@ -155,8 +154,8 @@ impl UserManager {
             .1;
         match grant_result {
             Ok(Ok(())) => Ok(()),
-            Ok(Err(typedb_source)) => Err(PermissionGrantError::SystemDB { typedb_source }),
-            Err(_) => Err(PermissionGrantError::Unexpected {}),
+            Ok(Err(typedb_source)) => Err(PermissionGrantError::UnexpectedSystemDB { typedb_source }),
+            Err(typedb_source) => Err(PermissionGrantError::UnexpectedDataCommit { typedb_source }),
         }
     }
 
@@ -165,7 +164,7 @@ impl UserManager {
             self.transaction_util.read_transaction(move |tx| rbac_repository::list_permissions(tx, grantee));
         match list_result {
             Ok(permissions) => Ok(permissions),
-            Err(typedb_source) => Err(PermissionListError::SystemDB { typedb_source }),
+            Err(typedb_source) => Err(PermissionListError::UnexpectedSystemDB { typedb_source }),
         }
     }
 
@@ -190,8 +189,8 @@ impl UserManager {
             .1;
         match grant_result {
             Ok(Ok(())) => Ok(()),
-            Ok(Err(typedb_source)) => Err(RoleGrantError::SystemDB { typedb_source }),
-            Err(_) => Err(RoleGrantError::Unexpected {}),
+            Ok(Err(typedb_source)) => Err(RoleGrantError::UnexpectedSystemDB { typedb_source }),
+            Err(typedb_source) => Err(RoleGrantError::UnexpectedDataCommit { typedb_source }),
         }
     }
 
@@ -200,7 +199,7 @@ impl UserManager {
             self.transaction_util.read_transaction(move |tx| rbac_repository::list_roles(tx, grantee));
         match list_result {
             Ok(permissions) => Ok(permissions),
-            Err(typedb_source) => Err(RoleListError::SystemDB { typedb_source }),
+            Err(typedb_source) => Err(RoleListError::UnexpectedSystemDB { typedb_source }),
         }
     }
 }

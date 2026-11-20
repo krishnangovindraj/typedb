@@ -5,8 +5,8 @@
  */
 
 use pwhash::bcrypt;
-use uuid::Uuid;
 use database::database::DatabaseUid;
+use encoding::graph::rbac::RBACRoleId;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct User {
@@ -61,9 +61,6 @@ pub enum Grantee {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct RoleUid(pub u64);
-
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum SystemPermission {
     ManageDatabases,
     ManageUsers,
@@ -83,8 +80,8 @@ pub struct PermissionGrant {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SchemaDefinedRole {
-    pub(crate) database: DatabaseUid,
-    pub(crate) role: RoleUid,
+    pub database: DatabaseUid,
+    pub role_id: RBACRoleId,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]

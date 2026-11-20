@@ -8,7 +8,7 @@ use std::{
     marker::PhantomData,
     sync::atomic::{AtomicU64, Ordering, Ordering::Relaxed},
 };
-
+use rand::RngCore;
 use bytes::Bytes;
 use lending_iterator::LendingIterator;
 use resource::{
@@ -20,14 +20,13 @@ use storage::{
     key_value::StorageKey,
     snapshot::WritableSnapshot,
 };
-
+use storage::snapshot::SnapshotGetError;
 use crate::{
     Keyable,
     error::EncodingError,
     graph::{
         Typed,
         definition::definition_key::{DefinitionID, DefinitionKey},
-        rbac::{RBACRoleId, RBACRoleVertex},
         type_::{
             Kind,
             vertex::{TypeID, TypeIDUInt, TypeVertex},
@@ -35,10 +34,13 @@ use crate::{
     },
     layout::prefix::Prefix,
 };
+use crate::graph::rbac::{RBACRoleId, RBACRoleVertex};
 
 pub type TypeVertexAllocator = SchemaIDAllocator<TypeVertex>;
 pub type DefinitionKeyAllocator = SchemaIDAllocator<DefinitionKey>;
-pub type RBACVertexAllocator = SchemaIDAllocator<RBACRoleVertex>;
+
+#[derive(Debug)]
+pub struct RBACVertexAllocator;
 
 pub trait SchemaID: Sized {
     const MIN_ID: u64;
@@ -154,22 +156,32 @@ impl SchemaID for DefinitionKey {
     }
 }
 
-impl SchemaID for RBACRoleVertex {
-    const MIN_ID: u64 = u16::MIN as u64;
-    const MAX_ID: u64 = u16::MAX as u64;
-
-    fn object_from_id(prefix: Prefix, id: u64) -> RBACRoleVertex {
-        debug_assert!(prefix == Self::PREFIX);
-        debug_assert!((Self::MIN_ID..=Self::MAX_ID).contains(&id));
-        RBACRoleVertex::new(RBACRoleId::new(id as u16))
+impl RBACVertexAllocator {
+    pub(crate) fn new() -> RBACVertexAllocator {
+        Self
     }
 
-    fn id_from_key(key: StorageKey<'_, BUFFER_KEY_INLINE>) -> u64 {
-        RBACRoleVertex::decode(Bytes::reference(key.bytes())).role_id().as_u16() as u64
+    pub fn reset(&mut self) {
+        // Nothing. We're stateless
     }
 
-    fn ids_exhausted_error(prefix: Prefix) -> EncodingError {
-        debug_assert!(prefix == Self::PREFIX);
-        EncodingError::RBACRoleIDsExhausted {}
+    pub fn allocate(&self, snapshot: &mut impl WritableSnapshot) -> Result<RBACRoleVertex, EncodingError> {
+        fn generate_random() -> RBACRoleId {
+            RBACRoleId::new(rand::thread_rng().next_u64())
+        }
+        let mut role_id = generate_random();
+        while self.is_already_allocated(role_id, snapshot)
+            .map_err(|source| EncodingError::RBACRoleIDAllocate { source: std::sync::Arc::new(source) })? {
+            role_id = generate_random()
+        }
+        let vertex = RBACRoleVertex::new(role_id);
+        snapshot.put(vertex.into_storage_key().into_owned_array());
+        Ok(vertex)
+    }
+
+    fn is_already_allocated(&self, role_id: RBACRoleId, snapshot: &mut impl WritableSnapshot) -> Result<bool, SnapshotGetError> {
+        // TODO: Pass storage counters?
+        let storage_key = RBACRoleVertex::new(role_id).into_storage_key();
+        Ok(snapshot.get::<BUFFER_KEY_INLINE>(storage_key.as_reference(), StorageCounters::DISABLED)?.is_some())
     }
 }

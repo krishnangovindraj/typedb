@@ -5549,6 +5549,7 @@ dependencies = [
  "compiler",
  "concept",
  "database",
+ "encoding",
  "error",
  "executor",
  "function",

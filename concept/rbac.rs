@@ -9,6 +9,7 @@ use encoding::graph::{
     rbac::{RBACAccessKind, RBACRoleVertex},
     type_::vertex::TypeVertex,
 };
+use encoding::graph::rbac::RBACRoleId;
 use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
@@ -54,7 +55,7 @@ impl RBACRole {
         Self { vertex }
     }
 
-    pub(crate) fn vertex(&self) -> RBACRoleVertex {
+    pub fn vertex(&self) -> RBACRoleVertex {
         self.vertex
     }
 }
