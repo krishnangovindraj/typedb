@@ -193,26 +193,22 @@ pub mod user_repository {
 }
 
 pub mod rbac_repository {
-    use std::{
-        collections::HashMap,
-        sync::Arc,
-    };
+    use std::{collections::HashMap, sync::Arc};
 
     use answer::variable_value::VariableValue;
     use concept::{thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
-    use database::transaction::TransactionRead;
+    use database::{database::DatabaseUid, transaction::TransactionRead};
+    use encoding::graph::rbac::RBACRoleId;
     use function::function_manager::FunctionManager;
     use query::query_manager::QueryManager;
     use storage::{durability_client::WALClient, snapshot::WriteSnapshot};
     use typeql::parse_query;
-    use database::database::DatabaseUid;
-    use encoding::graph::rbac::RBACRoleId;
+
     use crate::{
-        concepts::{SystemPermission, Grantee},
+        concepts::{Grantee, SchemaDefinedRole, SystemPermission},
         repositories::{is_valid_typeql_value, user_repository::SystemDBError},
         util::query_util::{execute_read_pipeline, execute_write_pipeline},
     };
-    use crate::concepts::SchemaDefinedRole;
 
     const GRANTEE_NAME_VALUE_VARIABLE: &'static str = "grantee-name-value";
     const DATABASE_ID_VALUE_VARIABLE: &'static str = "database-id-value";
@@ -260,9 +256,7 @@ pub mod rbac_repository {
                 debug_assert!(_rows.len() == 1);
                 (Ok(()), snapshot)
             }
-            Err(typedb_source) => {
-                (Err(SystemDBError::QueryFailed { typedb_source }), snapshot)
-            }
+            Err(typedb_source) => (Err(SystemDBError::QueryFailed { typedb_source }), snapshot),
         }
     }
 
@@ -315,12 +309,9 @@ pub mod rbac_repository {
                 debug_assert!(_rows.len() == 1);
                 (Ok(()), snapshot)
             }
-            Err(typedb_source) => {
-                (Err(SystemDBError::QueryFailed { typedb_source }), snapshot)
-            }
+            Err(typedb_source) => (Err(SystemDBError::QueryFailed { typedb_source }), snapshot),
         }
     }
-
 
     pub fn list_roles(
         tx: TransactionRead<WALClient>,
@@ -356,8 +347,7 @@ pub mod rbac_repository {
     fn try_valid_granted_permission_from_row(row: HashMap<String, VariableValue>) -> Option<SystemPermission> {
         let permission_value =
             row.get(PERMISSION_LABEL_VALUE_VARIABLE).expect("Expected permission label value").as_value();
-        let database_id_value_opt =
-            row.get(DATABASE_ID_VALUE_VARIABLE).expect("Expected database id value");
+        let database_id_value_opt = row.get(DATABASE_ID_VALUE_VARIABLE).expect("Expected database id value");
         match permission_value.unwrap_string_ref() {
             "manage-databases" => Some(SystemPermission::ManageDatabases),
             "manage-users" => Some(SystemPermission::ManageUsers),
@@ -486,10 +476,7 @@ pub mod rbac_repository {
         Ok(query_string)
     }
 
-    fn build_grant_role_query(
-        grantee: &Grantee,
-        granted_role: &SchemaDefinedRole,
-    ) -> Result<String, SystemDBError> {
+    fn build_grant_role_query(grantee: &Grantee, granted_role: &SchemaDefinedRole) -> Result<String, SystemDBError> {
         let grantee_type = check_valid_value(grantee.type_to_typeql_value_string())?;
         let grantee_name = check_valid_value(grantee.name_to_typeql_value_string())?;
         let database_id = &granted_role.database.0;
@@ -512,5 +499,4 @@ pub mod rbac_repository {
         );
         Ok(query_string)
     }
-
 }

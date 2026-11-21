@@ -8,9 +8,10 @@ use std::{
     marker::PhantomData,
     sync::atomic::{AtomicU64, Ordering, Ordering::Relaxed},
 };
-use rand::RngCore;
+
 use bytes::Bytes;
 use lending_iterator::LendingIterator;
+use rand::RngCore;
 use resource::{
     constants::{encoding::DefinitionIDUInt, snapshot::BUFFER_KEY_INLINE},
     profile::StorageCounters,
@@ -18,15 +19,16 @@ use resource::{
 use storage::{
     key_range::{KeyRange, RangeEnd, RangeStart},
     key_value::StorageKey,
-    snapshot::WritableSnapshot,
+    snapshot::{SnapshotGetError, WritableSnapshot},
 };
-use storage::snapshot::SnapshotGetError;
+
 use crate::{
     Keyable,
     error::EncodingError,
     graph::{
         Typed,
         definition::definition_key::{DefinitionID, DefinitionKey},
+        rbac::{RBACRoleId, RBACRoleVertex},
         type_::{
             Kind,
             vertex::{TypeID, TypeIDUInt, TypeVertex},
@@ -34,7 +36,6 @@ use crate::{
     },
     layout::prefix::Prefix,
 };
-use crate::graph::rbac::{RBACRoleId, RBACRoleVertex};
 
 pub type TypeVertexAllocator = SchemaIDAllocator<TypeVertex>;
 pub type DefinitionKeyAllocator = SchemaIDAllocator<DefinitionKey>;
@@ -170,8 +171,10 @@ impl RBACVertexAllocator {
             RBACRoleId::new(rand::thread_rng().next_u64())
         }
         let mut role_id = generate_random();
-        while self.is_already_allocated(role_id, snapshot)
-            .map_err(|source| EncodingError::RBACRoleIDAllocate { source: std::sync::Arc::new(source) })? {
+        while self
+            .is_already_allocated(role_id, snapshot)
+            .map_err(|source| EncodingError::RBACRoleIDAllocate { source: std::sync::Arc::new(source) })?
+        {
             role_id = generate_random()
         }
         let vertex = RBACRoleVertex::new(role_id);
@@ -179,7 +182,11 @@ impl RBACVertexAllocator {
         Ok(vertex)
     }
 
-    fn is_already_allocated(&self, role_id: RBACRoleId, snapshot: &mut impl WritableSnapshot) -> Result<bool, SnapshotGetError> {
+    fn is_already_allocated(
+        &self,
+        role_id: RBACRoleId,
+        snapshot: &mut impl WritableSnapshot,
+    ) -> Result<bool, SnapshotGetError> {
         // TODO: Pass storage counters?
         let storage_key = RBACRoleVertex::new(role_id).into_storage_key();
         Ok(snapshot.get::<BUFFER_KEY_INLINE>(storage_key.as_reference(), StorageCounters::DISABLED)?.is_some())

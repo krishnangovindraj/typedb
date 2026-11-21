@@ -23,7 +23,10 @@ use storage::{StorageCommitError, snapshot::SnapshotError};
 use tokio_rustls::rustls::{
     pki_types::pem::Error as RustlsCertError, server::VerifierBuilderError as RustlsVerifierError,
 };
-use user::errors::{PermissionGrantError, PermissionListError, RoleGrantError, RoleListError, UserCreateError, UserDeleteError, UserGetError, UserUpdateError};
+use user::errors::{
+    PermissionGrantError, PermissionListError, RoleGrantError, RoleListError, UserCreateError, UserDeleteError,
+    UserGetError, UserUpdateError,
+};
 
 use crate::{
     authentication::{AuthenticationError, token_manager::TokenManagerError},
@@ -289,7 +292,9 @@ impl ServerStateError for LocalServerStateError {
                 | DatabaseExportError::TransactionCloseInterrupt { .. } => System,
             },
             Self::PermissionCannotBeGranted { typedb_source } => match typedb_source {
-                PermissionGrantError::UnexpectedDataCommit { .. } | PermissionGrantError::UnexpectedSystemDB { .. } => System,
+                PermissionGrantError::UnexpectedDataCommit { .. } | PermissionGrantError::UnexpectedSystemDB { .. } => {
+                    System
+                }
             },
             Self::PermissionsCannotBeListed { typedb_source } => match typedb_source {
                 PermissionListError::UnexpectedSystemDB { .. } => System,

@@ -4,9 +4,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use pwhash::bcrypt;
 use database::database::DatabaseUid;
 use encoding::graph::rbac::RBACRoleId;
+use pwhash::bcrypt;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct User {
@@ -121,9 +121,9 @@ impl SystemPermission {
 
     pub(crate) fn database(&self) -> Option<DatabaseUid> {
         match self {
-            SystemPermission::ManageDatabases
-            | SystemPermission::ManageUsers
-            | SystemPermission::GrantPermissions => None,
+            SystemPermission::ManageDatabases | SystemPermission::ManageUsers | SystemPermission::GrantPermissions => {
+                None
+            }
             SystemPermission::TransactionRead { database }
             | SystemPermission::TransactionWrite { database }
             | SystemPermission::SchemaTypes { database }

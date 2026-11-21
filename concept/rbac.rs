@@ -6,10 +6,9 @@
 use std::{collections::HashSet, fmt};
 
 use encoding::graph::{
-    rbac::{RBACAccessKind, RBACRoleVertex},
+    rbac::{RBACAccessKind, RBACRoleId, RBACRoleVertex},
     type_::vertex::TypeVertex,
 };
-use encoding::graph::rbac::RBACRoleId;
 use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
