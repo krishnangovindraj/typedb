@@ -7,7 +7,7 @@
 use std::collections::HashSet;
 
 use concept::{
-    rbac::{RBACAccess, RBACRole, check_role_has_access},
+    rbac::{RBACAccess, RBACRole, check_has_access},
     type_::object_type::ObjectType,
 };
 use cucumber::gherkin::Step;
@@ -69,6 +69,48 @@ async fn permission_param_to_typedb(context: &Context, param: SystemPermissionPa
     }
 }
 
+fn resolve_rbac_access(
+    type_manager: &concept::type_::type_manager::TypeManager,
+    snapshot: &impl storage::snapshot::ReadableSnapshot,
+    type_label: &Label,
+    access: &str,
+) -> Option<RBACAccess> {
+    if let Some(t) = type_manager.get_entity_type(snapshot, type_label).expect("Error getting entity type") {
+        Some(match access {
+            "read" => RBACAccess::ReadObject(ObjectType::Entity(t)),
+            "write" => RBACAccess::WriteObject(ObjectType::Entity(t)),
+            other => panic!("Unknown access type '{other}'; expected 'read' or 'write'"),
+        })
+    } else if let Some(t) = type_manager.get_relation_type(snapshot, type_label).expect("Error getting relation type") {
+        Some(match access {
+            "read" => RBACAccess::ReadObject(ObjectType::Relation(t)),
+            "write" => RBACAccess::WriteObject(ObjectType::Relation(t)),
+            other => panic!("Unknown access type '{other}'; expected 'read' or 'write'"),
+        })
+    } else if let Some(t) = type_manager.get_attribute_type(snapshot, type_label).expect("Error getting attribute type")
+    {
+        Some(match access {
+            "read" => RBACAccess::ReadAttribute(t),
+            "write" => RBACAccess::WriteAttribute(t),
+            other => panic!("Unknown access type '{other}'; expected 'read' or 'write'"),
+        })
+    } else {
+        None
+    }
+}
+
+fn check_rbac_access_on_type(
+    type_manager: &concept::type_::type_manager::TypeManager,
+    snapshot: &impl storage::snapshot::ReadableSnapshot,
+    role: &RBACRole,
+    type_label: &Label,
+    access: &str,
+) -> bool {
+    let access = resolve_rbac_access(type_manager, snapshot, type_label, access)
+        .unwrap_or_else(|| panic!("Could not resolve type '{type_label}'"));
+    check_has_access(snapshot, type_manager, role, &access, StorageCounters::DISABLED).unwrap()
+}
+
 #[apply(generic_step)]
 #[step(expr = "list rbac declared access for role: {word}")]
 async fn rbac_role_has_direct_grants(context: &mut Context, role_name: String, step: &Step) {
@@ -119,48 +161,6 @@ async fn rbac_role_has_access_on_type(
             check_rbac_access_on_type(&tx.type_manager, tx.snapshot.as_ref(), &role, &type_label, &access)
         );
     });
-}
-
-fn resolve_rbac_access(
-    type_manager: &concept::type_::type_manager::TypeManager,
-    snapshot: &impl storage::snapshot::ReadableSnapshot,
-    type_label: &Label,
-    access: &str,
-) -> Option<RBACAccess> {
-    if let Some(t) = type_manager.get_entity_type(snapshot, type_label).expect("Error getting entity type") {
-        Some(match access {
-            "read" => RBACAccess::ReadObject(ObjectType::Entity(t)),
-            "write" => RBACAccess::WriteObject(ObjectType::Entity(t)),
-            other => panic!("Unknown access type '{other}'; expected 'read' or 'write'"),
-        })
-    } else if let Some(t) = type_manager.get_relation_type(snapshot, type_label).expect("Error getting relation type") {
-        Some(match access {
-            "read" => RBACAccess::ReadObject(ObjectType::Relation(t)),
-            "write" => RBACAccess::WriteObject(ObjectType::Relation(t)),
-            other => panic!("Unknown access type '{other}'; expected 'read' or 'write'"),
-        })
-    } else if let Some(t) = type_manager.get_attribute_type(snapshot, type_label).expect("Error getting attribute type")
-    {
-        Some(match access {
-            "read" => RBACAccess::ReadAttribute(t),
-            "write" => RBACAccess::WriteAttribute(t),
-            other => panic!("Unknown access type '{other}'; expected 'read' or 'write'"),
-        })
-    } else {
-        None
-    }
-}
-
-fn check_rbac_access_on_type(
-    type_manager: &concept::type_::type_manager::TypeManager,
-    snapshot: &impl storage::snapshot::ReadableSnapshot,
-    role: &RBACRole,
-    type_label: &Label,
-    access: &str,
-) -> bool {
-    let access = resolve_rbac_access(type_manager, snapshot, type_label, access)
-        .unwrap_or_else(|| panic!("Could not resolve type '{type_label}'"));
-    check_role_has_access(snapshot, type_manager, role, &access, StorageCounters::DISABLED).unwrap()
 }
 
 #[apply(generic_step)]

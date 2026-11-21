@@ -17,7 +17,6 @@ use encoding::{
         definition::{
             definition_key::DefinitionKey, definition_key_generator::DefinitionKeyGenerator, r#struct::StructDefinition,
         },
-        rbac::RBACRoleId,
         type_::{Kind, vertex::TypeVertexEncoding, vertex_generator::TypeVertexGenerator},
     },
     layout::prefix::Prefix,

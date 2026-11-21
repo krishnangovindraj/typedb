@@ -76,7 +76,7 @@ impl RBACRoleVertex {
         debug_assert_eq!(bytes.length(), Self::LENGTH);
         debug_assert_eq!(bytes[Self::INDEX_PREFIX], Self::PREFIX.prefix_id().byte);
         let mut be_bytes = [0u8; RBACRoleId::LENGTH];
-        be_bytes.copy_from_slice(&bytes[PrefixID::LENGTH..Self::LENGTH]);
+        be_bytes.copy_from_slice(&bytes[Self::range_role_id()]);
         Self { role_id: RBACRoleId::new(u64::from_be_bytes(be_bytes)) }
     }
 
@@ -88,7 +88,7 @@ impl RBACRoleVertex {
             return None;
         }
         let mut be_bytes = [0u8; RBACRoleId::LENGTH];
-        be_bytes.copy_from_slice(&bytes[PrefixID::LENGTH..Self::LENGTH]);
+        be_bytes.copy_from_slice(&bytes[Self::range_role_id()]);
         Some(Self { role_id: RBACRoleId::new(u64::from_be_bytes(be_bytes)) })
     }
 
