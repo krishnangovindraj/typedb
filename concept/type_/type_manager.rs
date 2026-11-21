@@ -35,7 +35,6 @@ use validation::{commit_time_validation::CommitTimeValidation, operation_time_va
 
 use crate::{
     error::{ConceptReadError, ConceptWriteError},
-    rbac::{RBACAccess, RBACRole},
     thing::thing_manager::ThingManager,
     type_::{
         Capability, Independent, KindAPI, ObjectTypeAPI, Ordering, OwnerAPI, PlayerAPI, TypeAPI, TypeQLSyntax,
@@ -1182,32 +1181,6 @@ impl TypeManager {
             struct_definition.format_syntax(&mut syntax, snapshot, self)?;
         }
         Ok(syntax)
-    }
-
-    pub fn get_rbac_role(
-        &self,
-        snapshot: &impl ReadableSnapshot,
-        role_name: &str,
-        _storage_counters: StorageCounters,
-    ) -> Result<MaybeOwns<'_, Option<RBACRole>>, Box<ConceptReadError>> {
-        if let Some(cache) = &self.type_cache {
-            Ok(MaybeOwns::Owned(cache.get_rbac_role(role_name)))
-        } else {
-            Ok(MaybeOwns::Owned(TypeReader::get_rbac_role(snapshot, role_name)?))
-        }
-    }
-
-    pub fn list_rbac_declared_access(
-        &self,
-        snapshot: &impl ReadableSnapshot,
-        role: &RBACRole,
-        _storage_counters: StorageCounters,
-    ) -> Result<MaybeOwns<'_, HashSet<RBACAccess>>, Box<ConceptReadError>> {
-        if let Some(cache) = &self.type_cache {
-            Ok(MaybeOwns::Borrowed(cache.get_rbac_role_access(role)))
-        } else {
-            Ok(MaybeOwns::Owned(TypeReader::list_rbac_declared_access(snapshot, role)?))
-        }
     }
 }
 
@@ -3950,54 +3923,6 @@ impl TypeManager {
         )
         .map_err(|typedb_source| ConceptWriteError::SchemaValidation { typedb_source })?;
 
-        Ok(())
-    }
-
-    pub fn create_rbac_role(
-        &self,
-        snapshot: &mut impl WritableSnapshot,
-        name: &str,
-        _storage_counters: StorageCounters,
-    ) -> Result<RBACRole, Box<ConceptWriteError>> {
-        OperationTimeValidation::validate_rbac_role_name_uniqueness(snapshot, name)
-            .map_err(|typedb_source| ConceptWriteError::SchemaValidation { typedb_source })?;
-        let role_vertex = self
-            .definition_key_generator
-            .create_rbac_role(snapshot)
-            .map_err(|source| Box::new(ConceptWriteError::Encoding { source }))?;
-        let role = RBACRole::new(role_vertex);
-        TypeWriter::storage_set_rbac_role_name(snapshot, role, name);
-        Ok(role)
-    }
-
-    pub fn delete_rbac_role(
-        &self,
-        snapshot: &mut impl WritableSnapshot,
-        role: &RBACRole,
-        _storage_counters: StorageCounters,
-    ) -> Result<(), Box<ConceptWriteError>> {
-        error::todo_must_implement!("Delete all access, properties and the 'vertex'")
-    }
-
-    pub fn set_rbac_access(
-        &self,
-        snapshot: &mut impl WritableSnapshot,
-        role: RBACRole,
-        access: RBACAccess,
-        _storage_counters: StorageCounters,
-    ) -> Result<(), Box<ConceptWriteError>> {
-        TypeWriter::storage_put_rbac_role_access(snapshot, role, access);
-        Ok(())
-    }
-
-    pub fn unset_rbac_access(
-        &self,
-        snapshot: &mut impl WritableSnapshot,
-        role: RBACRole,
-        access: RBACAccess,
-        _storage_counters: StorageCounters,
-    ) -> Result<(), Box<ConceptWriteError>> {
-        TypeWriter::storage_delete_rbac_role_access(snapshot, role, access);
         Ok(())
     }
 }

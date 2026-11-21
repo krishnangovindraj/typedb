@@ -12,11 +12,10 @@ use encoding::{
     error::EncodingError,
     graph::{
         definition::{DefinitionValueEncoding, definition_key::DefinitionKey, r#struct::StructDefinition},
-        rbac::{RBACRoleProperty, RBACRoleTypeAccess, RBACRoleVertex},
         type_::{
             CapabilityKind,
             edge::{TypeEdge, TypeEdgeEncoding},
-            index::{IdentifierIndex, LabelToTypeVertexIndex, NameToRBACRoleVertexIndex, NameToStructDefinitionIndex},
+            index::{IdentifierIndex, LabelToTypeVertexIndex, NameToStructDefinitionIndex},
             property::{TypeEdgeProperty, TypeEdgePropertyEncoding, TypeVertexProperty, TypeVertexPropertyEncoding},
             vertex::{PrefixedTypeVertexEncoding, TypeVertex, TypeVertexEncoding},
         },
@@ -39,7 +38,6 @@ use storage::{
 
 use crate::{
     error::ConceptReadError,
-    rbac::{RBACAccess, RBACRole},
     type_::{
         Capability, Independent, KindAPI, Ordering, TypeAPI,
         annotation::{
@@ -893,63 +891,5 @@ impl TypeReader {
             CapabilityKind::Sub => (),
         }
         Ok(())
-    }
-
-    pub(crate) fn get_all_rbac_roles(snapshot: &impl ReadableSnapshot) -> Result<Vec<RBACRole>, Box<ConceptReadError>> {
-        snapshot
-            .iterate_range(
-                &KeyRange::new_within(RBACRoleVertex::build_prefix(), RBACRoleVertex::FIXED_WIDTH_ENCODING),
-                StorageCounters::DISABLED,
-            )
-            .collect_cloned_vec(|key, _| RBACRole::new(RBACRoleVertex::decode(Bytes::copy(key.bytes()))))
-            .map_err(|error| Box::new(ConceptReadError::SnapshotIterate { source: error }))
-    }
-
-    pub(crate) fn get_rbac_role(
-        snapshot: &impl ReadableSnapshot,
-        name: &str,
-    ) -> Result<Option<RBACRole>, Box<ConceptReadError>> {
-        let key = NameToRBACRoleVertexIndex::build(name).into_storage_key();
-        match snapshot.get::<BUFFER_KEY_INLINE>(key.as_reference(), StorageCounters::DISABLED) {
-            Err(error) => Err(Box::new(ConceptReadError::SnapshotGet { source: error })),
-            Ok(None) => Ok(None),
-            Ok(Some(value)) => Ok(Some(RBACRole::new(RBACRoleVertex::decode(Bytes::Array(value))))),
-        }
-    }
-
-    pub(crate) fn get_rbac_role_label(
-        snapshot: &impl ReadableSnapshot,
-        role: RBACRole,
-    ) -> Result<Option<Label>, Box<ConceptReadError>> {
-        let property = snapshot
-            .get_mapped(
-                RBACRoleProperty::new_key_for_label(role.vertex()).into_storage_key().as_reference(),
-                |value| {
-                    let string_bytes = StringBytes::new(Bytes::<{ LABEL_SCOPED_NAME_STRING_INLINE }>::Reference(value));
-                    Label::parse_from_bytes(string_bytes)
-                },
-                StorageCounters::DISABLED,
-            )
-            .map_err(|err| Box::new(ConceptReadError::SnapshotGet { source: err }))?;
-        Ok(property)
-    }
-
-    pub(crate) fn list_rbac_declared_access(
-        snapshot: &impl ReadableSnapshot,
-        role: &RBACRole,
-    ) -> Result<HashSet<RBACAccess>, Box<ConceptReadError>> {
-        snapshot
-            .iterate_range(
-                &KeyRange::new_within(
-                    RBACRoleTypeAccess::build_prefix_role(role.vertex()),
-                    TypeEdge::FIXED_WIDTH_ENCODING,
-                ),
-                StorageCounters::DISABLED,
-            )
-            .collect_cloned_hashset(|key, _| {
-                let access = RBACRoleTypeAccess::decode(Bytes::Reference(key.bytes()).into_owned());
-                RBACAccess::new_type_access(access.access_type(), access.type_())
-            })
-            .map_err(|error| Box::new(ConceptReadError::SnapshotIterate { source: error }))
     }
 }

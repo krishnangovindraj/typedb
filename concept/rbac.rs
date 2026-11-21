@@ -9,20 +9,13 @@ use encoding::graph::{
     rbac::{RBACAccessKind, RBACRoleVertex},
     type_::vertex::TypeVertex,
 };
-use resource::profile::StorageCounters;
-use storage::snapshot::ReadableSnapshot;
 
-use crate::{
-    error::ConceptReadError,
-    type_::{TypeAPI, attribute_type::AttributeType, object_type::ObjectType, type_manager::TypeManager},
-};
-compile_error!("You want rbac to be its own top level module");
+use crate::type_::{attribute_type::AttributeType, object_type::ObjectType};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum RBACAccess {
     ReadObject(ObjectType),
     WriteObject(ObjectType),
-    // More to come?
     ReadAttribute(AttributeType),
     WriteAttribute(AttributeType),
 }
@@ -45,12 +38,11 @@ pub struct RBACRole {
 
 impl fmt::Debug for RBACRole {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Entity[{:?}]", self.vertex.role_id())
+        write!(f, "RBACRole[{:?}]", self.vertex.role_id())
     }
 }
 
 impl RBACRole {
-    // Do we need to copy the type manager methods here for consistency w/ concepts?
     pub fn new(vertex: RBACRoleVertex) -> Self {
         Self { vertex }
     }
@@ -58,26 +50,4 @@ impl RBACRole {
     pub fn vertex(&self) -> RBACRoleVertex {
         self.vertex
     }
-
-    pub fn check_has_access(
-        &self,
-        snapshot: &impl ReadableSnapshot,
-        type_manager: &TypeManager,
-        access: &RBACAccess,
-        storage_counters: StorageCounters,
-    ) -> Result<bool, Box<ConceptReadError>> {
-        check_has_access(snapshot, type_manager, self, access, storage_counters)
-    }
-
-}
-
-fn check_has_access(
-    snapshot: &impl ReadableSnapshot,
-    type_manager: &TypeManager,
-    role: &RBACRole,
-    access: &RBACAccess,
-    storage_counters: StorageCounters,
-) -> Result<bool, Box<ConceptReadError>> {
-    let all_accesses = type_manager.list_rbac_declared_access(snapshot, role, storage_counters)?;
-    Ok(all_accesses.contains(access))
 }

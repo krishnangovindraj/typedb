@@ -25,6 +25,7 @@ use encoding::{
 use error::typedb_error;
 use function::{FunctionError, function_manager::FunctionManager};
 use ir::{LiteralParseError, translation::tokens::translate_annotation_category};
+use rbac::{RBACError, rbac_manager::RBACManager};
 use resource::profile::StorageCounters;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 use typeql::{
@@ -75,6 +76,7 @@ pub(crate) fn execute(
     type_manager: &TypeManager,
     thing_manager: &ThingManager,
     function_manager: &FunctionManager,
+    rbac_manager: &RBACManager,
     undefine: &Undefine,
 ) -> Result<(), UndefineError> {
     process_function_undefinitions(snapshot, function_manager, &undefine.undefinables)?;
@@ -84,7 +86,7 @@ pub(crate) fn execute(
     process_type_annotation_undefinitions(snapshot, type_manager, &undefine.undefinables)?;
     process_type_undefinitions(snapshot, type_manager, thing_manager, &undefine.undefinables)?;
     process_struct_undefinitions(snapshot, type_manager, thing_manager, &undefine.undefinables)?;
-    process_role_undefinitions(snapshot, type_manager, &undefine.undefinables)?;
+    process_role_undefinitions(snapshot, type_manager, rbac_manager, &undefine.undefinables)?;
     Ok(())
 }
 
@@ -929,23 +931,24 @@ fn undefine_struct(
 fn process_role_undefinitions(
     snapshot: &mut impl WritableSnapshot,
     type_manager: &TypeManager,
+    rbac_manager: &RBACManager,
     undefinables: &[Undefinable],
 ) -> Result<(), UndefineError> {
     // Process removed accesses before processsing deleted role vertices
     filter_variants!(Undefinable::RBACAccess : undefinables)
-        .try_for_each(|rbac_access| undefine_rbac_access(snapshot, type_manager, rbac_access))?;
+        .try_for_each(|rbac_access| undefine_rbac_access(snapshot, type_manager, rbac_manager, rbac_access))?;
     filter_variants!(Undefinable::RBACRole : undefinables)
-        .try_for_each(|label| undefine_rbac_role(snapshot, type_manager, label))?;
+        .try_for_each(|label| undefine_rbac_role(snapshot, rbac_manager, label))?;
     Ok(())
 }
 
 fn undefine_rbac_role(
     snapshot: &mut impl WritableSnapshot,
-    type_manager: &TypeManager,
+    rbac_manager: &RBACManager,
     label: &TypeQLLabel,
 ) -> Result<(), UndefineError> {
     let role_name = checked_identifier(&label.ident)?;
-    let resolved_role = type_manager
+    let resolved_role = rbac_manager
         .get_rbac_role(snapshot, &role_name, StorageCounters::DISABLED)
         .map_err(|typedb_source| UndefineError::UnexpectedConceptRead { typedb_source })?
         .ok_or_else(|| UndefineError::DefinitionResolution {
@@ -954,7 +957,7 @@ fn undefine_rbac_role(
                 source_span: label.span(),
             }),
         })?;
-    type_manager.delete_rbac_role(snapshot, &resolved_role, StorageCounters::DISABLED).map_err(|typedb_source| {
+    rbac_manager.delete_rbac_role(snapshot, &resolved_role, StorageCounters::DISABLED).map_err(|typedb_source| {
         UndefineError::RBACRoleDeleteError { name: role_name.to_owned(), typedb_source, source_span: label.span() }
     })?;
     Ok(())
@@ -963,10 +966,11 @@ fn undefine_rbac_role(
 fn undefine_rbac_access(
     snapshot: &mut impl WritableSnapshot,
     type_manager: &TypeManager,
+    rbac_manager: &RBACManager,
     rbac_access: &RBACAccessFrom,
 ) -> Result<(), UndefineError> {
     let role_name = checked_identifier(&rbac_access.from.ident)?;
-    let resolved_role = type_manager
+    let resolved_role = rbac_manager
         .get_rbac_role(snapshot, &role_name, StorageCounters::DISABLED)
         .map_err(|typedb_source| UndefineError::UnexpectedConceptRead { typedb_source })?
         .ok_or_else(|| UndefineError::DefinitionResolution {
@@ -983,7 +987,7 @@ fn undefine_rbac_access(
         let type_label = Label::parse_from(checked_identifier(&typeql_label.ident)?, typeql_label.span());
         let access = resolve_rbac_type_access(snapshot, type_manager, access_kind, &type_label)
             .map_err(|typedb_source| UndefineError::DefinitionResolution { typedb_source })?;
-        type_manager.unset_rbac_access(snapshot, resolved_role, access, StorageCounters::DISABLED).map_err(
+        rbac_manager.unset_rbac_access(snapshot, resolved_role, access, StorageCounters::DISABLED).map_err(
             |typedb_source| UndefineError::RBACAccessRemoveError { source_span: rbac_access.span(), typedb_source },
         )
     })
@@ -1342,13 +1346,13 @@ typedb_error! {
             "Error deleting the RBAC role '{name}'.",
             name: String,
             source_span: Option<Span>,
-            typedb_source: Box<ConceptWriteError>
+            typedb_source: Box<RBACError>
         ),
         RBACAccessRemoveError(
             39,
             "Error removing RBAC access.",
             source_span: Option<Span>,
-            typedb_source: Box<ConceptWriteError>
+            typedb_source: Box<RBACError>
         ),
     }
 }

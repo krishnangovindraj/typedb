@@ -905,22 +905,6 @@ impl OperationTimeValidation {
         Ok(())
     }
 
-    pub(crate) fn validate_rbac_role_name_uniqueness(
-        snapshot: &impl ReadableSnapshot,
-        name: &str,
-    ) -> Result<(), Box<SchemaValidationError>> {
-        let rbac_role_clash = TypeReader::get_rbac_role(snapshot, name)
-            .map_err(|typedb_source| Box::new(SchemaValidationError::ConceptRead { typedb_source }))?
-            .is_some();
-        // TODO: Check other types clash?
-
-        if rbac_role_clash {
-            Err(Box::new(SchemaValidationError::RBACRoleNameShouldBeUnique { name: name.to_owned() }))
-        } else {
-            Ok(())
-        }
-    }
-
     pub(crate) fn validate_value_type_is_compatible_with_new_supertypes_value_type_transitive(
         snapshot: &impl ReadableSnapshot,
         type_manager: &TypeManager,

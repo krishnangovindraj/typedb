@@ -7,7 +7,7 @@
 use std::collections::HashSet;
 
 use concept::{
-    rbac::{RBACAccess, RBACRole, check_has_access},
+    rbac::{RBACAccess, RBACRole},
     type_::object_type::ObjectType,
 };
 use cucumber::gherkin::Step;
@@ -38,7 +38,7 @@ async fn resolve_role_uid(context: &Context, database_name: &str, role_name: &st
     let database = db_opt.unwrap().expect("Database with name '{name}' not found ");
     let tx = TransactionRead::open(database, TransactionOptions::default()).expect("Should be able to open");
     let role = tx
-        .type_manager
+        .rbac_manager
         .get_rbac_role(&*tx.snapshot, role_name, StorageCounters::DISABLED)
         .unwrap()
         .expect(format!("Could not find role '{role_name}' in the database '{database_name}'").as_str());
@@ -101,6 +101,7 @@ fn resolve_rbac_access(
 
 fn check_rbac_access_on_type(
     type_manager: &concept::type_::type_manager::TypeManager,
+    rbac_manager: &rbac::rbac_manager::RBACManager,
     snapshot: &impl storage::snapshot::ReadableSnapshot,
     role: &RBACRole,
     type_label: &Label,
@@ -108,7 +109,7 @@ fn check_rbac_access_on_type(
 ) -> bool {
     let access = resolve_rbac_access(type_manager, snapshot, type_label, access)
         .unwrap_or_else(|| panic!("Could not resolve type '{type_label}'"));
-    check_has_access(snapshot, type_manager, role, &access, StorageCounters::DISABLED).unwrap()
+    rbac_manager.check_has_access(snapshot, role, &access, StorageCounters::DISABLED).unwrap()
 }
 
 #[apply(generic_step)]
@@ -116,13 +117,13 @@ fn check_rbac_access_on_type(
 async fn rbac_role_has_direct_grants(context: &mut Context, role_name: String, step: &Step) {
     with_read_tx!(context, |tx| {
         let role = tx
-            .type_manager
+            .rbac_manager
             .get_rbac_role(tx.snapshot.as_ref(), &role_name, StorageCounters::DISABLED)
             .expect("Error getting RBAC role")
             .unwrap_or_else(|| panic!("RBAC role '{role_name}' not found"));
 
         let declared_roles = tx
-            .type_manager
+            .rbac_manager
             .list_rbac_declared_access(tx.snapshot.as_ref(), &role, StorageCounters::DISABLED)
             .expect("Error getting reading RBAC permissions for role");
 
@@ -150,7 +151,7 @@ async fn rbac_role_has_access_on_type(
 ) {
     with_read_tx!(context, |tx| {
         let role = tx
-            .type_manager
+            .rbac_manager
             .get_rbac_role(tx.snapshot.as_ref(), &role_name, StorageCounters::DISABLED)
             .expect("Error getting RBAC role")
             .unwrap_or_else(|| panic!("RBAC role '{role_name}' not found"));
@@ -158,7 +159,14 @@ async fn rbac_role_has_access_on_type(
         let type_label = Label::build(&type_name, None);
         params::check_boolean!(
             expected_has_access,
-            check_rbac_access_on_type(&tx.type_manager, tx.snapshot.as_ref(), &role, &type_label, &access)
+            check_rbac_access_on_type(
+                &tx.type_manager,
+                &tx.rbac_manager,
+                tx.snapshot.as_ref(),
+                &role,
+                &type_label,
+                &access
+            )
         );
     });
 }

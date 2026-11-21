@@ -1308,6 +1308,7 @@ dependencies = [
  "logger",
  "options",
  "query",
+ "rbac",
  "resource",
  "rocksdb",
  "serde",
@@ -2926,6 +2927,7 @@ dependencies = [
  "pprof",
  "query",
  "rand 0.8.8",
+ "rbac",
  "resource",
  "serde",
  "storage",
@@ -4112,6 +4114,7 @@ dependencies = [
  "paste",
  "pprof",
  "rand 0.8.8",
+ "rbac",
  "resource",
  "serde",
  "storage",
@@ -4322,6 +4325,19 @@ checksum = "22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
+]
+
+[[package]]
+name = "rbac"
+version = "0.0.0"
+dependencies = [
+ "bytes 0.0.0",
+ "concept",
+ "encoding",
+ "error",
+ "primitive",
+ "resource",
+ "storage",
 ]
 
 [[package]]
@@ -5333,6 +5349,7 @@ dependencies = [
  "params",
  "primitive",
  "query",
+ "rbac",
  "resource",
  "serde_json",
  "server",
@@ -5557,6 +5574,7 @@ dependencies = [
  "options",
  "pwhash",
  "query",
+ "rbac",
  "resource",
  "storage",
  "typeql",
@@ -6195,6 +6213,7 @@ dependencies = [
  "query",
  "rand 0.8.8",
  "rand_core 0.3.2",
+ "rbac",
  "resource",
  "sentry",
  "server",

@@ -30,6 +30,7 @@ use encoding::{
 use error::typedb_error;
 use function::{FunctionError, function_manager::FunctionManager};
 use ir::{LiteralParseError, pipeline::VariableRegistry, translation::tokens::translate_annotation};
+use rbac::{RBACError, rbac_manager::RBACManager};
 use resource::profile::StorageCounters;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 use typeql::{
@@ -85,13 +86,14 @@ pub(crate) fn execute(
     type_manager: &TypeManager,
     thing_manager: &ThingManager,
     function_manager: &FunctionManager,
+    rbac_manager: &RBACManager,
     define: &Define,
     storage_counters: StorageCounters,
 ) -> Result<(), DefineError> {
     process_struct_definitions(snapshot, type_manager, &define.definables)?;
     process_type_definitions(snapshot, type_manager, thing_manager, &define.definables, storage_counters.clone())?;
     process_function_definitions(snapshot, function_manager, &define.definables)?;
-    process_role_definitions(snapshot, type_manager, &define.definables, storage_counters.clone())?;
+    process_role_definitions(snapshot, type_manager, rbac_manager, &define.definables, storage_counters.clone())?;
     Ok(())
 }
 
@@ -156,13 +158,14 @@ fn process_function_definitions(
 fn process_role_definitions(
     snapshot: &mut impl WritableSnapshot,
     type_manager: &TypeManager,
+    rbac_manager: &RBACManager,
     definables: &[Definable],
     storage_counters: StorageCounters,
 ) -> Result<(), DefineError> {
     filter_variants!(Definable::RBACDeclaration : definables).try_for_each(|rbac| {
         if rbac.kind.is_some() {
             let role_name = checked_identifier(&rbac.label.ident)?;
-            type_manager.create_rbac_role(snapshot, role_name, storage_counters.clone()).map_err(|typedb_source| {
+            rbac_manager.create_rbac_role(snapshot, role_name, storage_counters.clone()).map_err(|typedb_source| {
                 DefineError::CreateRBACRole { role_name: role_name.to_owned(), source_span: rbac.span(), typedb_source }
             })?;
         }
@@ -170,7 +173,7 @@ fn process_role_definitions(
     })?;
     filter_variants!(Definable::RBACDeclaration : definables).try_for_each(|rbac| {
         let role_name = checked_identifier(&rbac.label.ident)?;
-        let resolved_role = type_manager
+        let resolved_role = rbac_manager
             .get_rbac_role(snapshot, &role_name, storage_counters.clone())
             .map_err(|typedb_source| DefineError::UnexpectedConceptRead { typedb_source })?
             .ok_or_else(|| DefineError::SymbolResolution {
@@ -188,7 +191,7 @@ fn process_role_definitions(
                 let type_label = Label::parse_from(checked_identifier(&typeql_label.ident)?, typeql_label.span());
                 let access = resolve_rbac_type_access(snapshot, type_manager, access_kind, &type_label)
                     .map_err(|typedb_source| DefineError::SymbolResolution { typedb_source })?;
-                type_manager.set_rbac_access(snapshot, resolved_role, access, storage_counters.clone()).map_err(
+                rbac_manager.set_rbac_access(snapshot, resolved_role, access, storage_counters.clone()).map_err(
                     |typedb_source| DefineError::CreateRBACAccess {
                         role_name: role_name.to_owned(),
                         type_label,
@@ -1476,7 +1479,7 @@ typedb_error! {
             "An error occured when creating the RBAC role: '{role_name}'",
             role_name: String,
             source_span: Option<Span>,
-            typedb_source: Box<ConceptWriteError>
+            typedb_source: Box<RBACError>
         ),
         CreateRBACAccess(
             33,
@@ -1484,7 +1487,7 @@ typedb_error! {
             role_name: String,
             type_label: Label,
             source_span: Option<Span>,
-            typedb_source: Box<ConceptWriteError>
+            typedb_source: Box<RBACError>
         ),
     }
 }

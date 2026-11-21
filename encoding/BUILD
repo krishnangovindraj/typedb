@@ -23,6 +23,7 @@ package(default_visibility = [
     "//function:__subpackages__",
     "//inference:__subpackages__",
     "//ir:__subpackages__",
+    "//rbac:__subpackages__",
     "//server:__subpackages__",
     "//system:__subpackages__",
     "//query:__subpackages__",

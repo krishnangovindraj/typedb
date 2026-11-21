@@ -1,0 +1,256 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+use std::{collections::HashSet, sync::Arc};
+
+use bytes::Bytes;
+use concept::{
+    error::ConceptReadError,
+    rbac::{RBACAccess, RBACRole},
+};
+use encoding::{
+    Keyable,
+    graph::{
+        definition::definition_key_generator::DefinitionKeyGenerator,
+        rbac::{RBACAccessKind, RBACRoleProperty, RBACRoleTypeAccess, RBACRoleVertex},
+        type_::index::NameToRBACRoleVertexIndex,
+    },
+    value::{label::Label, string_bytes::StringBytes},
+};
+use primitive::maybe_owns::MaybeOwns;
+use resource::{
+    constants::{encoding::LABEL_SCOPED_NAME_STRING_INLINE, snapshot::BUFFER_KEY_INLINE},
+    profile::StorageCounters,
+};
+use storage::{
+    key_range::{KeyRange, RangeEnd, RangeStart},
+    snapshot::{ReadableSnapshot, WritableSnapshot},
+};
+
+use crate::{RBACError, rbac_cache::RBACCache};
+
+#[derive(Debug)]
+pub struct RBACManager {
+    definition_key_generator: Arc<DefinitionKeyGenerator>,
+    rbac_cache: Option<Arc<RBACCache>>,
+}
+
+impl RBACManager {
+    pub fn new(definition_key_generator: Arc<DefinitionKeyGenerator>, rbac_cache: Option<Arc<RBACCache>>) -> Self {
+        RBACManager { definition_key_generator, rbac_cache }
+    }
+
+    pub fn get_rbac_role(
+        &self,
+        snapshot: &impl ReadableSnapshot,
+        role_name: &str,
+        _storage_counters: StorageCounters,
+    ) -> Result<Option<RBACRole>, Box<ConceptReadError>> {
+        if let Some(cache) = &self.rbac_cache {
+            Ok(cache.get_rbac_role(role_name))
+        } else {
+            RBACReader::get_rbac_role(snapshot, role_name)
+        }
+    }
+
+    pub fn list_rbac_declared_access(
+        &self,
+        snapshot: &impl ReadableSnapshot,
+        role: &RBACRole,
+        _storage_counters: StorageCounters,
+    ) -> Result<MaybeOwns<'_, HashSet<RBACAccess>>, Box<ConceptReadError>> {
+        if let Some(cache) = &self.rbac_cache {
+            Ok(MaybeOwns::Borrowed(cache.get_rbac_role_access(role)))
+        } else {
+            Ok(MaybeOwns::Owned(RBACReader::list_rbac_declared_access(snapshot, role)?))
+        }
+    }
+
+    pub fn create_rbac_role(
+        &self,
+        snapshot: &mut impl WritableSnapshot,
+        name: &str,
+        _storage_counters: StorageCounters,
+    ) -> Result<RBACRole, Box<RBACError>> {
+        let existing = RBACReader::get_rbac_role(snapshot, name)
+            .map_err(|typedb_source| Box::new(RBACError::ConceptRead { typedb_source }))?;
+        if existing.is_some() {
+            return Err(Box::new(RBACError::RBACRoleAlreadyExists { name: name.to_owned() }));
+        }
+        let role_vertex = self
+            .definition_key_generator
+            .create_rbac_role(snapshot)
+            .map_err(|source| Box::new(RBACError::CreateRBACRoleEncoding { source }))?;
+        let role = RBACRole::new(role_vertex);
+        RBACWriter::storage_set_rbac_role_name(snapshot, role, name);
+        Ok(role)
+    }
+
+    pub fn delete_rbac_role(
+        &self,
+        _snapshot: &mut impl WritableSnapshot,
+        _role: &RBACRole,
+        _storage_counters: StorageCounters,
+    ) -> Result<(), Box<RBACError>> {
+        error::todo_must_implement!("Delete all access, properties and the 'vertex'")
+    }
+
+    pub fn set_rbac_access(
+        &self,
+        snapshot: &mut impl WritableSnapshot,
+        role: RBACRole,
+        access: RBACAccess,
+        _storage_counters: StorageCounters,
+    ) -> Result<(), Box<RBACError>> {
+        RBACWriter::storage_put_rbac_role_access(snapshot, role, access);
+        Ok(())
+    }
+
+    pub fn unset_rbac_access(
+        &self,
+        snapshot: &mut impl WritableSnapshot,
+        role: RBACRole,
+        access: RBACAccess,
+        _storage_counters: StorageCounters,
+    ) -> Result<(), Box<RBACError>> {
+        RBACWriter::storage_delete_rbac_role_access(snapshot, role, access);
+        Ok(())
+    }
+
+    pub fn check_has_access(
+        &self,
+        snapshot: &impl ReadableSnapshot,
+        role: &RBACRole,
+        access: &RBACAccess,
+        storage_counters: StorageCounters,
+    ) -> Result<bool, Box<ConceptReadError>> {
+        let all_accesses = self.list_rbac_declared_access(snapshot, role, storage_counters)?;
+        Ok(all_accesses.contains(access))
+    }
+}
+
+pub struct RBACReader;
+
+impl RBACReader {
+    pub fn get_all_rbac_roles(snapshot: &impl ReadableSnapshot) -> Result<Vec<RBACRole>, Box<ConceptReadError>> {
+        snapshot
+            .iterate_range(
+                &KeyRange::new_within(RBACRoleVertex::build_prefix(), RBACRoleVertex::FIXED_WIDTH_ENCODING),
+                StorageCounters::DISABLED,
+            )
+            .collect_cloned_vec(|key, _| RBACRole::new(RBACRoleVertex::decode(Bytes::copy(key.bytes()))))
+            .map_err(|error| Box::new(ConceptReadError::SnapshotIterate { source: error }))
+    }
+
+    pub fn get_rbac_role(
+        snapshot: &impl ReadableSnapshot,
+        name: &str,
+    ) -> Result<Option<RBACRole>, Box<ConceptReadError>> {
+        let key = NameToRBACRoleVertexIndex::build(name).into_storage_key();
+        match snapshot.get::<BUFFER_KEY_INLINE>(key.as_reference(), StorageCounters::DISABLED) {
+            Err(error) => Err(Box::new(ConceptReadError::SnapshotGet { source: error })),
+            Ok(None) => Ok(None),
+            Ok(Some(value)) => Ok(Some(RBACRole::new(RBACRoleVertex::decode(Bytes::Array(value))))),
+        }
+    }
+
+    pub fn get_rbac_role_label(
+        snapshot: &impl ReadableSnapshot,
+        role: RBACRole,
+    ) -> Result<Option<Label>, Box<ConceptReadError>> {
+        let property = snapshot
+            .get_mapped(
+                RBACRoleProperty::new_key_for_label(role.vertex()).into_storage_key().as_reference(),
+                |value| {
+                    let string_bytes = StringBytes::new(Bytes::<{ LABEL_SCOPED_NAME_STRING_INLINE }>::Reference(value));
+                    Label::parse_from_bytes(string_bytes)
+                },
+                StorageCounters::DISABLED,
+            )
+            .map_err(|err| Box::new(ConceptReadError::SnapshotGet { source: err }))?;
+        Ok(property)
+    }
+
+    pub fn list_rbac_declared_access(
+        snapshot: &impl ReadableSnapshot,
+        role: &RBACRole,
+    ) -> Result<HashSet<RBACAccess>, Box<ConceptReadError>> {
+        use encoding::graph::type_::edge::TypeEdge;
+        snapshot
+            .iterate_range(
+                &KeyRange::new_within(
+                    RBACRoleTypeAccess::build_prefix_role(role.vertex()),
+                    TypeEdge::FIXED_WIDTH_ENCODING,
+                ),
+                StorageCounters::DISABLED,
+            )
+            .collect_cloned_hashset(|key, _| {
+                let access = RBACRoleTypeAccess::decode(Bytes::Reference(key.bytes()).into_owned());
+                RBACAccess::new_type_access(access.access_type(), access.type_())
+            })
+            .map_err(|error| Box::new(ConceptReadError::SnapshotIterate { source: error }))
+    }
+}
+
+pub(crate) struct RBACWriter;
+
+impl RBACWriter {
+    pub(crate) fn storage_set_rbac_role_name(snapshot: &mut impl WritableSnapshot, role: RBACRole, name: &str) {
+        let index_key = NameToRBACRoleVertexIndex::build(name);
+        snapshot.put_val(
+            index_key.into_storage_key().into_owned_array(),
+            bytes::byte_array::ByteArray::copy(&role.vertex().to_bytes()),
+        );
+
+        let property_label_key = RBACRoleProperty::new_key_for_label(role.vertex());
+        let property_label_value = StringBytes::build_ref(name).to_bytes();
+        snapshot.put_val(property_label_key.into_storage_key().into_owned_array(), property_label_value.into_array());
+    }
+
+    pub(crate) fn storage_put_rbac_role_access(
+        snapshot: &mut impl WritableSnapshot,
+        role: RBACRole,
+        access: RBACAccess,
+    ) {
+        let to_write = match access {
+            RBACAccess::ReadObject(type_) => {
+                RBACRoleTypeAccess::new(role.vertex(), RBACAccessKind::ReadObjectVertex, type_.vertex())
+            }
+            RBACAccess::WriteObject(type_) => {
+                RBACRoleTypeAccess::new(role.vertex(), RBACAccessKind::WriteObjectVertex, type_.vertex())
+            }
+            RBACAccess::ReadAttribute(type_) => {
+                RBACRoleTypeAccess::new(role.vertex(), RBACAccessKind::ReadAttributeVertex, type_.vertex())
+            }
+            RBACAccess::WriteAttribute(type_) => {
+                RBACRoleTypeAccess::new(role.vertex(), RBACAccessKind::WriteAttributeVertex, type_.vertex())
+            }
+        };
+        snapshot.put(to_write.into_storage_key().into_owned_array())
+    }
+
+    pub(crate) fn storage_delete_rbac_role_access(
+        snapshot: &mut impl WritableSnapshot,
+        role: RBACRole,
+        access: RBACAccess,
+    ) {
+        let to_write = match access {
+            RBACAccess::ReadObject(type_) => {
+                RBACRoleTypeAccess::new(role.vertex(), RBACAccessKind::ReadObjectVertex, type_.vertex())
+            }
+            RBACAccess::WriteObject(type_) => {
+                RBACRoleTypeAccess::new(role.vertex(), RBACAccessKind::WriteObjectVertex, type_.vertex())
+            }
+            RBACAccess::ReadAttribute(type_) => {
+                RBACRoleTypeAccess::new(role.vertex(), RBACAccessKind::ReadAttributeVertex, type_.vertex())
+            }
+            RBACAccess::WriteAttribute(type_) => {
+                RBACRoleTypeAccess::new(role.vertex(), RBACAccessKind::WriteAttributeVertex, type_.vertex())
+            }
+        };
+        snapshot.delete(to_write.into_storage_key().into_owned_array())
+    }
+}

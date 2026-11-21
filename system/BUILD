@@ -23,6 +23,7 @@ rust_library(
         "//encoding",
         "//executor",
         "//function",
+        "//rbac",
         "//query",
         "//resource",
         "//storage",

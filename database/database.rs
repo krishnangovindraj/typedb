@@ -51,6 +51,7 @@ use function::{FunctionError, function_cache::FunctionCache};
 use itertools::Itertools;
 use options::MvccCleanupStrategy;
 use query::query_cache::QueryCache;
+use rbac::{RBACError, rbac_cache::RBACCache};
 use resource::constants::database::{CHECKPOINT_INTERVAL, CLEANUP_WAKEUP_INTERVAL, STATISTICS_UPDATE_INTERVAL};
 use storage::{
     MVCCStorage, StorageDeleteError, StorageOpenError, StorageResetError,
@@ -63,7 +64,7 @@ use storage::{
 use tracing::{Level, debug, error, event, info, trace};
 
 use crate::{
-    DatabaseOpenError::FunctionCacheInitialise,
+    DatabaseOpenError::{FunctionCacheInitialise, RBACCacheInitialise},
     DatabaseResetError::{
         CorruptionPartialResetKeyGeneratorInUse, CorruptionPartialResetThingVertexGeneratorInUse,
         CorruptionPartialResetTypeVertexGeneratorInUse,
@@ -77,6 +78,7 @@ pub(super) struct Schema {
     pub(super) thing_statistics: Arc<Statistics>,
     pub(super) type_cache: Arc<TypeCache>,
     pub(super) function_cache: Arc<FunctionCache>,
+    pub(super) rbac_cache: Arc<RBACCache>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -375,7 +377,9 @@ impl Database<WALClient> {
             .map_err(|error| FunctionCacheInitialise { typedb_source: *error })?,
         );
 
-        let schema = Arc::new(RwLock::new(Schema { thing_statistics, type_cache, function_cache }));
+        let rbac_cache = Arc::new(RBACCache::new(storage.clone(), SequenceNumber::MIN));
+
+        let schema = Arc::new(RwLock::new(Schema { thing_statistics, type_cache, function_cache, rbac_cache }));
         let schema_write_transaction_exclusivity = Arc::new(Mutex::new(SchemaWriteTransactionState::new()));
 
         let query_cache = Arc::new(QueryCache::new());
@@ -495,6 +499,8 @@ impl Database<WALClient> {
             .map_err(|error| FunctionCacheInitialise { typedb_source: *error })?,
         );
 
+        let rbac_cache = Arc::new(RBACCache::new(storage.clone(), wal_last_sequence_number));
+
         let checkpoint_sequence_number = match checkpoint {
             None => SequenceNumber::MIN,
             Some(checkpoint) => {
@@ -505,7 +511,7 @@ impl Database<WALClient> {
             }
         };
 
-        let schema = Arc::new(RwLock::new(Schema { thing_statistics, type_cache, function_cache }));
+        let schema = Arc::new(RwLock::new(Schema { thing_statistics, type_cache, function_cache, rbac_cache }));
         let schema_write_transaction_exclusivity = Arc::new(Mutex::new(SchemaWriteTransactionState::new()));
 
         let query_cache = Arc::new(QueryCache::new());
@@ -856,6 +862,7 @@ typedb_error! {
         StatisticsInitialise(11, "Error initialising statistics manager.", typedb_source: StatisticsError),
         TypeCacheInitialise(12, "Error initialising type cache.", typedb_source: TypeCacheCreateError),
         FunctionCacheInitialise(13, "Error initialising function cache.", typedb_source: FunctionError),
+        RBACCacheInitialise(18, "Error initialising RBAC cache.", typedb_source: RBACError),
         FileDelete(14, "Error while deleting file for '{name}'", name: String, source: Arc<io::Error>),
         DirectoryDelete(15, "Error while deleting directory of '{name}'", name: String, source: Arc<io::Error>),
         NotADatabase(16, "Directory '{name}' already exists and does not contain a database.", name: String),

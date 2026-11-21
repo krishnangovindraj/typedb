@@ -78,6 +78,9 @@
 	[dependencies.query]
 		workspace = true
 
+	[dependencies.rbac]
+		workspace = true
+
 	[dependencies.resource]
 		workspace = true
 
