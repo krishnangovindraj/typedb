@@ -333,7 +333,6 @@ impl FromStr for ContainsOrDoesnt {
     }
 }
 
-
 #[derive(Debug, Parameter)]
 #[param(name = "has_or_doesnt", regex = "(has|have|does not have|do not have)")]
 pub enum HasOrDoesnt {
@@ -944,8 +943,15 @@ impl FromStr for WithGiven {
     }
 }
 
-const PERMISSION_KINDS: &[&str] =
-    &["manage-databases", "manage-users", "grant-permissions", "transaction-read", "transaction-write", "schema-types", "schema-roles"];
+const PERMISSION_KINDS: &[&str] = &[
+    "manage-databases",
+    "manage-users",
+    "grant-permissions",
+    "transaction-read",
+    "transaction-write",
+    "schema-types",
+    "schema-roles",
+];
 
 /// Parses `manage-users`, `transaction-read:mydb`.
 #[derive(Debug, Parameter)]
@@ -966,9 +972,8 @@ pub struct SchemaDefinedRoleParam {
 impl FromStr for SchemaDefinedRoleParam {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (database, role) = s
-            .split_once(':')
-            .ok_or_else(|| format!("Invalid `SchemaDefinedRoleParam` (expected 'db:role'): {s}"))?;
+        let (database, role) =
+            s.split_once(':').ok_or_else(|| format!("Invalid `SchemaDefinedRoleParam` (expected 'db:role'): {s}"))?;
         Ok(Self { database: database.to_owned(), role: role.to_owned() })
     }
 }

@@ -3,11 +3,22 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+use error::typedb_error;
+use query::error::QueryError;
 
 pub const SCHEMA: &str = include_str!("schema.tql");
 
 fn is_valid_typeql_value(value: &str) -> bool {
     typeql::common::identifier::is_valid_label(value)
+}
+
+typedb_error! {
+    pub SystemDBError(component = "System database", prefix = "SDB") {
+        EmptyUpdate(1, "There is nothing to update"),
+        IllegalQueryInput(2, "The specified input contains one or more illegal character(s)"),
+        QueryFailed(3, "System database query could not be executed. The system database may not be fully initialised yet.", typedb_source: Box<QueryError>),
+        UnexpectedParseFailed(4, "Parsing a system database query failed unexpectedly", typedb_source: typeql::Error),
+    }
 }
 
 pub mod user_repository {
@@ -16,9 +27,8 @@ pub mod user_repository {
     use answer::variable_value::VariableValue;
     use concept::{thing::thing_manager, type_::type_manager::TypeManager};
     use database::transaction::TransactionRead;
-    use error::typedb_error;
     use function::function_manager::FunctionManager;
-    use query::{error::QueryError, query_manager::QueryManager};
+    use query::query_manager::QueryManager;
     use storage::{durability_client::WALClient, snapshot::WriteSnapshot};
     use thing_manager::ThingManager;
     use typeql::parse_query;
@@ -26,7 +36,7 @@ pub mod user_repository {
 
     use crate::{
         concepts::{Credential, PasswordHash, User},
-        repositories::is_valid_typeql_value,
+        repositories::{SystemDBError, is_valid_typeql_value},
         util::{
             answer_util::get_string,
             query_util::{execute_read_pipeline, execute_write_pipeline},
@@ -181,15 +191,6 @@ pub mod user_repository {
             Err(typedb_source) => (Err(SystemDBError::QueryFailed { typedb_source }), snapshot),
         }
     }
-
-    typedb_error! {
-        pub SystemDBError(component = "System database", prefix = "SDB") {
-            EmptyUpdate(1, "There is nothing to update"),
-            IllegalQueryInput(2, "The specified input contains one or more illegal character(s)"),
-            QueryFailed(3, "System database query could not be executed. The system database may not be fully initialised yet.", typedb_source: Box<QueryError>),
-            UnexpectedParseFailed(4, "Parsing a system database query failed unexpectedly", typedb_source: typeql::Error),
-        }
-    }
 }
 
 pub mod rbac_repository {
@@ -206,7 +207,7 @@ pub mod rbac_repository {
 
     use crate::{
         concepts::{Grantee, SchemaDefinedRole, SystemPermission},
-        repositories::{is_valid_typeql_value, user_repository::SystemDBError},
+        repositories::{SystemDBError, is_valid_typeql_value},
         util::query_util::{execute_read_pipeline, execute_write_pipeline},
     };
 

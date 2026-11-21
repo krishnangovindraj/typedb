@@ -5,7 +5,7 @@
  */
 use database::transaction::DataCommitError;
 use error::typedb_error;
-use system::repositories::user_repository::SystemDBError;
+use system::repositories::SystemDBError;
 
 typedb_error! {
     pub UserGetError(component = "User get", prefix = "USG") {
