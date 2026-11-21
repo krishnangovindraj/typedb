@@ -19,17 +19,21 @@ use crate::{
 };
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
-pub struct RBACRoleId(u16);
+pub struct RBACRoleId(u64);
 
 impl RBACRoleId {
-    const LENGTH: usize = 2;
+    const LENGTH: usize = std::mem::size_of::<u64>();
 
-    pub(crate) fn new(id: u16) -> Self {
+    pub(crate) fn new(id: u64) -> Self {
         Self(id)
     }
 
-    pub(crate) fn as_u16(&self) -> u16 {
-        self.0
+    pub fn from_system_db_id(id: i64) -> Self {
+        Self(id.cast_unsigned())
+    }
+
+    pub fn to_system_db_id(&self) -> i64 {
+        self.0.cast_signed()
     }
 }
 
@@ -41,13 +45,13 @@ impl fmt::Debug for RBACRoleId {
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct RBACRoleVertex {
-    // TODO: To avoid re-using or running out of roles, this should be a full u64 like do we for types.
-    value: u32,
+    // Unlike TypeVertex, We don't store the prefix here since we have only one type of role vertex.
+    role_id: RBACRoleId,
 }
 
 impl fmt::Debug for RBACRoleVertex {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:06X}", self.value)
+        write!(f, "{:#018X}", self.role_id.0)
     }
 }
 
@@ -61,16 +65,19 @@ impl RBACRoleVertex {
     pub(crate) const LENGTH_PREFIX: usize = PrefixID::LENGTH;
 
     pub const fn new(role_id: RBACRoleId) -> Self {
-        let prefix = (Self::PREFIX as u32) << 16;
-        let role_id = role_id.0 as u32;
-        Self { value: prefix + role_id }
+        Self { role_id }
+    }
+
+    const fn range_role_id() -> Range<usize> {
+        Self::INDEX_PREFIX + 1..Self::INDEX_PREFIX + 1 + RBACRoleId::LENGTH
     }
 
     pub fn decode(bytes: Bytes<'_, BUFFER_KEY_INLINE>) -> Self {
         debug_assert_eq!(bytes.length(), Self::LENGTH);
-        let mut be_bytes = [0; 4];
-        be_bytes[1..].copy_from_slice(&bytes);
-        Self { value: u32::from_be_bytes(be_bytes) }
+        debug_assert_eq!(bytes[Self::INDEX_PREFIX], Self::PREFIX.prefix_id().byte);
+        let mut be_bytes = [0u8; RBACRoleId::LENGTH];
+        be_bytes.copy_from_slice(&bytes[PrefixID::LENGTH..Self::LENGTH]);
+        Self { role_id: RBACRoleId::new(u64::from_be_bytes(be_bytes)) }
     }
 
     pub fn try_decode(bytes: &[u8]) -> Option<Self> {
@@ -80,13 +87,13 @@ impl RBACRoleVertex {
         if bytes[Self::INDEX_PREFIX] != Self::PREFIX.prefix_id().byte {
             return None;
         }
-        let mut be_bytes = [0; 4];
-        be_bytes[1..].copy_from_slice(&bytes);
-        Some(Self { value: u32::from_be_bytes(be_bytes) })
+        let mut be_bytes = [0u8; RBACRoleId::LENGTH];
+        be_bytes.copy_from_slice(&bytes[PrefixID::LENGTH..Self::LENGTH]);
+        Some(Self { role_id: RBACRoleId::new(u64::from_be_bytes(be_bytes)) })
     }
 
     pub fn role_id(&self) -> RBACRoleId {
-        RBACRoleId((self.value & 0xFFFF) as u16)
+        self.role_id
     }
 
     pub fn build_prefix() -> StorageKey<'static, { RBACRoleVertex::LENGTH_PREFIX }> {
@@ -97,7 +104,10 @@ impl RBACRoleVertex {
 
 impl AsBytes<BUFFER_KEY_INLINE> for RBACRoleVertex {
     fn to_bytes(self) -> Bytes<'static, BUFFER_KEY_INLINE> {
-        Bytes::Array(ByteArray::copy(&self.value.to_be_bytes()[1..]))
+        let mut array = ByteArray::zeros(Self::LENGTH);
+        array[Self::INDEX_PREFIX] = Self::PREFIX.prefix_id().byte;
+        array[Self::range_role_id()].copy_from_slice(&self.role_id.0.to_be_bytes());
+        Bytes::Array(array)
     }
 }
 
@@ -275,6 +285,9 @@ pub struct RBACRoleTypeAccess {
 }
 
 impl RBACRoleTypeAccess {
+    // Note: Using u64 for RBAC roles means the length is > 11. We still use this prefix as:
+    // * Not having the TypeVertex within the prefix is not a big deal.
+    // * All schema goes in here anyway.
     const KEYSPACE: EncodingKeyspace = EncodingKeyspace::DefaultOptimisedPrefix11;
     const PREFIX: Prefix = Prefix::RBACAccess;
     pub const FIXED_WIDTH_ENCODING: bool = Self::PREFIX.fixed_width_keys();

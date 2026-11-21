@@ -24,7 +24,7 @@ package(default_visibility = [
     "//inference:__subpackages__",
     "//ir:__subpackages__",
     "//server:__subpackages__",
-    "//traversal:__subpackages__",
+    "//system:__subpackages__",
     "//query:__subpackages__",
     "//tests/behaviour:__subpackages__",
     "//tests/benchmarks:__subpackages__",
@@ -58,6 +58,7 @@ rust_library(
         "@crates//:tracing",
         "@crates//:seahash",
         "@crates//:serde",
+        "@crates//:rand",
         "@crates//:rocksdb",
     ],
 )

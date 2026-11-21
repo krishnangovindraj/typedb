@@ -7,7 +7,9 @@
 use std::{
     collections::{BTreeMap, VecDeque},
     ffi::OsString,
-    fmt, fs, io, mem,
+    fmt, fs,
+    hash::Hash,
+    io, mem,
     path::{Path, PathBuf},
     sync::{
         Arc, Mutex, MutexGuard, RwLock, TryLockError,
@@ -76,6 +78,9 @@ pub(super) struct Schema {
     pub(super) type_cache: Arc<TypeCache>,
     pub(super) function_cache: Arc<FunctionCache>,
 }
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct DatabaseUid(pub u64);
 
 type ReservationRequestId = u64;
 
@@ -563,6 +568,14 @@ impl Database<WALClient> {
         database.prepare_for_writes().map_err(|typedb_source| DatabaseOpenError::Encoding { source: typedb_source })?;
         event!(Level::TRACE, "Finished loading database '{}'", &name);
         Ok(database)
+    }
+
+    pub fn database_id(&self) -> DatabaseUid {
+        // TODO: Replace with one read from the properties file.
+        use std::hash::{DefaultHasher, Hasher};
+        let mut s = DefaultHasher::new();
+        self.name.hash(&mut s);
+        DatabaseUid((s.finish() >> 1))
     }
 
     fn checkpoint(&self) -> Result<(), CheckpointCreateError> {

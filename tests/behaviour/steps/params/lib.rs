@@ -334,6 +334,45 @@ impl FromStr for ContainsOrDoesnt {
 }
 
 #[derive(Debug, Parameter)]
+#[param(name = "has_or_doesnt", regex = "(has|have|does not have|do not have)")]
+pub enum HasOrDoesnt {
+    Has,
+    DoesNotHave,
+}
+
+impl HasOrDoesnt {
+    pub fn check_contains<T: PartialEq + fmt::Debug>(&self, haystack: &[T], needle: &T) {
+        let expected_has = self.expected_has();
+        assert_eq!(
+            expected_has,
+            haystack.contains(needle),
+            "{:?} {} {:?} ",
+            haystack,
+            if expected_has { "should have contained" } else { "should not have contained" },
+            needle
+        );
+    }
+
+    pub fn expected_has(&self) -> bool {
+        match self {
+            HasOrDoesnt::Has => true,
+            HasOrDoesnt::DoesNotHave => false,
+        }
+    }
+}
+
+impl FromStr for HasOrDoesnt {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "has" | "have" => Self::Has,
+            "does not have" | "do not have" => Self::DoesNotHave,
+            invalid => return Err(format!("Invalid `ContainsOrDoesnt`: {invalid}")),
+        })
+    }
+}
+
+#[derive(Debug, Parameter)]
 #[param(name = "type_label", regex = r"[A-Za-z0-9_:-]+")]
 pub struct Label {
     pub label_string: String,
@@ -901,5 +940,56 @@ impl FromStr for WithGiven {
             "" => Self::False,
             invalid => return Err(format!("Invalid `WithGiven`: {invalid}")),
         })
+    }
+}
+
+const PERMISSION_KINDS: &[&str] = &[
+    "manage-databases",
+    "manage-users",
+    "grant-permissions",
+    "transaction-read",
+    "transaction-write",
+    "schema-types",
+    "schema-roles",
+];
+
+/// Parses `manage-users`, `transaction-read:mydb`.
+#[derive(Debug, Parameter)]
+#[param(name = "permission", regex = r"[a-z][a-z0-9_-]*(?::[a-z0-9_-]+)?")]
+pub struct SystemPermissionParam {
+    pub kind: String,
+    pub database: Option<String>,
+}
+
+/// Parses `mydb:my-role`.
+#[derive(Debug, Parameter)]
+#[param(name = "schema_defined_role", regex = r"[a-z0-9_-]+:[a-z0-9_-]+")]
+pub struct SchemaDefinedRoleParam {
+    pub database: String,
+    pub role: String,
+}
+
+impl FromStr for SchemaDefinedRoleParam {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (database, role) =
+            s.split_once(':').ok_or_else(|| format!("Invalid `SchemaDefinedRoleParam` (expected 'db:role'): {s}"))?;
+        Ok(Self { database: database.to_owned(), role: role.to_owned() })
+    }
+}
+
+impl FromStr for SystemPermissionParam {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.split_once(':') {
+            None => Ok(Self { kind: s.to_owned(), database: None }),
+            Some((kind, rest)) => {
+                if PERMISSION_KINDS.contains(&kind) {
+                    Ok(Self { kind: kind.to_owned(), database: Some(rest.to_owned()) })
+                } else {
+                    Err(format!("BDD got unrecongnised SystemPermissionParam kind '{kind}'"))
+                }
+            }
+        }
     }
 }

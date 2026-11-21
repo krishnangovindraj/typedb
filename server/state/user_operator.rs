@@ -5,6 +5,7 @@
  */
 
 use std::{
+    collections::HashSet,
     fmt::Debug,
     sync::{Arc, RwLock as StdRwLock},
 };
@@ -12,7 +13,7 @@ use std::{
 use async_trait::async_trait;
 use database::database_manager::DatabaseManager;
 use resource::constants::server::DEFAULT_USER_NAME;
-use system::concepts::{Credential, User};
+use system::concepts::{Credential, Grantee, SchemaDefinedRole, SystemPermission, User, UserGroup};
 use user::{permission_manager::PermissionManager, user_manager::UserManager};
 use uuid::Uuid;
 
@@ -57,6 +58,50 @@ pub trait UserOperator: Debug + Send + Sync {
     async fn token_get_owner(&self, token: &str) -> Option<String>;
 
     fn is_initialised(&self) -> bool;
+
+    // async fn create_group(&self, accessor: Accessor, group_name: &str) -> Result<(), ArcServerStateError>;
+    //
+    // async fn delete_group(&self, accessor: Accessor, group_name: UserGroup) -> Result<(), ArcServerStateError>;
+    //
+    // async fn add_group_member(
+    //     &self,
+    //     accessor: Accessor,
+    //     group_name: UserGroup,
+    //     member: Grantee,
+    // ) -> Result<(), ArcServerStateError>;
+    //
+    // async fn remove_group_member(
+    //     &self,
+    //     accessor: Accessor,
+    //     group_name: UserGroup,
+    //     user_name: Grantee,
+    // ) -> Result<(), ArcServerStateError>;
+
+    async fn grant_permission(
+        &self,
+        accessor: Accessor,
+        grantee: Grantee,
+        permission: SystemPermission,
+    ) -> Result<(), ArcServerStateError>;
+
+    async fn list_permissions(
+        &self,
+        accessor: Accessor,
+        grantee: Grantee,
+    ) -> Result<Vec<SystemPermission>, ArcServerStateError>;
+
+    async fn grant_role(
+        &self,
+        accessor: Accessor,
+        grantee: Grantee,
+        role: SchemaDefinedRole,
+    ) -> Result<(), ArcServerStateError>;
+
+    async fn list_roles(
+        &self,
+        accessor: Accessor,
+        grantee: Grantee,
+    ) -> Result<Vec<SchemaDefinedRole>, ArcServerStateError>;
 }
 
 #[derive(Debug)]
@@ -237,5 +282,93 @@ impl UserOperator for LocalUserOperator {
         };
         let user_manager = UserManager::new(system_db);
         user_manager.contains(DEFAULT_USER_NAME).unwrap_or(false)
+    }
+
+    // async fn create_group(&self, accessor: Accessor, group_name: &str) -> Result<(), ArcServerStateError> {
+    //     error::todo_must_implement!("todo")
+    // }
+    //
+    // async fn delete_group(&self, accessor: Accessor, group_name: UserGroup) -> Result<(), ArcServerStateError> {
+    //     error::todo_must_implement!("todo")
+    // }
+    //
+    // async fn add_group_member(
+    //     &self,
+    //     accessor: Accessor,
+    //     group_name: UserGroup,
+    //     member: Grantee,
+    // ) -> Result<(), ArcServerStateError> {
+    //     error::todo_must_implement!("todo")
+    // }
+    //
+    // async fn remove_group_member(
+    //     &self,
+    //     accessor: Accessor,
+    //     group_name: UserGroup,
+    //     user_name: Grantee,
+    // ) -> Result<(), ArcServerStateError> {
+    //     error::todo_must_implement!("todo")
+    // }
+    //
+    async fn grant_permission(
+        &self,
+        accessor: Accessor,
+        grantee: Grantee,
+        permission: SystemPermission,
+    ) -> Result<(), ArcServerStateError> {
+        if !PermissionManager::exec_grant_permission_permitted(accessor.as_str()) {
+            return Err(Arc::new(LocalServerStateError::OperationNotPermitted {}));
+        }
+
+        let user_manager = self.get_user_manager().map_err(arc_server_state_err)?;
+        user_manager.grant_permission(&grantee, &permission).map_err(|typedb_source| {
+            arc_server_state_err(LocalServerStateError::PermissionCannotBeGranted { typedb_source })
+        })
+    }
+
+    async fn list_permissions(
+        &self,
+        accessor: Accessor,
+        grantee: Grantee,
+    ) -> Result<Vec<SystemPermission>, ArcServerStateError> {
+        if !PermissionManager::exec_list_permissions_permitted(accessor.as_str()) {
+            return Err(Arc::new(LocalServerStateError::OperationNotPermitted {}));
+        }
+
+        let user_manager = self.get_user_manager().map_err(arc_server_state_err)?;
+        user_manager.list_permissions(&grantee).map_err(|typedb_source| {
+            arc_server_state_err(LocalServerStateError::PermissionsCannotBeListed { typedb_source })
+        })
+    }
+
+    async fn grant_role(
+        &self,
+        accessor: Accessor,
+        grantee: Grantee,
+        role: SchemaDefinedRole,
+    ) -> Result<(), ArcServerStateError> {
+        if !PermissionManager::exec_grant_role_permitted(accessor.as_str()) {
+            return Err(Arc::new(LocalServerStateError::OperationNotPermitted {}));
+        }
+
+        let user_manager = self.get_user_manager().map_err(arc_server_state_err)?;
+        user_manager
+            .grant_role(&grantee, &role)
+            .map_err(|typedb_source| arc_server_state_err(LocalServerStateError::RoleCannotBeGranted { typedb_source }))
+    }
+
+    async fn list_roles(
+        &self,
+        accessor: Accessor,
+        grantee: Grantee,
+    ) -> Result<Vec<SchemaDefinedRole>, ArcServerStateError> {
+        if !PermissionManager::exec_list_roles_permitted(accessor.as_str()) {
+            return Err(Arc::new(LocalServerStateError::OperationNotPermitted {}));
+        }
+
+        let user_manager = self.get_user_manager().map_err(arc_server_state_err)?;
+        user_manager
+            .list_roles(&grantee)
+            .map_err(|typedb_source| arc_server_state_err(LocalServerStateError::RolesCannotBeListed { typedb_source }))
     }
 }

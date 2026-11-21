@@ -3,8 +3,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-
+use database::transaction::DataCommitError;
 use error::typedb_error;
+use system::repositories::SystemDBError;
 
 typedb_error! {
     pub UserGetError(component = "User get", prefix = "USG") {
@@ -40,6 +41,33 @@ typedb_error! {
         UserNotFound(3, "User not found."),
         Unexpected(4, "An unexpected error has occurred in the process of deleting a user."),
         GetFailed(5, "Failed to check user existence.", typedb_source: UserGetError),
+    }
+}
+
+// Do we really need a different error class per operation?
+typedb_error! {
+    pub PermissionGrantError(component = "Permission management", prefix="UPG") {
+        UnexpectedSystemDB(1, "An unexpected error occurred while granting user permissions.", typedb_source: SystemDBError),
+        UnexpectedDataCommit(2, "An unexpected error has occurred while granting user permissions.", typedb_source: DataCommitError),
+    }
+}
+
+typedb_error! {
+    pub PermissionListError(component = "Permission listing", prefix="UPL") {
+        UnexpectedSystemDB(1, "An unexpected error occurred while listing user permissions.", typedb_source: SystemDBError),
+    }
+}
+
+typedb_error! {
+    pub RoleGrantError(component = "Role management", prefix="URG") {
+        UnexpectedSystemDB(1, "An unexpected error occurred while granting the role to the user.", typedb_source: SystemDBError),
+        UnexpectedDataCommit(2, "An unexpected error occurred while granting the role to the user.", typedb_source: DataCommitError),
+    }
+}
+
+typedb_error! {
+    pub RoleListError(component = "Role Listing", prefix="URL") {
+        UnexpectedSystemDB(1, "An unexpected error occurred while listing user roles.", typedb_source: SystemDBError),
     }
 }
 

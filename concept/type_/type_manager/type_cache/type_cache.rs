@@ -10,7 +10,10 @@ use std::{
 };
 
 use encoding::{
-    graph::definition::{definition_key::DefinitionKey, r#struct::StructDefinition},
+    graph::{
+        definition::{definition_key::DefinitionKey, r#struct::StructDefinition},
+        rbac::RBACRoleId,
+    },
     value::{label::Label, value_type::ValueType},
 };
 use error::typedb_error;

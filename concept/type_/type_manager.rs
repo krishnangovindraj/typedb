@@ -17,6 +17,7 @@ use encoding::{
         definition::{
             definition_key::DefinitionKey, definition_key_generator::DefinitionKeyGenerator, r#struct::StructDefinition,
         },
+        rbac::RBACRoleId,
         type_::{Kind, vertex::TypeVertexEncoding, vertex_generator::TypeVertexGenerator},
     },
     layout::prefix::Prefix,
@@ -1195,17 +1196,6 @@ impl TypeManager {
         } else {
             Ok(MaybeOwns::Owned(TypeReader::get_rbac_role(snapshot, role_name)?))
         }
-    }
-
-    pub fn has_rbac_access(
-        &self,
-        snapshot: &impl ReadableSnapshot,
-        role: &RBACRole,
-        access: RBACAccess,
-        storage_counters: StorageCounters,
-    ) -> Result<bool, Box<ConceptReadError>> {
-        let all_accesses = self.list_rbac_declared_access(snapshot, role, storage_counters)?;
-        Ok(all_accesses.contains(&access))
     }
 
     pub fn list_rbac_declared_access(
@@ -3972,11 +3962,10 @@ impl TypeManager {
     ) -> Result<RBACRole, Box<ConceptWriteError>> {
         OperationTimeValidation::validate_rbac_role_name_uniqueness(snapshot, name)
             .map_err(|typedb_source| ConceptWriteError::SchemaValidation { typedb_source })?;
-
         let role_vertex = self
             .definition_key_generator
             .create_rbac_role(snapshot)
-            .map_err(|err| ConceptWriteError::Encoding { source: err })?;
+            .map_err(|source| Box::new(ConceptWriteError::Encoding { source }))?;
         let role = RBACRole::new(role_vertex);
         TypeWriter::storage_set_rbac_role_name(snapshot, role, name);
         Ok(role)
