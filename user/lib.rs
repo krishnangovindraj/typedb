@@ -4,7 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 use database::database::DatabaseUid;
-use system::concepts::SystemPermission;
+use system::concepts::{DatabasePermission, SystemPermission};
 
 pub mod errors;
 pub mod permission_manager;
@@ -36,12 +36,33 @@ impl UserSystemPermission {
 
 
 impl UserDatabasePermission {
-    pub fn to_system_permission(&self, database: DatabaseUid,) -> SystemPermission {
+    pub fn to_database_permission(&self, database: DatabaseUid,) -> DatabasePermission {
         match self {
-            Self::TransactionRead => SystemPermission::TransactionRead { database },
-            Self::TransactionWrite => SystemPermission::TransactionWrite { database },
-            Self::SchemaTypes => SystemPermission::SchemaTypes { database },
-            Self::SchemaRoles => SystemPermission::SchemaRoles { database },
+            Self::TransactionRead => DatabasePermission::TransactionRead { database },
+            Self::TransactionWrite => DatabasePermission::TransactionWrite { database },
+            Self::SchemaTypes => DatabasePermission::SchemaTypes { database },
+            Self::SchemaRoles => DatabasePermission::SchemaRoles { database },
+        }
+    }
+}
+
+impl From<SystemPermission> for UserSystemPermission {
+    fn from(permission: SystemPermission) -> Self {
+        match permission {
+            SystemPermission::ManageDatabases => UserSystemPermission::ManageDatabases,
+            SystemPermission::ManageUsers => UserSystemPermission::ManageUsers,
+            SystemPermission::GrantPermissions => UserSystemPermission::GrantPermissions,
+        }
+    }
+}
+
+impl From<DatabasePermission> for UserDatabasePermission {
+    fn from(permission: DatabasePermission) -> Self {
+        match permission {
+            DatabasePermission::TransactionRead { .. } => UserDatabasePermission::TransactionRead,
+            DatabasePermission::TransactionWrite { .. } => UserDatabasePermission::TransactionWrite,
+            DatabasePermission::SchemaTypes { .. } => UserDatabasePermission::SchemaTypes,
+            DatabasePermission::SchemaRoles { .. } => UserDatabasePermission::SchemaRoles,
         }
     }
 }

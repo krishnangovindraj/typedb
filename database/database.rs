@@ -83,7 +83,7 @@ pub(super) struct Schema {
     pub(super) rbac_cache: Arc<RBACCache>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct DatabaseUid(pub u64);
 
 type ReservationRequestId = u64;

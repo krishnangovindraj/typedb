@@ -9,8 +9,9 @@ use std::sync::Arc;
 use database::Database;
 use resource::constants::server::DEFAULT_USER_NAME;
 use storage::durability_client::WALClient;
+use database::database::DatabaseUid;
 use system::{
-    concepts::{Credential, Grantee, SchemaDefinedRole, SystemPermission, User},
+    concepts::{Credential, DatabasePermission, Grantee, SchemaDefinedRole, SystemPermission, User},
     repositories::{SystemDBError, rbac_repository, user_repository},
     util::transaction_util::TransactionUtil,
 };
@@ -135,7 +136,7 @@ impl UserManager {
         }
     }
 
-    pub fn grant_permission(
+    pub fn grant_system_permission(
         &self,
         grantee: &Grantee,
         granted_permission: &SystemPermission,
@@ -143,7 +144,7 @@ impl UserManager {
         let grant_result = self
             .transaction_util
             .write_transaction(move |snapshot, type_mgr, thing_mgr, fn_mgr, query_mgr, _db, _tx_opts| {
-                rbac_repository::grant_permission(
+                rbac_repository::grant_system_permission(
                     snapshot,
                     &type_mgr,
                     thing_mgr.clone(),
@@ -164,9 +165,44 @@ impl UserManager {
         }
     }
 
-    pub fn list_permissions(&self, grantee: &Grantee) -> Result<Vec<SystemPermission>, PermissionManagementError> {
+    pub fn grant_database_permission(
+        &self,
+        grantee: &Grantee,
+        granted_permission: &DatabasePermission,
+    ) -> Result<(), PermissionManagementError> {
+        let grant_result = self
+            .transaction_util
+            .write_transaction(move |snapshot, type_mgr, thing_mgr, fn_mgr, query_mgr, _db, _tx_opts| {
+                rbac_repository::grant_database_permission(
+                    snapshot,
+                    &type_mgr,
+                    thing_mgr.clone(),
+                    fn_mgr.clone(),
+                    &query_mgr,
+                    grantee,
+                    granted_permission,
+                )
+            })
+            .1;
+        match grant_result {
+            Ok(Ok(_row_count)) => {
+                debug_assert!(*_row_count >= 1);
+                Ok(())
+            },
+            Ok(Err(typedb_source)) => Err(PermissionManagementError::UnexpectedSystemDB { typedb_source }),
+            Err(typedb_source) => Err(PermissionManagementError::UnexpectedDataCommit { typedb_source }),
+        }
+    }
+
+    pub fn list_system_permissions(&self, grantee: &Grantee) -> Result<Vec<SystemPermission>, PermissionManagementError> {
         self.transaction_util
-            .read_transaction(move |tx| rbac_repository::list_permissions(tx, grantee))
+            .read_transaction(move |tx| rbac_repository::list_system_permissions(tx, grantee))
+            .map_err(|typedb_source| PermissionManagementError::UnexpectedSystemDB { typedb_source })
+    }
+
+    pub fn list_database_permissions(&self, grantee: &Grantee, database_id: DatabaseUid) -> Result<Vec<DatabasePermission>, PermissionManagementError> {
+        self.transaction_util
+            .read_transaction(move |tx| rbac_repository::list_database_permissions(tx, grantee, database_id))
             .map_err(|typedb_source| PermissionManagementError::UnexpectedSystemDB { typedb_source })
     }
 
@@ -201,7 +237,7 @@ impl UserManager {
             .map_err(|typedb_source| PermissionManagementError::UnexpectedSystemDB { typedb_source })
     }
 
-    pub fn revoke_permission(
+    pub fn revoke_system_permission(
         &self,
         grantee: &Grantee,
         permission: &SystemPermission,
@@ -209,7 +245,7 @@ impl UserManager {
         let revoke_result = self
             .transaction_util
             .write_transaction(move |snapshot, type_mgr, thing_mgr, fn_mgr, query_mgr, _db, _tx_opts| {
-                rbac_repository::revoke_permission(
+                rbac_repository::revoke_system_permission(
                     snapshot,
                     &type_mgr,
                     thing_mgr.clone(),
@@ -225,7 +261,41 @@ impl UserManager {
                 if *_row_count >= 1 {
                     Ok(())
                 } else {
-                    Err(PermissionManagementError::GranteeDidNotHaveRevokedPermission {
+                    Err(PermissionManagementError::GranteeDidNotHaveRevokedSystemPermission {
+                        grantee: grantee.clone(), permission: permission.clone(),
+                    })
+                }
+            },
+            Ok(Err(typedb_source)) => Err(PermissionManagementError::UnexpectedSystemDB { typedb_source }),
+            Err(typedb_source) => Err(PermissionManagementError::UnexpectedDataCommit { typedb_source }),
+        }
+    }
+
+    pub fn revoke_database_permission(
+        &self,
+        grantee: &Grantee,
+        permission: &DatabasePermission,
+    ) -> Result<(), PermissionManagementError> {
+        let revoke_result = self
+            .transaction_util
+            .write_transaction(move |snapshot, type_mgr, thing_mgr, fn_mgr, query_mgr, _db, _tx_opts| {
+                rbac_repository::revoke_database_permission(
+                    snapshot,
+                    &type_mgr,
+                    thing_mgr.clone(),
+                    fn_mgr.clone(),
+                    &query_mgr,
+                    grantee,
+                    permission,
+                )
+            })
+            .1;
+        match revoke_result {
+            Ok(Ok(_row_count)) => {
+                if *_row_count >= 1 {
+                    Ok(())
+                } else {
+                    Err(PermissionManagementError::GranteeDidNotHaveRevokedDatabasePermission {
                         grantee: grantee.clone(), permission: permission.clone(),
                     })
                 }

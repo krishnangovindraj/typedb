@@ -451,7 +451,9 @@ fn permission_management_origin(error: &PermissionManagementError) -> ErrorOrigi
     match error {
         PermissionManagementError::UnexpectedSystemDB { .. }
         | PermissionManagementError::UnexpectedDataCommit { .. } => ErrorOrigin::System,
-        PermissionManagementError::GranteeDidNotHaveRevokedPermission { .. }
+        PermissionManagementError::DatabaseNotFound { .. }
+        | PermissionManagementError::GranteeDidNotHaveRevokedSystemPermission { .. }
+        | PermissionManagementError::GranteeDidNotHaveRevokedDatabasePermission { .. }
         | PermissionManagementError::GranteeDidNotHaveRevokedRole { .. } => ErrorOrigin::Request,
     }
 }

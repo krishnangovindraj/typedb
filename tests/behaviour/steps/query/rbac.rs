@@ -18,7 +18,8 @@ use options::TransactionOptions;
 use params::{HasOrDoesnt, MayError, SchemaDefinedRoleParam, SystemPermissionParam};
 use resource::{constants::server::DEFAULT_USER_NAME, profile::StorageCounters};
 use server::authentication::Accessor;
-use system::concepts::{Credential, Grantee, SchemaDefinedRole, SystemPermission, User};
+use system::concepts::{Credential, Grantee, SchemaDefinedRole, User};
+use user::{UserDatabasePermission, UserSystemPermission};
 
 use crate::{Context, generic_step, transaction_context::with_read_tx, util::iter_table_map};
 
@@ -61,19 +62,20 @@ async fn schema_defined_role_param_to_typedb(
     }
 }
 
-async fn permission_param_to_typedb(context: &Context, param: SystemPermissionParam) -> SystemPermission {
-    let database = match &param.database {
-        None => None,
-        Some(db) => Some(resolve_database_uid(context, db.as_str()).await),
-    };
+enum BDDPermission {
+    System(UserSystemPermission),
+    Database { database: String, permission: UserDatabasePermission },
+}
+
+fn permission_param_to_bdd(param: SystemPermissionParam) -> BDDPermission {
     match param.kind.as_str() {
-        "manage-databases" => SystemPermission::ManageDatabases,
-        "manage-users" => SystemPermission::ManageUsers,
-        "grant-permissions" => SystemPermission::GrantPermissions,
-        "transaction-read" => SystemPermission::TransactionRead { database: database.unwrap() },
-        "transaction-write" => SystemPermission::TransactionWrite { database: database.unwrap() },
-        "schema-types" => SystemPermission::SchemaTypes { database: database.unwrap() },
-        "schema-roles" => SystemPermission::SchemaRoles { database: database.unwrap() },
+        "manage-databases" => BDDPermission::System(UserSystemPermission::ManageDatabases),
+        "manage-users" => BDDPermission::System(UserSystemPermission::ManageUsers),
+        "grant-permissions" => BDDPermission::System(UserSystemPermission::GrantPermissions),
+        "transaction-read" => BDDPermission::Database { database: param.database.unwrap(), permission: UserDatabasePermission::TransactionRead },
+        "transaction-write" => BDDPermission::Database { database: param.database.unwrap(), permission: UserDatabasePermission::TransactionWrite },
+        "schema-types" => BDDPermission::Database { database: param.database.unwrap(), permission: UserDatabasePermission::SchemaTypes },
+        "schema-roles" => BDDPermission::Database { database: param.database.unwrap(), permission: UserDatabasePermission::SchemaRoles },
         other => panic!("Unknown permission kind '{other}'"),
     }
 }
@@ -195,13 +197,20 @@ async fn create_user(context: &mut Context, username: String, password: String) 
 #[step(expr = "grant user {string} permission: {permission}")]
 async fn grant_user_permission(context: &mut Context, username: String, permission: SystemPermissionParam) {
     let grantee = Grantee::User(User::new(username));
-    let granted = permission_param_to_typedb(context, permission).await;
-    context
-        .server_state()
-        .users()
-        .grant_permission(admin_accessor(), grantee, granted)
-        .await
-        .expect("Failed to grant permission");
+    match permission_param_to_bdd(permission) {
+        BDDPermission::System(perm) => context
+            .server_state()
+            .users()
+            .grant_system_permission(admin_accessor(), grantee, perm)
+            .await
+            .expect("Failed to grant system permission"),
+        BDDPermission::Database { database, permission: perm } => context
+            .server_state()
+            .users()
+            .grant_database_permission(admin_accessor(), grantee, &database, perm)
+            .await
+            .expect("Failed to grant database permission"),
+    }
 }
 
 #[apply(generic_step)]
@@ -213,14 +222,26 @@ async fn user_has_permission(
     permission: SystemPermissionParam,
 ) {
     let grantee = Grantee::User(User::new(username));
-    let expected = permission_param_to_typedb(context, permission).await;
-    let permissions = context
-        .server_state()
-        .users()
-        .list_permissions(admin_accessor(), grantee)
-        .await
-        .expect("Failed to list permissions");
-    has_or_doesnt.check_contains(&permissions, &expected);
+    match permission_param_to_bdd(permission) {
+        BDDPermission::System(expected) => {
+            let permissions = context
+                .server_state()
+                .users()
+                .list_system_permissions(admin_accessor(), grantee)
+                .await
+                .expect("Failed to list system permissions");
+            has_or_doesnt.check_contains(&permissions, &expected);
+        }
+        BDDPermission::Database { database, permission: expected } => {
+            let permissions = context
+                .server_state()
+                .users()
+                .list_database_permissions(admin_accessor(), grantee, &database)
+                .await
+                .expect("Failed to list database permissions");
+            has_or_doesnt.check_contains(&permissions, &expected);
+        }
+    }
 }
 
 #[apply(generic_step)]
@@ -275,13 +296,20 @@ async fn rbac_role_exists(context: &mut Context, role_name: String, expected_exi
 #[step(expr = "ungrant user {string} permission: {permission}")]
 async fn ungrant_user_permission(context: &mut Context, username: String, permission: SystemPermissionParam) {
     let grantee = Grantee::User(User::new(username));
-    let revoked = permission_param_to_typedb(context, permission).await;
-    context
-        .server_state()
-        .users()
-        .revoke_permission(admin_accessor(), grantee, revoked)
-        .await
-        .expect("Failed to revoke permission");
+    match permission_param_to_bdd(permission) {
+        BDDPermission::System(perm) => context
+            .server_state()
+            .users()
+            .revoke_system_permission(admin_accessor(), grantee, perm)
+            .await
+            .expect("Failed to revoke system permission"),
+        BDDPermission::Database { database, permission: perm } => context
+            .server_state()
+            .users()
+            .revoke_database_permission(admin_accessor(), grantee, &database, perm)
+            .await
+            .expect("Failed to revoke database permission"),
+    }
 }
 
 #[apply(generic_step)]

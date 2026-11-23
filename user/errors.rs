@@ -5,7 +5,7 @@
  */
 use database::transaction::DataCommitError;
 use error::typedb_error;
-use system::concepts::{Grantee, SchemaDefinedRole, SystemPermission};
+use system::concepts::{DatabasePermission, Grantee, SchemaDefinedRole, SystemPermission};
 use system::repositories::SystemDBError;
 
 typedb_error! {
@@ -49,7 +49,8 @@ typedb_error! {
     pub PermissionManagementError(component = "Permission management", prefix = "UPM") {
         UnexpectedSystemDB(1, "An unexpected error occurred during permission management.", typedb_source: SystemDBError),
         UnexpectedDataCommit(2, "An unexpected error occurred during permission management.", typedb_source: DataCommitError),
-        GranteeDidNotHaveRevokedPermission(3, "Grantee did not have the revoked permission.", grantee: Grantee, permission: SystemPermission),
+        GranteeDidNotHaveRevokedSystemPermission(3, "Grantee did not have the revoked permission.", grantee: Grantee, permission: SystemPermission),
+        GranteeDidNotHaveRevokedDatabasePermission(6, "Grantee did not have the revoked permission.", grantee: Grantee, permission: DatabasePermission),
         GranteeDidNotHaveRevokedRole(4, "Grantee did not have the revoked role.", grantee: Grantee, role: SchemaDefinedRole),
         DatabaseNotFound(5, "The referenced database '{database}' was not found.", database: String),
     }
