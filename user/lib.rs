@@ -7,3 +7,17 @@
 pub mod errors;
 pub mod permission_manager;
 pub mod user_manager;
+
+pub enum UserSystemPermission {
+    ManageUsers,
+    ManageDatabases,
+    GrantPermissions,
+}
+
+pub enum UserDatabasePermission {
+    TransactionRead,
+    TransactionWrite,
+    SchemaTypes,
+    SchemaRoles,
+    // GrantRoles, // TODO
+}

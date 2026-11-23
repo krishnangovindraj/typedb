@@ -5,7 +5,6 @@
  */
 
 use std::{
-    collections::HashSet,
     fmt::Debug,
     sync::{Arc, RwLock as StdRwLock},
 };
@@ -13,12 +12,8 @@ use std::{
 use async_trait::async_trait;
 use database::database_manager::DatabaseManager;
 use resource::constants::server::DEFAULT_USER_NAME;
-use system::concepts::{Credential, Grantee, SchemaDefinedRole, SystemPermission, User, UserGroup};
-use user::{
-    errors::{PermissionRevokeError, RoleRevokeError},
-    permission_manager::PermissionManager,
-    user_manager::UserManager,
-};
+use system::concepts::{Credential, Grantee, SchemaDefinedRole, User, UserGroup};
+use user::{permission_manager::PermissionManager, user_manager::UserManager, UserDatabasePermission, UserSystemPermission};
 use uuid::Uuid;
 
 use super::TransactionOperator;
@@ -81,18 +76,48 @@ pub trait UserOperator: Debug + Send + Sync {
     //     user_name: Grantee,
     // ) -> Result<(), ArcServerStateError>;
 
-    async fn grant_permission(
+    async fn grant_system_permission(
         &self,
         accessor: Accessor,
         grantee: Grantee,
-        permission: SystemPermission,
+        permission: UserSystemPermission,
     ) -> Result<(), ArcServerStateError>;
 
-    async fn list_permissions(
+    async fn list_system_permissions(
         &self,
         accessor: Accessor,
         grantee: Grantee,
-    ) -> Result<Vec<SystemPermission>, ArcServerStateError>;
+    ) -> Result<Vec<UserSystemPermission>, ArcServerStateError>;
+
+    async fn revoke_system_permission(
+        &self,
+        accessor: Accessor,
+        grantee: Grantee,
+        permission: UserSystemPermission,
+    ) -> Result<(), ArcServerStateError>;
+
+    async fn grant_database_permission(
+        &self,
+        accessor: Accessor,
+        grantee: Grantee,
+        database: &str,
+        permission: UserDatabasePermission,
+    ) -> Result<(), ArcServerStateError>;
+
+    async fn list_database_permissions(
+        &self,
+        accessor: Accessor,
+        grantee: Grantee,
+        database: &str,
+    ) -> Result<Vec<UserDatabasePermission>, ArcServerStateError>;
+
+    async fn revoke_database_permission(
+        &self,
+        accessor: Accessor,
+        grantee: Grantee,
+        database: &str,
+        permission: UserDatabasePermission,
+    ) -> Result<(), ArcServerStateError>;
 
     async fn grant_role(
         &self,
@@ -106,13 +131,6 @@ pub trait UserOperator: Debug + Send + Sync {
         accessor: Accessor,
         grantee: Grantee,
     ) -> Result<Vec<SchemaDefinedRole>, ArcServerStateError>;
-
-    async fn revoke_permission(
-        &self,
-        accessor: Accessor,
-        grantee: Grantee,
-        permission: SystemPermission,
-    ) -> Result<(), ArcServerStateError>;
 
     async fn revoke_role(
         &self,
@@ -302,34 +320,94 @@ impl UserOperator for LocalUserOperator {
         user_manager.contains(DEFAULT_USER_NAME).unwrap_or(false)
     }
 
-    async fn grant_permission(
+    async fn grant_system_permission(
         &self,
         accessor: Accessor,
         grantee: Grantee,
-        permission: SystemPermission,
+        permission: UserSystemPermission,
     ) -> Result<(), ArcServerStateError> {
         if !PermissionManager::exec_grant_permission_permitted(accessor.as_str()) {
             return Err(Arc::new(LocalServerStateError::OperationNotPermitted {}));
         }
-
         let user_manager = self.get_user_manager().map_err(arc_server_state_err)?;
-        user_manager.grant_permission(&grantee, &permission).map_err(|typedb_source| {
+        user_manager.grant_permission(&grantee, &permission.into()).map_err(|typedb_source| {
             arc_server_state_err(LocalServerStateError::PermissionCannotBeGranted { typedb_source })
         })
     }
 
-    async fn list_permissions(
+    async fn list_system_permissions(
         &self,
         accessor: Accessor,
         grantee: Grantee,
-    ) -> Result<Vec<SystemPermission>, ArcServerStateError> {
+    ) -> Result<Vec<UserSystemPermission>, ArcServerStateError> {
         if !PermissionManager::exec_list_permissions_permitted(accessor.as_str()) {
             return Err(Arc::new(LocalServerStateError::OperationNotPermitted {}));
         }
-
         let user_manager = self.get_user_manager().map_err(arc_server_state_err)?;
         user_manager.list_permissions(&grantee).map_err(|typedb_source| {
             arc_server_state_err(LocalServerStateError::PermissionsCannotBeListed { typedb_source })
+        }).map(|perms| perms.into_iter().filter_map(UserSystemPermission::try_from_system_permission).collect())
+    }
+
+    async fn revoke_system_permission(
+        &self,
+        accessor: Accessor,
+        grantee: Grantee,
+        permission: UserSystemPermission,
+    ) -> Result<(), ArcServerStateError> {
+        if !PermissionManager::exec_revoke_permission_permitted(accessor.as_str()) {
+            return Err(Arc::new(LocalServerStateError::OperationNotPermitted {}));
+        }
+        let user_manager = self.get_user_manager().map_err(arc_server_state_err)?;
+        user_manager.revoke_permission(&grantee, &permission.into()).map_err(|typedb_source| {
+            arc_server_state_err(LocalServerStateError::PermissionCannotBeRevoked { typedb_source })
+        })
+    }
+
+    async fn grant_database_permission(
+        &self,
+        accessor: Accessor,
+        grantee: Grantee,
+        database: &str,
+        permission: UserDatabasePermission,
+    ) -> Result<(), ArcServerStateError> {
+        if !PermissionManager::exec_grant_permission_permitted(accessor.as_str()) {
+            return Err(Arc::new(LocalServerStateError::OperationNotPermitted {}));
+        }
+        let user_manager = self.get_user_manager().map_err(arc_server_state_err)?;
+        user_manager.grant_permission(&grantee, &permission.into()).map_err(|typedb_source| {
+            arc_server_state_err(LocalServerStateError::PermissionCannotBeGranted { typedb_source })
+        })
+    }
+
+    async fn list_database_permissions(
+        &self,
+        accessor: Accessor,
+        grantee: Grantee,
+        database: &str,
+    ) -> Result<Vec<UserDatabasePermission>, ArcServerStateError> {
+        if !PermissionManager::exec_list_permissions_permitted(accessor.as_str()) {
+            return Err(Arc::new(LocalServerStateError::OperationNotPermitted {}));
+        }
+        let user_manager = self.get_user_manager().map_err(arc_server_state_err)?;
+        user_manager.list_permissions(&grantee).map_err(|typedb_source| {
+            arc_server_state_err(LocalServerStateError::PermissionsCannotBeListed { typedb_source })
+        }).map(|perms| perms.into_iter().filter_map(UserDatabasePermission::try_from_system_permission).collect())
+    }
+
+    async fn revoke_database_permission(
+        &self,
+        accessor: Accessor,
+        grantee: Grantee,
+        database: &str,
+        permission: UserDatabasePermission,
+    ) -> Result<(), ArcServerStateError> {
+        if !PermissionManager::exec_revoke_permission_permitted(accessor.as_str()) {
+            return Err(Arc::new(LocalServerStateError::OperationNotPermitted {}));
+        }
+        let user_manager = self.get_user_manager().map_err(arc_server_state_err)?;
+        user_manager.revoke_permission(&grantee, &permission.into()).map_err(|typedb_source| {
+            arc_server_state_err(LocalServerStateError::PermissionCannotBeRevoked { typedb_source })
         })
     }
 
@@ -349,37 +427,6 @@ impl UserOperator for LocalUserOperator {
             .map_err(|typedb_source| arc_server_state_err(LocalServerStateError::RoleCannotBeGranted { typedb_source }))
     }
 
-    async fn list_roles(
-        &self,
-        accessor: Accessor,
-        grantee: Grantee,
-    ) -> Result<Vec<SchemaDefinedRole>, ArcServerStateError> {
-        if !PermissionManager::exec_list_roles_permitted(accessor.as_str()) {
-            return Err(Arc::new(LocalServerStateError::OperationNotPermitted {}));
-        }
-
-        let user_manager = self.get_user_manager().map_err(arc_server_state_err)?;
-        user_manager
-            .list_roles(&grantee)
-            .map_err(|typedb_source| arc_server_state_err(LocalServerStateError::RolesCannotBeListed { typedb_source }))
-    }
-
-    async fn revoke_permission(
-        &self,
-        accessor: Accessor,
-        grantee: Grantee,
-        permission: SystemPermission,
-    ) -> Result<(), ArcServerStateError> {
-        if !PermissionManager::exec_revoke_permission_permitted(accessor.as_str()) {
-            return Err(Arc::new(LocalServerStateError::OperationNotPermitted {}));
-        }
-
-        let user_manager = self.get_user_manager().map_err(arc_server_state_err)?;
-        user_manager.revoke_permission(&grantee, &permission).map_err(|typedb_source| {
-            arc_server_state_err(LocalServerStateError::PermissionCannotBeRevoked { typedb_source })
-        })
-    }
-
     async fn revoke_role(
         &self,
         accessor: Accessor,
@@ -394,5 +441,20 @@ impl UserOperator for LocalUserOperator {
         user_manager
             .revoke_role(&grantee, &role)
             .map_err(|typedb_source| arc_server_state_err(LocalServerStateError::RoleCannotBeRevoked { typedb_source }))
+    }
+
+    async fn list_roles(
+        &self,
+        accessor: Accessor,
+        grantee: Grantee,
+    ) -> Result<Vec<SchemaDefinedRole>, ArcServerStateError> {
+        if !PermissionManager::exec_list_roles_permitted(accessor.as_str()) {
+            return Err(Arc::new(LocalServerStateError::OperationNotPermitted {}));
+        }
+
+        let user_manager = self.get_user_manager().map_err(arc_server_state_err)?;
+        user_manager
+            .list_roles(&grantee)
+            .map_err(|typedb_source| arc_server_state_err(LocalServerStateError::RolesCannotBeListed { typedb_source }))
     }
 }

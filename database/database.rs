@@ -73,6 +73,8 @@ use crate::{
     transaction::TransactionError,
 };
 
+struct SchemaLockedError;
+
 #[derive(Debug, Clone)]
 pub(super) struct Schema {
     pub(super) thing_statistics: Arc<Statistics>,
@@ -203,6 +205,14 @@ impl<D> Database<D> {
 
     pub fn name_arc(&self) -> Arc<str> {
         self.name.clone()
+    }
+
+    pub fn rbac_cache(&self) -> Result<Arc<RBACCache>, SchemaLockedError> {
+        match self.schema.try_read() {
+            Ok(schema) => Some(schema.rbac_cache.clone()),
+            Err(TryLockError::WouldBlock) => Err(SchemaLockedError),
+            Err(TryLockError::Poisoned(_)) => panic!("Schema lock is poisoned"),
+        }
     }
 
     // Must be called before serving write transactions in case the storage was modified with
