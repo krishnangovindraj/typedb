@@ -15,7 +15,7 @@ use database::{database::DatabaseUid, transaction::TransactionRead};
 use encoding::{graph::rbac::RBACRoleId, value::label::Label};
 use macro_rules_attribute::apply;
 use options::TransactionOptions;
-use params::{HasOrDoesnt, MayError, SchemaDefinedRoleParam, SystemPermissionParam};
+use params::{HasOrDoesnt, MayError, SchemaDefinedRoleParam};
 use resource::{constants::server::DEFAULT_USER_NAME, profile::StorageCounters};
 use server::authentication::Accessor;
 use system::concepts::{Credential, Grantee, SchemaDefinedRole, User};
@@ -52,7 +52,7 @@ async fn resolve_role_uid(
 
 async fn schema_defined_role_param_to_typedb(
     context: &Context,
-    param: SchemaDefinedRoleParam,
+    param: &SchemaDefinedRoleParam,
 ) -> Result<SchemaDefinedRole, String> {
     let database = resolve_database_uid(context, param.database.as_str()).await;
     let role_id = resolve_role_uid(context, param.database.as_str(), param.role.as_str()).await;
@@ -67,15 +67,19 @@ enum BDDPermission {
     Database { database: String, permission: UserDatabasePermission },
 }
 
-fn permission_param_to_bdd(param: SystemPermissionParam) -> BDDPermission {
-    match param.kind.as_str() {
+fn parse_permission(s: &str) -> BDDPermission {
+    let (kind, db) = match s.split_once(':') {
+        None => (s, None),
+        Some((kind, db)) => (kind, Some(db.to_owned())),
+    };
+    match kind {
         "manage-databases" => BDDPermission::System(UserSystemPermission::ManageDatabases),
         "manage-users" => BDDPermission::System(UserSystemPermission::ManageUsers),
         "grant-permissions" => BDDPermission::System(UserSystemPermission::GrantPermissions),
-        "transaction-read" => BDDPermission::Database { database: param.database.unwrap(), permission: UserDatabasePermission::TransactionRead },
-        "transaction-write" => BDDPermission::Database { database: param.database.unwrap(), permission: UserDatabasePermission::TransactionWrite },
-        "schema-types" => BDDPermission::Database { database: param.database.unwrap(), permission: UserDatabasePermission::SchemaTypes },
-        "schema-roles" => BDDPermission::Database { database: param.database.unwrap(), permission: UserDatabasePermission::SchemaRoles },
+        "transaction-read" => BDDPermission::Database { database: db.unwrap(), permission: UserDatabasePermission::TransactionRead },
+        "transaction-write" => BDDPermission::Database { database: db.unwrap(), permission: UserDatabasePermission::TransactionWrite },
+        "schema-types" => BDDPermission::Database { database: db.unwrap(), permission: UserDatabasePermission::SchemaTypes },
+        "schema-roles" => BDDPermission::Database { database: db.unwrap(), permission: UserDatabasePermission::SchemaRoles },
         other => panic!("Unknown permission kind '{other}'"),
     }
 }
@@ -194,10 +198,10 @@ async fn create_user(context: &mut Context, username: String, password: String) 
 }
 
 #[apply(generic_step)]
-#[step(expr = "grant user {string} permission: {permission}")]
-async fn grant_user_permission(context: &mut Context, username: String, permission: SystemPermissionParam) {
+#[step(expr = "grant user {string} permission: {word}")]
+async fn grant_user_permission(context: &mut Context, username: String, permission: String) {
     let grantee = Grantee::User(User::new(username));
-    match permission_param_to_bdd(permission) {
+    match parse_permission(&permission) {
         BDDPermission::System(perm) => context
             .server_state()
             .users()
@@ -214,15 +218,15 @@ async fn grant_user_permission(context: &mut Context, username: String, permissi
 }
 
 #[apply(generic_step)]
-#[step(expr = "user {string} {has_or_doesnt} permission: {permission}")]
+#[step(expr = "user {string} {has_or_doesnt} permission: {word}")]
 async fn user_has_permission(
     context: &mut Context,
     username: String,
     has_or_doesnt: HasOrDoesnt,
-    permission: SystemPermissionParam,
+    permission: String,
 ) {
     let grantee = Grantee::User(User::new(username));
-    match permission_param_to_bdd(permission) {
+    match parse_permission(&permission) {
         BDDPermission::System(expected) => {
             let permissions = context
                 .server_state()
@@ -253,15 +257,12 @@ async fn grant_user_database_role(
     may_error: MayError,
 ) {
     let grantee = Grantee::User(User::new(username));
-    let result: Result<(), String> = match schema_defined_role_param_to_typedb(context, role).await {
-        Err(e) => Err(e),
-        Ok(granted) => context
-            .server_state()
-            .users()
-            .grant_role(admin_accessor(), grantee, granted)
-            .await
-            .map_err(|e| format!("{e:?}")),
-    };
+    let result = context
+        .server_state()
+        .users()
+        .grant_role(admin_accessor(), grantee, &role.database, &role.role)
+        .await
+        .map_err(|e| format!("{e:?}"));
     may_error.check(result);
 }
 
@@ -274,9 +275,13 @@ async fn user_has_database_role(
     role: SchemaDefinedRoleParam,
 ) {
     let grantee = Grantee::User(User::new(username));
-    let expected = schema_defined_role_param_to_typedb(context, role).await.expect("Role not found");
-    let roles =
-        context.server_state().users().list_roles(admin_accessor(), grantee).await.expect("Failed to list roles");
+    let expected = schema_defined_role_param_to_typedb(context, &role).await.expect("Role not found");
+    let roles = context
+        .server_state()
+        .users()
+        .list_roles(admin_accessor(), grantee, &role.database)
+        .await
+        .expect("Failed to list roles");
     has_or_doesnt.check_contains(&roles, &expected);
 }
 
@@ -293,10 +298,10 @@ async fn rbac_role_exists(context: &mut Context, role_name: String, expected_exi
 }
 
 #[apply(generic_step)]
-#[step(expr = "ungrant user {string} permission: {permission}")]
-async fn ungrant_user_permission(context: &mut Context, username: String, permission: SystemPermissionParam) {
+#[step(expr = "ungrant user {string} permission: {word}")]
+async fn ungrant_user_permission(context: &mut Context, username: String, permission: String) {
     let grantee = Grantee::User(User::new(username));
-    match permission_param_to_bdd(permission) {
+    match parse_permission(&permission) {
         BDDPermission::System(perm) => context
             .server_state()
             .users()
@@ -321,14 +326,11 @@ async fn ungrant_user_database_role(
     may_error: MayError,
 ) {
     let grantee = Grantee::User(User::new(username));
-    let result: Result<(), String> = match schema_defined_role_param_to_typedb(context, role).await {
-        Err(e) => Err(e),
-        Ok(revoked) => context
-            .server_state()
-            .users()
-            .revoke_role(admin_accessor(), grantee, revoked)
-            .await
-            .map_err(|e| format!("{e:?}")),
-    };
+    let result = context
+        .server_state()
+        .users()
+        .revoke_role(admin_accessor(), grantee, &role.database, &role.role)
+        .await
+        .map_err(|e| format!("{e:?}"));
     may_error.check(result);
 }

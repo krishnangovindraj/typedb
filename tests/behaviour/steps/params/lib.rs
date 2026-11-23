@@ -943,24 +943,6 @@ impl FromStr for WithGiven {
     }
 }
 
-const PERMISSION_KINDS: &[&str] = &[
-    "manage-databases",
-    "manage-users",
-    "grant-permissions",
-    "transaction-read",
-    "transaction-write",
-    "schema-types",
-    "schema-roles",
-];
-
-/// Parses `manage-users`, `transaction-read:mydb`.
-#[derive(Debug, Parameter)]
-#[param(name = "permission", regex = r"[a-z][a-z0-9_-]*(?::[a-z0-9_-]+)?")]
-pub struct SystemPermissionParam {
-    pub kind: String,
-    pub database: Option<String>,
-}
-
 /// Parses `mydb:my-role`.
 #[derive(Debug, Parameter)]
 #[param(name = "schema_defined_role", regex = r"[a-z0-9_-]+:[a-z0-9_-]+")]
@@ -978,18 +960,3 @@ impl FromStr for SchemaDefinedRoleParam {
     }
 }
 
-impl FromStr for SystemPermissionParam {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.split_once(':') {
-            None => Ok(Self { kind: s.to_owned(), database: None }),
-            Some((kind, rest)) => {
-                if PERMISSION_KINDS.contains(&kind) {
-                    Ok(Self { kind: kind.to_owned(), database: Some(rest.to_owned()) })
-                } else {
-                    Err(format!("BDD got unrecongnised SystemPermissionParam kind '{kind}'"))
-                }
-            }
-        }
-    }
-}
