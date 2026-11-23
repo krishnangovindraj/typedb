@@ -15,7 +15,7 @@ use database::{database::DatabaseUid, transaction::TransactionRead};
 use encoding::{graph::rbac::RBACRoleId, value::label::Label};
 use macro_rules_attribute::apply;
 use options::TransactionOptions;
-use params::{HasOrDoesnt, SchemaDefinedRoleParam, SystemPermissionParam};
+use params::{HasOrDoesnt, MayError, SchemaDefinedRoleParam, SystemPermissionParam};
 use resource::{constants::server::DEFAULT_USER_NAME, profile::StorageCounters};
 use server::authentication::Accessor;
 use system::concepts::{Credential, Grantee, SchemaDefinedRole, SystemPermission, User};
@@ -32,7 +32,11 @@ async fn resolve_database_uid(context: &Context, name: &str) -> DatabaseUid {
     db_opt.unwrap().expect("Database with name '{name}' not found ").database_id()
 }
 
-async fn resolve_role_uid(context: &Context, database_name: &str, role_name: &str) -> RBACRoleId {
+async fn resolve_role_uid(
+    context: &Context,
+    database_name: &str,
+    role_name: &str,
+) -> Option<RBACRoleId> {
     let server = context.server.as_ref().unwrap().lock().unwrap();
     let db_opt = server.server_state().databases().get(database_name).await;
     let database = db_opt.unwrap().expect("Database with name '{name}' not found ");
@@ -40,16 +44,21 @@ async fn resolve_role_uid(context: &Context, database_name: &str, role_name: &st
     let role = tx
         .rbac_manager
         .get_rbac_role(&*tx.snapshot, role_name, StorageCounters::DISABLED)
-        .unwrap()
-        .expect(format!("Could not find role '{role_name}' in the database '{database_name}'").as_str());
+        .unwrap();
     tx.close();
-    role.vertex().role_id()
+    role.map(|r| r.vertex().role_id())
 }
 
-async fn schema_defined_role_param_to_typedb(context: &Context, param: SchemaDefinedRoleParam) -> SchemaDefinedRole {
+async fn schema_defined_role_param_to_typedb(
+    context: &Context,
+    param: SchemaDefinedRoleParam,
+) -> Result<SchemaDefinedRole, String> {
     let database = resolve_database_uid(context, param.database.as_str()).await;
-    let role_id = resolve_role_uid(context, param.database.as_str(), &param.role.as_str()).await;
-    SchemaDefinedRole { database, role_id }
+    let role_id = resolve_role_uid(context, param.database.as_str(), param.role.as_str()).await;
+    match role_id {
+        Some(role_id) => Ok(SchemaDefinedRole { database, role_id }),
+        None => Err(format!("Role '{}' not found in database '{}'", param.role, param.database)),
+    }
 }
 
 async fn permission_param_to_typedb(context: &Context, param: SystemPermissionParam) -> SystemPermission {
@@ -215,16 +224,24 @@ async fn user_has_permission(
 }
 
 #[apply(generic_step)]
-#[step(expr = "grant user {string} database role: {schema_defined_role}")]
-async fn grant_user_database_role(context: &mut Context, username: String, role: SchemaDefinedRoleParam) {
+#[step(expr = "grant user {string} database role: {schema_defined_role}{may_error}")]
+async fn grant_user_database_role(
+    context: &mut Context,
+    username: String,
+    role: SchemaDefinedRoleParam,
+    may_error: MayError,
+) {
     let grantee = Grantee::User(User::new(username));
-    let granted = schema_defined_role_param_to_typedb(context, role).await;
-    context
-        .server_state()
-        .users()
-        .grant_role(admin_accessor(), grantee, granted)
-        .await
-        .expect("Failed to grant database role");
+    let result: Result<(), String> = match schema_defined_role_param_to_typedb(context, role).await {
+        Err(e) => Err(e),
+        Ok(granted) => context
+            .server_state()
+            .users()
+            .grant_role(admin_accessor(), grantee, granted)
+            .await
+            .map_err(|e| format!("{e:?}")),
+    };
+    may_error.check(result);
 }
 
 #[apply(generic_step)]
@@ -236,7 +253,7 @@ async fn user_has_database_role(
     role: SchemaDefinedRoleParam,
 ) {
     let grantee = Grantee::User(User::new(username));
-    let expected = schema_defined_role_param_to_typedb(context, role).await;
+    let expected = schema_defined_role_param_to_typedb(context, role).await.expect("Role not found");
     let roles =
         context.server_state().users().list_roles(admin_accessor(), grantee).await.expect("Failed to list roles");
     has_or_doesnt.check_contains(&roles, &expected);
@@ -268,14 +285,22 @@ async fn ungrant_user_permission(context: &mut Context, username: String, permis
 }
 
 #[apply(generic_step)]
-#[step(expr = "ungrant user {string} database role: {schema_defined_role}")]
-async fn ungrant_user_database_role(context: &mut Context, username: String, role: SchemaDefinedRoleParam) {
+#[step(expr = "ungrant user {string} database role: {schema_defined_role}{may_error}")]
+async fn ungrant_user_database_role(
+    context: &mut Context,
+    username: String,
+    role: SchemaDefinedRoleParam,
+    may_error: MayError,
+) {
     let grantee = Grantee::User(User::new(username));
-    let revoked = schema_defined_role_param_to_typedb(context, role).await;
-    context
-        .server_state()
-        .users()
-        .revoke_role(admin_accessor(), grantee, revoked)
-        .await
-        .expect("Failed to revoke database role");
+    let result: Result<(), String> = match schema_defined_role_param_to_typedb(context, role).await {
+        Err(e) => Err(e),
+        Ok(revoked) => context
+            .server_state()
+            .users()
+            .revoke_role(admin_accessor(), grantee, revoked)
+            .await
+            .map_err(|e| format!("{e:?}")),
+    };
+    may_error.check(result);
 }

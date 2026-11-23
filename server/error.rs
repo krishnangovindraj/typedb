@@ -312,9 +312,12 @@ impl ServerStateError for LocalServerStateError {
             Self::PermissionCannotBeRevoked { typedb_source } => match typedb_source {
                 PermissionRevokeError::UnexpectedDataCommit { .. }
                 | PermissionRevokeError::UnexpectedSystemDB { .. } => System,
+                PermissionRevokeError::GranteeDidNotHaveRevokedPermission {..}  => Request,
             },
             Self::RoleCannotBeRevoked { typedb_source } => match typedb_source {
-                RoleRevokeError::UnexpectedDataCommit { .. } | RoleRevokeError::UnexpectedSystemDB { .. } => System,
+                RoleRevokeError::UnexpectedDataCommit { .. }
+                | RoleRevokeError::UnexpectedSystemDB { .. } => System,
+                RoleRevokeError::GranteeDidNotHaveRevokedRole {..}  => Request,
             },
             Self::NotInitialised { .. }
             | Self::FailedToOpenPrerequisiteTransaction { .. }

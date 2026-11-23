@@ -223,8 +223,13 @@ impl UserManager {
             .1;
         match revoke_result {
             Ok(Ok(_row_count)) => {
-                debug_assert!(*_row_count >= 1);
-                Ok(())
+                if *_row_count >= 1 {
+                    Ok(())
+                } else {
+                    Err(PermissionRevokeError::GranteeDidNotHaveRevokedPermission {
+                        grantee: grantee.clone(), permission: permission.clone(),
+                    })
+                }
             },
             Ok(Err(typedb_source)) => Err(PermissionRevokeError::UnexpectedSystemDB { typedb_source }),
             Err(typedb_source) => Err(PermissionRevokeError::UnexpectedDataCommit { typedb_source }),
@@ -248,8 +253,13 @@ impl UserManager {
             .1;
         match revoke_result {
             Ok(Ok(_row_count)) => {
-                debug_assert!(*_row_count >= 1);
-                Ok(())
+                if *_row_count >= 1 {
+                    Ok(())
+                } else {
+                    Err(RoleRevokeError::GranteeDidNotHaveRevokedRole {
+                        grantee: grantee.clone(), role: role.clone(),
+                    })
+                }
             },
             Ok(Err(typedb_source)) => Err(RoleRevokeError::UnexpectedSystemDB { typedb_source }),
             Err(typedb_source) => Err(RoleRevokeError::UnexpectedDataCommit { typedb_source }),

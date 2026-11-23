@@ -4,6 +4,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::fmt;
+
 use database::database::DatabaseUid;
 use encoding::graph::rbac::RBACRoleId;
 use pwhash::bcrypt;
@@ -102,6 +104,29 @@ impl Grantee {
         match self {
             Grantee::User(user) => user.name.to_string(),
             Grantee::UserGroup(group) => group.name.to_string(),
+        }
+    }
+}
+
+impl fmt::Display for Grantee {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Grantee::User(user) => write!(f, "User('{}')", user.name),
+            Grantee::UserGroup(group) => write!(f, "UserGroup('{}')", group.name),
+        }
+    }
+}
+
+impl fmt::Display for SystemPermission {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SystemPermission::ManageDatabases => write!(f, "manage-databases"),
+            SystemPermission::ManageUsers => write!(f, "manage-users"),
+            SystemPermission::GrantPermissions => write!(f, "grant-permissions"),
+            SystemPermission::TransactionRead { database } => write!(f, "transaction-read:{}", database.0),
+            SystemPermission::TransactionWrite { database } => write!(f, "transaction-write:{}", database.0),
+            SystemPermission::SchemaTypes { database } => write!(f, "schema-types:{}", database.0),
+            SystemPermission::SchemaRoles { database } => write!(f, "schema-roles:{}", database.0),
         }
     }
 }
