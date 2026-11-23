@@ -20,6 +20,7 @@ rust_library(
         "//common/options",
         "//concept",
         "//function",
+        "//rbac",
         "//database",
         "//diagnostics",
         "//encoding",

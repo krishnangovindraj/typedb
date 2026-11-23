@@ -7,7 +7,9 @@
 use std::{
     collections::{BTreeMap, VecDeque},
     ffi::OsString,
-    fmt, fs, io, mem,
+    fmt, fs,
+    hash::Hash,
+    io, mem,
     path::{Path, PathBuf},
     sync::{
         Arc, Mutex, MutexGuard, RwLock, TryLockError,
@@ -39,8 +41,8 @@ use encoding::{
     EncodingKeyspace,
     error::EncodingError,
     graph::{
-        definition::definition_key_generator::DefinitionKeyGenerator, thing::vertex_generator::ThingVertexGenerator,
-        type_::vertex_generator::TypeVertexGenerator,
+        common::schema_id_allocator::RBACVertexAllocator, definition::definition_key_generator::DefinitionKeyGenerator,
+        thing::vertex_generator::ThingVertexGenerator, type_::vertex_generator::TypeVertexGenerator,
     },
 };
 use error::typedb_error;
@@ -49,6 +51,7 @@ use function::{FunctionError, function_cache::FunctionCache};
 use itertools::Itertools;
 use options::MvccCleanupStrategy;
 use query::query_cache::QueryCache;
+use rbac::rbac_cache::RBACCache;
 use resource::constants::database::{CHECKPOINT_INTERVAL, CLEANUP_WAKEUP_INTERVAL, STATISTICS_UPDATE_INTERVAL};
 use storage::{
     MVCCStorage, StorageDeleteError, StorageOpenError, StorageResetError,
@@ -75,7 +78,11 @@ pub(super) struct Schema {
     pub(super) thing_statistics: Arc<Statistics>,
     pub(super) type_cache: Arc<TypeCache>,
     pub(super) function_cache: Arc<FunctionCache>,
+    pub(super) rbac_cache: Arc<RBACCache>,
 }
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct DatabaseUid(pub u64);
 
 type ReservationRequestId = u64;
 
@@ -164,6 +171,7 @@ pub struct Database<D> {
     pub(super) definition_key_generator: Arc<DefinitionKeyGenerator>,
     pub(super) type_vertex_generator: Arc<TypeVertexGenerator>,
     pub(super) thing_vertex_generator: Arc<ThingVertexGenerator>,
+    pub(super) rbac_role_id_allocator: Arc<RBACVertexAllocator>,
 
     pub(super) schema: Arc<RwLock<Schema>>,
     pub(super) query_cache: Arc<QueryCache>,
@@ -354,6 +362,7 @@ impl Database<WALClient> {
         let type_vertex_generator = Arc::new(TypeVertexGenerator::new());
         let thing_vertex_generator =
             Arc::new(ThingVertexGenerator::load(storage.clone()).map_err(|err| Encoding { source: err })?);
+        let rbac_role_id_allocator = Arc::new(RBACVertexAllocator::new());
         let thing_statistics = Arc::new(Statistics::new(storage.snapshot_watermark()));
 
         let type_cache = Arc::new(
@@ -370,7 +379,12 @@ impl Database<WALClient> {
             .map_err(|error| FunctionCacheInitialise { typedb_source: *error })?,
         );
 
-        let schema = Arc::new(RwLock::new(Schema { thing_statistics, type_cache, function_cache }));
+        let rbac_cache = {
+            let snapshot = storage.open_snapshot_read_at(SequenceNumber::MIN);
+            Arc::new(RBACCache::build(&snapshot))
+        };
+
+        let schema = Arc::new(RwLock::new(Schema { thing_statistics, type_cache, function_cache, rbac_cache }));
         let schema_write_transaction_exclusivity = Arc::new(Mutex::new(SchemaWriteTransactionState::new()));
 
         let query_cache = Arc::new(QueryCache::new());
@@ -397,6 +411,7 @@ impl Database<WALClient> {
             definition_key_generator,
             type_vertex_generator,
             thing_vertex_generator,
+            rbac_role_id_allocator,
             schema,
             query_cache,
             _cleanup_queue: cleanup_queue,
@@ -457,6 +472,7 @@ impl Database<WALClient> {
         let type_vertex_generator = Arc::new(TypeVertexGenerator::new());
         let thing_vertex_generator =
             Arc::new(ThingVertexGenerator::load(storage.clone()).map_err(|err| Encoding { source: err })?);
+        let rbac_role_id_allocator = Arc::new(RBACVertexAllocator::new());
 
         event!(Level::TRACE, "Finding last database '{}' statistics WAL entry", &name);
         let mut thing_statistics = storage
@@ -490,6 +506,11 @@ impl Database<WALClient> {
             .map_err(|error| FunctionCacheInitialise { typedb_source: *error })?,
         );
 
+        let rbac_cache = {
+            let snapshot = storage.open_snapshot_read_at(wal_last_sequence_number);
+            Arc::new(RBACCache::build(&snapshot))
+        };
+
         let checkpoint_sequence_number = match checkpoint {
             None => SequenceNumber::MIN,
             Some(checkpoint) => {
@@ -500,7 +521,7 @@ impl Database<WALClient> {
             }
         };
 
-        let schema = Arc::new(RwLock::new(Schema { thing_statistics, type_cache, function_cache }));
+        let schema = Arc::new(RwLock::new(Schema { thing_statistics, type_cache, function_cache, rbac_cache }));
         let schema_write_transaction_exclusivity = Arc::new(Mutex::new(SchemaWriteTransactionState::new()));
 
         let query_cache = Arc::new(QueryCache::new());
@@ -540,6 +561,7 @@ impl Database<WALClient> {
             definition_key_generator,
             type_vertex_generator,
             thing_vertex_generator,
+            rbac_role_id_allocator,
             schema,
             query_cache,
             _cleanup_queue: cleanup_queue,
@@ -563,6 +585,14 @@ impl Database<WALClient> {
         database.prepare_for_writes().map_err(|typedb_source| DatabaseOpenError::Encoding { source: typedb_source })?;
         event!(Level::TRACE, "Finished loading database '{}'", &name);
         Ok(database)
+    }
+
+    pub fn database_id(&self) -> DatabaseUid {
+        // TODO: Replace with one read from the properties file.
+        use std::hash::{DefaultHasher, Hasher};
+        let mut s = DefaultHasher::new();
+        self.name.hash(&mut s);
+        DatabaseUid((s.finish() >> 1))
     }
 
     fn checkpoint(&self) -> Result<(), CheckpointCreateError> {

@@ -11,6 +11,7 @@ use std::{
 
 use bytes::Bytes;
 use lending_iterator::LendingIterator;
+use rand::RngCore;
 use resource::{
     constants::{encoding::DefinitionIDUInt, snapshot::BUFFER_KEY_INLINE},
     profile::StorageCounters,
@@ -18,7 +19,7 @@ use resource::{
 use storage::{
     key_range::{KeyRange, RangeEnd, RangeStart},
     key_value::StorageKey,
-    snapshot::WritableSnapshot,
+    snapshot::{SnapshotGetError, WritableSnapshot},
 };
 
 use crate::{
@@ -27,6 +28,7 @@ use crate::{
     graph::{
         Typed,
         definition::definition_key::{DefinitionID, DefinitionKey},
+        rbac::{RBACRoleId, RBACRoleVertex},
         type_::{
             Kind,
             vertex::{TypeID, TypeIDUInt, TypeVertex},
@@ -37,6 +39,9 @@ use crate::{
 
 pub type TypeVertexAllocator = SchemaIDAllocator<TypeVertex>;
 pub type DefinitionKeyAllocator = SchemaIDAllocator<DefinitionKey>;
+
+#[derive(Debug)]
+pub struct RBACVertexAllocator;
 
 pub trait SchemaID: Sized {
     const MIN_ID: u64;
@@ -149,5 +154,41 @@ impl SchemaID for DefinitionKey {
 
     fn ids_exhausted_error(prefix: Prefix) -> EncodingError {
         EncodingError::DefinitionIDsExhausted { prefix }
+    }
+}
+
+impl RBACVertexAllocator {
+    pub fn new() -> RBACVertexAllocator {
+        Self
+    }
+
+    pub fn reset(&mut self) {
+        // Nothing. We're stateless
+    }
+
+    pub fn allocate(&self, snapshot: &mut impl WritableSnapshot) -> Result<RBACRoleVertex, EncodingError> {
+        fn generate_random() -> RBACRoleId {
+            RBACRoleId::new(rand::thread_rng().next_u64())
+        }
+        let mut role_id = generate_random();
+        while self
+            .is_already_allocated(role_id, snapshot)
+            .map_err(|source| EncodingError::RBACRoleIDAllocate { source: std::sync::Arc::new(source) })?
+        {
+            role_id = generate_random()
+        }
+        let vertex = RBACRoleVertex::new(role_id);
+        snapshot.put(vertex.into_storage_key().into_owned_array());
+        Ok(vertex)
+    }
+
+    fn is_already_allocated(
+        &self,
+        role_id: RBACRoleId,
+        snapshot: &mut impl WritableSnapshot,
+    ) -> Result<bool, SnapshotGetError> {
+        // TODO: Pass storage counters?
+        let storage_key = RBACRoleVertex::new(role_id).into_storage_key();
+        Ok(snapshot.get::<BUFFER_KEY_INLINE>(storage_key.as_reference(), StorageCounters::DISABLED)?.is_some())
     }
 }

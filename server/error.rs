@@ -23,7 +23,10 @@ use storage::{StorageCommitError, snapshot::SnapshotError};
 use tokio_rustls::rustls::{
     pki_types::pem::Error as RustlsCertError, server::VerifierBuilderError as RustlsVerifierError,
 };
-use user::errors::{UserCreateError, UserDeleteError, UserGetError, UserUpdateError};
+use user::errors::{
+    PermissionGrantError, PermissionListError, RoleGrantError, RoleListError, UserCreateError, UserDeleteError,
+    UserGetError, UserUpdateError,
+};
 
 use crate::{
     authentication::{AuthenticationError, token_manager::TokenManagerError},
@@ -141,6 +144,10 @@ typedb_error! {
         DatabaseImportFinaliseFailed(24, "Unable to finalise database import.", typedb_source: DatabaseCreateError),
         DatabaseImportDiscardFailed(25, "Unable to discard database import.", typedb_source: DatabaseDeleteError),
         ConcurrentImportLimitReached(27, "Too many concurrent imports (limit {limit}). Retry later.", limit: usize),
+        PermissionCannotBeGranted(28, "Unable to grant permission.", typedb_source: PermissionGrantError),
+        PermissionsCannotBeListed(29, "Unable to list permission.", typedb_source: PermissionListError),
+        RoleCannotBeGranted(30, "Unable to grant role.", typedb_source: RoleGrantError),
+        RolesCannotBeListed(31, "Unable to list roles.", typedb_source: RoleListError),
     }
 }
 
@@ -181,7 +188,11 @@ impl ServerStateError for LocalServerStateError {
             | Self::DatabaseImport { .. }
             | Self::DatabaseImportPrepareFailed { .. }
             | Self::DatabaseImportFinaliseFailed { .. }
-            | Self::DatabaseImportDiscardFailed { .. } => InvalidRequest,
+            | Self::DatabaseImportDiscardFailed { .. }
+            | Self::PermissionCannotBeGranted { .. }
+            | Self::PermissionsCannotBeListed { .. }
+            | Self::RoleCannotBeGranted { .. }
+            | Self::RolesCannotBeListed { .. } => InvalidRequest,
             Self::NotInitialised { .. } | Self::ConcurrentImportLimitReached { .. } => Unavailable,
         }
     }
@@ -279,6 +290,20 @@ impl ServerStateError for LocalServerStateError {
                 DatabaseExportError::FunctionRead { typedb_source } => function_read_origin(typedb_source),
                 DatabaseExportError::ShutdownInterrupt { .. }
                 | DatabaseExportError::TransactionCloseInterrupt { .. } => System,
+            },
+            Self::PermissionCannotBeGranted { typedb_source } => match typedb_source {
+                PermissionGrantError::UnexpectedDataCommit { .. } | PermissionGrantError::UnexpectedSystemDB { .. } => {
+                    System
+                }
+            },
+            Self::PermissionsCannotBeListed { typedb_source } => match typedb_source {
+                PermissionListError::UnexpectedSystemDB { .. } => System,
+            },
+            Self::RoleCannotBeGranted { typedb_source } => match typedb_source {
+                RoleGrantError::UnexpectedDataCommit { .. } | RoleGrantError::UnexpectedSystemDB { .. } => System,
+            },
+            Self::RolesCannotBeListed { typedb_source } => match typedb_source {
+                RoleListError::UnexpectedSystemDB { .. } => System,
             },
             Self::NotInitialised { .. }
             | Self::FailedToOpenPrerequisiteTransaction { .. }

@@ -4,7 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::sync::Arc;
+use std::{ops::Deref, sync::Arc};
 
 use concept::{thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
 use database::{
@@ -157,6 +157,7 @@ impl UnifiedTransactionView for TransactionRead<WALClient> {
             database,
             transaction_options,
             profile,
+            ..
         } = self;
         let partial_tx = PartialTx {
             type_manager,
@@ -180,16 +181,7 @@ impl UnifiedTransactionView for TransactionRead<WALClient> {
             transaction_options,
             profile,
         } = partial_tx;
-        TransactionRead {
-            snapshot,
-            type_manager,
-            thing_manager,
-            function_manager,
-            query_manager,
-            database,
-            transaction_options,
-            profile,
-        }
+        TransactionRead::open(database.deref().clone(), transaction_options).expect("Failed to reconstruct read tx")
     }
 
     fn commit(self) -> Result<TransactionProfile, CommitError> {

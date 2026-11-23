@@ -25,11 +25,13 @@ rust_library(
         "//encoding:encoding",
         "//executor:executor",
         "//function",
+        "//rbac",
         "//ir:ir",
         "//query:query",
         "//resource:resource",
         "//server:server",
         "//storage:storage",
+        "//system:system",
         "//util/test:test_utils",
         "//tests/behaviour/steps/params:params",
 

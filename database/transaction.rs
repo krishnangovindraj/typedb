@@ -30,6 +30,7 @@ use function::{FunctionError, function_cache::FunctionCache, function_manager::F
 use ir::pipeline::FunctionReadError;
 use options::TransactionOptions;
 use query::query_manager::QueryManager;
+use rbac::{rbac_cache::RBACCache, rbac_manager::RBACManager};
 use resource::profile::{CommitProfile, TransactionProfile};
 use serde::{Deserialize, Serialize};
 use storage::{
@@ -62,6 +63,7 @@ pub struct TransactionRead<D> {
     pub type_manager: Arc<TypeManager>,
     pub thing_manager: Arc<ThingManager>,
     pub function_manager: Arc<FunctionManager>,
+    pub rbac_manager: Arc<RBACManager>,
     pub query_manager: Arc<QueryManager>,
     pub database: DatabaseDropGuard<D>,
     pub transaction_options: TransactionOptions,
@@ -92,6 +94,8 @@ impl<D: DurabilityClient> TransactionRead<D> {
             database.definition_key_generator.clone(),
             Some(schema.function_cache.clone()),
         ));
+        let rbac_manager =
+            Arc::new(RBACManager::new(database.rbac_role_id_allocator.clone(), Some(schema.rbac_cache.clone())));
         let query_manager = Arc::new(QueryManager::new(Some(database.query_cache.clone())));
 
         drop(schema);
@@ -103,6 +107,7 @@ impl<D: DurabilityClient> TransactionRead<D> {
             type_manager,
             thing_manager,
             function_manager,
+            rbac_manager,
             query_manager,
             database: DatabaseDropGuard::new(database),
             transaction_options,
@@ -264,6 +269,7 @@ pub struct TransactionSchema<D> {
     pub type_manager: Arc<TypeManager>,
     pub thing_manager: Arc<ThingManager>,
     pub function_manager: Arc<FunctionManager>,
+    pub rbac_manager: Arc<RBACManager>,
     pub query_manager: Arc<QueryManager>,
     pub database: DatabaseDropGuard<D>,
     pub transaction_options: TransactionOptions,
@@ -291,6 +297,7 @@ impl<D: DurabilityClient> TransactionSchema<D> {
             )
         };
         let function_manager = Arc::new(FunctionManager::new(database.definition_key_generator.clone(), None));
+        let rbac_manager = Arc::new(RBACManager::new(database.rbac_role_id_allocator.clone(), None));
         let query_manager = Arc::new(QueryManager::new(None));
 
         let enable_transaction_profiling =
@@ -300,6 +307,7 @@ impl<D: DurabilityClient> TransactionSchema<D> {
             type_manager,
             thing_manager: Arc::new(thing_manager),
             function_manager,
+            rbac_manager,
             query_manager,
             database: DatabaseDropGuard::new_with_fn(database, Database::release_schema_transaction),
             transaction_options,
@@ -312,6 +320,7 @@ impl<D: DurabilityClient> TransactionSchema<D> {
         type_manager: Arc<TypeManager>,
         thing_manager: Arc<ThingManager>,
         function_manager: Arc<FunctionManager>,
+        rbac_manager: Arc<RBACManager>,
         query_manager: Arc<QueryManager>,
         database: DatabaseDropGuard<D>,
         transaction_options: TransactionOptions,
@@ -322,6 +331,7 @@ impl<D: DurabilityClient> TransactionSchema<D> {
             type_manager,
             thing_manager,
             function_manager,
+            rbac_manager,
             query_manager,
             database,
             transaction_options,
@@ -440,13 +450,14 @@ impl TransactionId {
 #[macro_export]
 macro_rules! with_transaction_parts {
     (
-        $TransactionType:ident, $transaction:ident, |$inner_snapshot:ident, $type_manager:ident, $thing_manager:ident, $function_manager:ident, $query_manager:ident| $expr:expr
+        $TransactionType:ident, $transaction:ident, |$inner_snapshot:ident, $type_manager:ident, $thing_manager:ident, $function_manager:ident, $rbac_manager:ident, $query_manager:ident| $expr:expr
     ) => {{
         let $TransactionType {
             snapshot,
             type_manager: $type_manager,
             thing_manager: $thing_manager,
             function_manager: $function_manager,
+            rbac_manager: $rbac_manager,
             query_manager: $query_manager,
             database,
             transaction_options,
@@ -462,6 +473,7 @@ macro_rules! with_transaction_parts {
             $type_manager,
             $thing_manager,
             $function_manager,
+            $rbac_manager,
             $query_manager,
             database,
             transaction_options,
@@ -693,6 +705,10 @@ impl<D: DurabilityClient> CommitIntent for SchemaCommitIntent<D> {
                 Err(err) => return Err(SchemaCommitError::FunctionError { typedb_source: *err }),
             };
             schema.function_cache = Arc::new(function_cache);
+            schema.rbac_cache = {
+                let snapshot = database.storage.open_snapshot_read_at(sequence_number);
+                Arc::new(RBACCache::build(&snapshot))
+            };
             commit_profile.schema_update_caches_updated();
         }
 

@@ -10,13 +10,16 @@ use database::Database;
 use resource::constants::server::DEFAULT_USER_NAME;
 use storage::durability_client::WALClient;
 use system::{
-    concepts::{Credential, User},
-    repositories::{user_repository, user_repository::SystemDBError},
+    concepts::{Credential, Grantee, SchemaDefinedRole, SystemPermission, User},
+    repositories::{SystemDBError, rbac_repository, user_repository},
     util::transaction_util::TransactionUtil,
 };
 use uuid::Uuid;
 
-use crate::errors::{UserCreateError, UserDeleteError, UserGetError, UserUpdateError};
+use crate::errors::{
+    PermissionGrantError, PermissionListError, RoleGrantError, RoleListError, UserCreateError, UserDeleteError,
+    UserGetError, UserUpdateError,
+};
 
 #[derive(Debug)]
 pub struct UserManager {
@@ -36,7 +39,9 @@ impl UserManager {
         self.transaction_util.read_transaction(|tx| {
             user_repository::get(tx, username).map_err(|query_error| match query_error {
                 SystemDBError::IllegalQueryInput { .. } => UserGetError::IllegalUsername {},
-                SystemDBError::EmptyUpdate { .. } | SystemDBError::QueryFailed { .. } => UserGetError::Unexpected {},
+                SystemDBError::EmptyUpdate { .. }
+                | SystemDBError::QueryFailed { .. }
+                | SystemDBError::UnexpectedParseFailed { .. } => UserGetError::Unexpected {},
             })
         })
     }
@@ -129,5 +134,65 @@ impl UserManager {
             Ok(Err(_)) => Err(UserDeleteError::IllegalUsername {}),
             Err(_) => Err(UserDeleteError::Unexpected {}),
         }
+    }
+
+    pub fn grant_permission(
+        &self,
+        grantee: &Grantee,
+        granted_permission: &SystemPermission,
+    ) -> Result<(), PermissionGrantError> {
+        let grant_result = self
+            .transaction_util
+            .write_transaction(move |snapshot, type_mgr, thing_mgr, fn_mgr, query_mgr, _db, _tx_opts| {
+                rbac_repository::grant_permission(
+                    snapshot,
+                    &type_mgr,
+                    thing_mgr.clone(),
+                    fn_mgr.clone(),
+                    &query_mgr,
+                    grantee,
+                    granted_permission,
+                )
+            })
+            .1;
+        match grant_result {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(typedb_source)) => Err(PermissionGrantError::UnexpectedSystemDB { typedb_source }),
+            Err(typedb_source) => Err(PermissionGrantError::UnexpectedDataCommit { typedb_source }),
+        }
+    }
+
+    pub fn list_permissions(&self, grantee: &Grantee) -> Result<Vec<SystemPermission>, PermissionListError> {
+        self.transaction_util
+            .read_transaction(move |tx| rbac_repository::list_permissions(tx, grantee))
+            .map_err(|typedb_source| PermissionListError::UnexpectedSystemDB { typedb_source })
+    }
+
+    pub fn grant_role(&self, grantee: &Grantee, granted_role: &SchemaDefinedRole) -> Result<(), RoleGrantError> {
+        let grant_result = self
+            .transaction_util
+            .write_transaction(move |snapshot, type_mgr, thing_mgr, fn_mgr, query_mgr, _db, _tx_opts| {
+                rbac_repository::grant_role(
+                    snapshot,
+                    &type_mgr,
+                    thing_mgr.clone(),
+                    fn_mgr.clone(),
+                    &query_mgr,
+                    grantee,
+                    granted_role,
+                )
+            })
+            .1;
+        match grant_result {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(typedb_source)) => Err(RoleGrantError::UnexpectedSystemDB { typedb_source }),
+            Err(typedb_source) => Err(RoleGrantError::UnexpectedDataCommit { typedb_source }),
+        }
+    }
+
+    pub fn list_roles(&self, grantee: &Grantee) -> Result<Vec<SchemaDefinedRole>, RoleListError> {
+        self.transaction_util
+            .read_transaction(move |tx| rbac_repository::list_roles(tx, grantee))
+            .map_err(|typedb_source| RoleListError::UnexpectedSystemDB { typedb_source })
     }
 }

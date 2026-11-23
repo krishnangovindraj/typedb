@@ -10,6 +10,7 @@
 
 pub mod error;
 pub mod iterator;
+pub mod rbac;
 pub mod thing;
 pub mod type_;
 
