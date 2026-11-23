@@ -45,46 +45,13 @@ typedb_error! {
     }
 }
 
-// Do we really need a different error class per operation?
 typedb_error! {
-    pub PermissionGrantError(component = "Permission management", prefix="UPG") {
-        UnexpectedSystemDB(1, "An unexpected error occurred while granting user permissions.", typedb_source: SystemDBError),
-        UnexpectedDataCommit(2, "An unexpected error has occurred while granting user permissions.", typedb_source: DataCommitError),
-    }
-}
-
-typedb_error! {
-    pub PermissionListError(component = "Permission listing", prefix="UPL") {
-        UnexpectedSystemDB(1, "An unexpected error occurred while listing user permissions.", typedb_source: SystemDBError),
-    }
-}
-
-typedb_error! {
-    pub RoleGrantError(component = "Role management", prefix="URG") {
-        UnexpectedSystemDB(1, "An unexpected error occurred while granting the role to the user.", typedb_source: SystemDBError),
-        UnexpectedDataCommit(2, "An unexpected error occurred while granting the role to the user.", typedb_source: DataCommitError),
-    }
-}
-
-typedb_error! {
-    pub RoleListError(component = "Role Listing", prefix="URL") {
-        UnexpectedSystemDB(1, "An unexpected error occurred while listing user roles.", typedb_source: SystemDBError),
-    }
-}
-
-typedb_error! {
-    pub PermissionRevokeError(component = "Permission revocation", prefix="UPR") {
-        UnexpectedSystemDB(1, "An unexpected error occurred while revoking user permissions.", typedb_source: SystemDBError),
-        UnexpectedDataCommit(2, "An unexpected error has occurred while revoking user permissions.", typedb_source: DataCommitError),
-        GranteeDidNotHaveRevokedPermission(3, "Grantee did not have the revoked permission.", grantee: Grantee,permission: SystemPermission),
-    }
-}
-
-typedb_error! {
-    pub RoleRevokeError(component = "Role revocation", prefix="URR") {
-        UnexpectedSystemDB(1, "An unexpected error occurred while revoking the role from the user.", typedb_source: SystemDBError),
-        UnexpectedDataCommit(2, "An unexpected error occurred while revoking the role from the user.", typedb_source: DataCommitError),
-        GranteeDidNotHaveRevokedRole(3, "Grantee did not have the revoked role.", grantee: Grantee, role: SchemaDefinedRole,),
+    pub PermissionManagementError(component = "Permission management", prefix = "UPM") {
+        UnexpectedSystemDB(1, "An unexpected error occurred during permission management.", typedb_source: SystemDBError),
+        UnexpectedDataCommit(2, "An unexpected error occurred during permission management.", typedb_source: DataCommitError),
+        GranteeDidNotHaveRevokedPermission(3, "Grantee did not have the revoked permission.", grantee: Grantee, permission: SystemPermission),
+        GranteeDidNotHaveRevokedRole(4, "Grantee did not have the revoked role.", grantee: Grantee, role: SchemaDefinedRole),
+        DatabaseNotFound(5, "The referenced database '{database}' was not found.", database: String),
     }
 }
 

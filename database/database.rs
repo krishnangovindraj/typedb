@@ -209,7 +209,7 @@ impl<D> Database<D> {
 
     pub fn rbac_cache(&self) -> Result<Arc<RBACCache>, SchemaLockedError> {
         match self.schema.try_read() {
-            Ok(schema) => Some(schema.rbac_cache.clone()),
+            Ok(schema) => Ok(schema.rbac_cache.clone()),
             Err(TryLockError::WouldBlock) => Err(SchemaLockedError),
             Err(TryLockError::Poisoned(_)) => panic!("Schema lock is poisoned"),
         }

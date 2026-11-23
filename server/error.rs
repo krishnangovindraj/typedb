@@ -23,10 +23,7 @@ use storage::{StorageCommitError, snapshot::SnapshotError};
 use tokio_rustls::rustls::{
     pki_types::pem::Error as RustlsCertError, server::VerifierBuilderError as RustlsVerifierError,
 };
-use user::errors::{
-    PermissionGrantError, PermissionListError, PermissionRevokeError, RoleGrantError, RoleListError, RoleRevokeError,
-    UserCreateError, UserDeleteError, UserGetError, UserUpdateError,
-};
+use user::errors::{PermissionManagementError, UserCreateError, UserDeleteError, UserGetError, UserUpdateError};
 
 use crate::{
     authentication::{AuthenticationError, token_manager::TokenManagerError},
@@ -144,12 +141,12 @@ typedb_error! {
         DatabaseImportFinaliseFailed(24, "Unable to finalise database import.", typedb_source: DatabaseCreateError),
         DatabaseImportDiscardFailed(25, "Unable to discard database import.", typedb_source: DatabaseDeleteError),
         ConcurrentImportLimitReached(27, "Too many concurrent imports (limit {limit}). Retry later.", limit: usize),
-        PermissionCannotBeGranted(28, "Unable to grant permission.", typedb_source: PermissionGrantError),
-        PermissionsCannotBeListed(29, "Unable to list permission.", typedb_source: PermissionListError),
-        RoleCannotBeGranted(30, "Unable to grant role.", typedb_source: RoleGrantError),
-        RolesCannotBeListed(31, "Unable to list roles.", typedb_source: RoleListError),
-        PermissionCannotBeRevoked(32, "Unable to revoke permission.", typedb_source: PermissionRevokeError),
-        RoleCannotBeRevoked(33, "Unable to revoke role.", typedb_source: RoleRevokeError),
+        PermissionCannotBeGranted(28, "Unable to grant permission.", typedb_source: PermissionManagementError),
+        PermissionsCannotBeListed(29, "Unable to list permission.", typedb_source: PermissionManagementError),
+        RoleCannotBeGranted(30, "Unable to grant role.", typedb_source: PermissionManagementError),
+        RolesCannotBeListed(31, "Unable to list roles.", typedb_source: PermissionManagementError),
+        PermissionCannotBeRevoked(32, "Unable to revoke permission.", typedb_source: PermissionManagementError),
+        RoleCannotBeRevoked(33, "Unable to revoke role.", typedb_source: PermissionManagementError),
     }
 }
 
@@ -295,30 +292,12 @@ impl ServerStateError for LocalServerStateError {
                 DatabaseExportError::ShutdownInterrupt { .. }
                 | DatabaseExportError::TransactionCloseInterrupt { .. } => System,
             },
-            Self::PermissionCannotBeGranted { typedb_source } => match typedb_source {
-                PermissionGrantError::UnexpectedDataCommit { .. } | PermissionGrantError::UnexpectedSystemDB { .. } => {
-                    System
-                }
-            },
-            Self::PermissionsCannotBeListed { typedb_source } => match typedb_source {
-                PermissionListError::UnexpectedSystemDB { .. } => System,
-            },
-            Self::RoleCannotBeGranted { typedb_source } => match typedb_source {
-                RoleGrantError::UnexpectedDataCommit { .. } | RoleGrantError::UnexpectedSystemDB { .. } => System,
-            },
-            Self::RolesCannotBeListed { typedb_source } => match typedb_source {
-                RoleListError::UnexpectedSystemDB { .. } => System,
-            },
-            Self::PermissionCannotBeRevoked { typedb_source } => match typedb_source {
-                PermissionRevokeError::UnexpectedDataCommit { .. }
-                | PermissionRevokeError::UnexpectedSystemDB { .. } => System,
-                PermissionRevokeError::GranteeDidNotHaveRevokedPermission {..}  => Request,
-            },
-            Self::RoleCannotBeRevoked { typedb_source } => match typedb_source {
-                RoleRevokeError::UnexpectedDataCommit { .. }
-                | RoleRevokeError::UnexpectedSystemDB { .. } => System,
-                RoleRevokeError::GranteeDidNotHaveRevokedRole {..}  => Request,
-            },
+            Self::PermissionCannotBeGranted { typedb_source }
+            | Self::PermissionsCannotBeListed { typedb_source }
+            | Self::RoleCannotBeGranted { typedb_source }
+            | Self::RolesCannotBeListed { typedb_source }
+            | Self::PermissionCannotBeRevoked { typedb_source }
+            | Self::RoleCannotBeRevoked { typedb_source } => permission_management_origin(typedb_source),
             Self::NotInitialised { .. }
             | Self::FailedToOpenPrerequisiteTransaction { .. }
             | Self::TransactionOpenFailed { .. }
@@ -465,6 +444,15 @@ fn function_read_origin(error: &FunctionReadError) -> ErrorOrigin {
     match error {
         FunctionReadError::FunctionRetrieval { .. } | FunctionReadError::FunctionsScan { .. } => ErrorOrigin::System,
         FunctionReadError::FunctionIDNotFound { .. } | FunctionReadError::FormatError { .. } => ErrorOrigin::Internal,
+    }
+}
+
+fn permission_management_origin(error: &PermissionManagementError) -> ErrorOrigin {
+    match error {
+        PermissionManagementError::UnexpectedSystemDB { .. }
+        | PermissionManagementError::UnexpectedDataCommit { .. } => ErrorOrigin::System,
+        PermissionManagementError::GranteeDidNotHaveRevokedPermission { .. }
+        | PermissionManagementError::GranteeDidNotHaveRevokedRole { .. } => ErrorOrigin::Request,
     }
 }
 
