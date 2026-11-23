@@ -10,12 +10,14 @@ pub mod errors;
 pub mod permission_manager;
 pub mod user_manager;
 
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum UserSystemPermission {
     ManageUsers,
     ManageDatabases,
     GrantPermissions,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum UserDatabasePermission {
     TransactionRead,
     TransactionWrite,

@@ -449,9 +449,11 @@ fn function_read_origin(error: &FunctionReadError) -> ErrorOrigin {
 
 fn permission_management_origin(error: &PermissionManagementError) -> ErrorOrigin {
     match error {
-        PermissionManagementError::UnexpectedSystemDB { .. }
+        PermissionManagementError::DatabaseSchemaBusy { .. }
+        | PermissionManagementError::UnexpectedSystemDB { .. }
         | PermissionManagementError::UnexpectedDataCommit { .. } => ErrorOrigin::System,
         PermissionManagementError::DatabaseNotFound { .. }
+        | PermissionManagementError::RoleNotFound { .. }
         | PermissionManagementError::GranteeDidNotHaveRevokedSystemPermission { .. }
         | PermissionManagementError::GranteeDidNotHaveRevokedDatabasePermission { .. }
         | PermissionManagementError::GranteeDidNotHaveRevokedRole { .. } => ErrorOrigin::Request,

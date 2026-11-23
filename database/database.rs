@@ -73,7 +73,7 @@ use crate::{
     transaction::TransactionError,
 };
 
-struct SchemaLockedError;
+pub struct SchemaLockedError;
 
 #[derive(Debug, Clone)]
 pub(super) struct Schema {

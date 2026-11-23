@@ -104,3 +104,6 @@
 
 	[dependencies.typeql]
 		workspace = true
+
+	[dependencies.user]
+		workspace = true

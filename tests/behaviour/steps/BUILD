@@ -32,6 +32,7 @@ rust_library(
         "//server:server",
         "//storage:storage",
         "//system:system",
+        "//user:user",
         "//util/test:test_utils",
         "//tests/behaviour/steps/params:params",
 

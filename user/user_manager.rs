@@ -231,7 +231,7 @@ impl UserManager {
         }
     }
 
-    pub fn list_roles(&self, grantee: &Grantee) -> Result<Vec<SchemaDefinedRole>, PermissionManagementError> {
+    pub fn list_roles(&self, grantee: &Grantee, database: DatabaseUid) -> Result<Vec<SchemaDefinedRole>, PermissionManagementError> {
         self.transaction_util
             .read_transaction(move |tx| rbac_repository::list_roles(tx, grantee))
             .map_err(|typedb_source| PermissionManagementError::UnexpectedSystemDB { typedb_source })

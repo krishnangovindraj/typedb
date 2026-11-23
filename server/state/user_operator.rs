@@ -15,7 +15,9 @@ use resource::constants::server::DEFAULT_USER_NAME;
 use system::concepts::{Credential, Grantee, SchemaDefinedRole, User, UserGroup};
 use user::{permission_manager::PermissionManager, user_manager::UserManager, UserDatabasePermission, UserSystemPermission};
 use uuid::Uuid;
-use database::database::DatabaseUid;
+use database::Database;
+use database::database::{DatabaseUid, SchemaLockedError};
+use storage::durability_client::WALClient;
 use user::errors::PermissionManagementError;
 use super::TransactionOperator;
 use crate::{
@@ -124,20 +126,23 @@ pub trait UserOperator: Debug + Send + Sync {
         &self,
         accessor: Accessor,
         grantee: Grantee,
-        role: SchemaDefinedRole,
+        database: &str,
+        role: &str,
     ) -> Result<(), ArcServerStateError>;
 
     async fn list_roles(
         &self,
         accessor: Accessor,
         grantee: Grantee,
+        database: &str,
     ) -> Result<Vec<SchemaDefinedRole>, ArcServerStateError>;
 
     async fn revoke_role(
         &self,
         accessor: Accessor,
         grantee: Grantee,
-        role: SchemaDefinedRole,
+        database: &str,
+        role: &str,
     ) -> Result<(), ArcServerStateError>;
 }
 
@@ -191,9 +196,23 @@ impl LocalUserOperator {
     }
 
     fn resolve_database_for_permissions(&self, database: &str) -> Result<DatabaseUid, PermissionManagementError> {
-        self.database_manager.database(database).map(|db| db.database_id()).ok_or_else(|| {
+        let db = self.database_manager.database(database).ok_or_else(|| {
             PermissionManagementError::DatabaseNotFound { database: database.to_owned() }
-        })
+        })?;
+        Ok(db.database_id())
+    }
+
+    fn resolve_role(&self, database: &str, role_name: &str) -> Result<SchemaDefinedRole, PermissionManagementError> {
+        let db = self.database_manager.database(database).ok_or_else(|| {
+            PermissionManagementError::DatabaseNotFound { database: database.to_owned() }
+        })?;
+        let rbac_cache = db.rbac_cache().map_err(|_: SchemaLockedError| {
+            PermissionManagementError::DatabaseSchemaBusy { database: database.to_owned() }
+        })?;
+        let role = rbac_cache.get_rbac_role(role_name).ok_or_else(|| {
+            PermissionManagementError::RoleNotFound { database: database.to_owned(), role: role_name.to_owned() }
+        })?;
+        Ok(SchemaDefinedRole { database: db.database_id(), role_id: role.vertex().role_id() })
     }
 }
 
@@ -435,15 +454,18 @@ impl UserOperator for LocalUserOperator {
         &self,
         accessor: Accessor,
         grantee: Grantee,
-        role: SchemaDefinedRole,
+        database: &str,
+        role: &str,
     ) -> Result<(), ArcServerStateError> {
         if !PermissionManager::exec_grant_role_permitted(accessor.as_str()) {
             return Err(Arc::new(LocalServerStateError::OperationNotPermitted {}));
         }
-
+        let resolved_role = self.resolve_role(database, role).map_err(|typedb_source| {
+            LocalServerStateError::PermissionCannotBeGranted { typedb_source }
+        })?;
         let user_manager = self.get_user_manager().map_err(arc_server_state_err)?;
         user_manager
-            .grant_role(&grantee, &role)
+            .grant_role(&grantee, &resolved_role)
             .map_err(|typedb_source| arc_server_state_err(LocalServerStateError::RoleCannotBeGranted { typedb_source }))
     }
 
@@ -451,15 +473,18 @@ impl UserOperator for LocalUserOperator {
         &self,
         accessor: Accessor,
         grantee: Grantee,
-        role: SchemaDefinedRole,
+        database: &str,
+        role: &str,
     ) -> Result<(), ArcServerStateError> {
         if !PermissionManager::exec_revoke_role_permitted(accessor.as_str()) {
             return Err(Arc::new(LocalServerStateError::OperationNotPermitted {}));
         }
-
+        let resolved_role = self.resolve_role(database, role).map_err(|typedb_source| {
+            LocalServerStateError::PermissionCannotBeGranted { typedb_source }
+        })?;
         let user_manager = self.get_user_manager().map_err(arc_server_state_err)?;
         user_manager
-            .revoke_role(&grantee, &role)
+            .revoke_role(&grantee, &resolved_role)
             .map_err(|typedb_source| arc_server_state_err(LocalServerStateError::RoleCannotBeRevoked { typedb_source }))
     }
 
@@ -467,14 +492,17 @@ impl UserOperator for LocalUserOperator {
         &self,
         accessor: Accessor,
         grantee: Grantee,
+        database: &str,
     ) -> Result<Vec<SchemaDefinedRole>, ArcServerStateError> {
         if !PermissionManager::exec_list_roles_permitted(accessor.as_str()) {
             return Err(Arc::new(LocalServerStateError::OperationNotPermitted {}));
         }
-
+        let db = self.resolve_database_for_permissions(database).map_err(|typedb_source| {
+            LocalServerStateError::PermissionCannotBeGranted { typedb_source }
+        })?;
         let user_manager = self.get_user_manager().map_err(arc_server_state_err)?;
         user_manager
-            .list_roles(&grantee)
+            .list_roles(&grantee, db)
             .map_err(|typedb_source| arc_server_state_err(LocalServerStateError::RolesCannotBeListed { typedb_source }))
     }
 }

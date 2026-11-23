@@ -44,11 +44,11 @@ impl RBACCache {
         RBACCache { roles_index_name, role_access }
     }
 
-    pub(crate) fn get_rbac_role(&self, name: &str) -> Option<RBACRole> {
+    pub fn get_rbac_role(&self, name: &str) -> Option<RBACRole> {
         self.roles_index_name.get(name).copied()
     }
 
-    pub(crate) fn list_rbac_role_accesses(&self, role: &RBACRole) -> &HashSet<RBACAccess> {
+    pub fn list_rbac_role_accesses(&self, role: &RBACRole) -> &HashSet<RBACAccess> {
         self.role_access.get(role).unwrap()
     }
 }
