@@ -285,6 +285,7 @@ async fn typeql_schema_query(context: &mut Context, may_error: params::TypeQLMay
             &tx.type_manager,
             &tx.thing_manager,
             &tx.function_manager,
+            &tx.rbac_manager,
             &typeql_schema,
             query,
             None,

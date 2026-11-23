@@ -8,7 +8,7 @@ use std::{fmt, ops::Range};
 use bytes::{Bytes, byte_array::ByteArray};
 use resource::constants::snapshot::BUFFER_KEY_INLINE;
 use storage::key_value::StorageKey;
-
+use storage::snapshot::WritableSnapshot;
 use crate::{
     AsBytes, EncodingKeyspace, Keyable, Prefixed,
     graph::type_::vertex::TypeVertex,
@@ -17,6 +17,8 @@ use crate::{
         prefix::{Prefix, PrefixID},
     },
 };
+use crate::error::EncodingError;
+use crate::graph::common::schema_id_allocator::RBACVertexAllocator;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct RBACRoleId(u64);
@@ -40,6 +42,19 @@ impl RBACRoleId {
 impl fmt::Debug for RBACRoleId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:04X}", self.0)
+    }
+}
+
+#[derive(Debug)]
+pub struct RBACVertexGenerator(RBACVertexAllocator);
+
+impl RBACVertexGenerator {
+    pub fn new() -> Self {
+        Self(RBACVertexAllocator::new())
+    }
+
+    pub fn allocate(&self, snapshot: &mut impl WritableSnapshot) -> Result<RBACRoleVertex, EncodingError> {
+        self.0.allocate(snapshot)
     }
 }
 

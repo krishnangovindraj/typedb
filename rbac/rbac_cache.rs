@@ -5,8 +5,11 @@
  */
 
 use std::collections::{HashMap, HashSet};
-
+use std::sync::Arc;
 use concept::rbac::{RBACAccess, RBACRole};
+use concept::type_::type_manager::TypeManager;
+use storage::MVCCStorage;
+use storage::sequence_number::SequenceNumber;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::rbac_manager::RBACReader;
@@ -18,6 +21,15 @@ pub struct RBACCache {
 }
 
 impl RBACCache {
+    pub fn new<D>(
+        storage: Arc<MVCCStorage<D>>,
+        open_sequence_number: SequenceNumber,
+    ) -> Self {
+        let snapshot = storage.open_snapshot_read_at(open_sequence_number);
+        let cache = Self::build(&snapshot);
+        cache
+    }
+
     pub fn build(snapshot: &impl ReadableSnapshot) -> Self {
         let all_roles = RBACReader::get_all_rbac_roles(snapshot).unwrap();
         let mut roles_index_name = HashMap::new();

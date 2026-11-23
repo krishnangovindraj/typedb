@@ -20,6 +20,8 @@ rust_library(
         "//concept",
         "//encoding",
         "//storage",
+
+        "@typeql//rust:typeql",
     ],
 )
 

@@ -15,6 +15,7 @@ use database::{
     },
 };
 use function::function_manager::FunctionManager;
+use rbac::rbac_manager::RBACManager;
 use options::TransactionOptions;
 use query::{error::QueryError, given_rows::GivenRowsSimple, query_manager::QueryManager};
 use resource::profile::TransactionProfile;
@@ -35,6 +36,7 @@ pub(crate) struct PartialTx {
     pub(crate) type_manager: Arc<TypeManager>,
     pub(crate) thing_manager: Arc<ThingManager>,
     pub(crate) function_manager: Arc<FunctionManager>,
+    pub(crate) rbac_manager: Arc<RBACManager>,
     pub(crate) query_manager: Arc<QueryManager>,
     pub(crate) database: DatabaseDropGuard<WALClient>,
     pub(crate) transaction_options: TransactionOptions,
@@ -79,6 +81,7 @@ impl UnifiedTransactionView for TransactionWrite<WALClient> {
             type_manager,
             thing_manager,
             function_manager,
+            rbac_manager,
             query_manager,
             database,
             transaction_options,
@@ -90,6 +93,7 @@ impl UnifiedTransactionView for TransactionWrite<WALClient> {
                 type_manager,
                 thing_manager,
                 function_manager,
+                rbac_manager,
                 query_manager,
                 database,
                 transaction_options,
@@ -103,6 +107,7 @@ impl UnifiedTransactionView for TransactionWrite<WALClient> {
             type_manager,
             thing_manager,
             function_manager,
+            rbac_manager,
             query_manager,
             database,
             transaction_options,
@@ -113,6 +118,7 @@ impl UnifiedTransactionView for TransactionWrite<WALClient> {
             type_manager,
             thing_manager,
             function_manager,
+            rbac_manager,
             query_manager,
             database,
             transaction_options,
@@ -153,16 +159,17 @@ impl UnifiedTransactionView for TransactionRead<WALClient> {
             type_manager,
             thing_manager,
             function_manager,
+            rbac_manager,
             query_manager,
             database,
             transaction_options,
             profile,
-            ..
         } = self;
         let partial_tx = PartialTx {
             type_manager,
             thing_manager,
             function_manager,
+            rbac_manager,
             query_manager,
             database,
             transaction_options,
@@ -172,15 +179,7 @@ impl UnifiedTransactionView for TransactionRead<WALClient> {
     }
 
     fn reconstruct(snapshot: Arc<Self::Snapshot>, partial_tx: PartialTx) -> Self {
-        let PartialTx {
-            type_manager,
-            thing_manager,
-            function_manager,
-            query_manager,
-            database,
-            transaction_options,
-            profile,
-        } = partial_tx;
+        let PartialTx { database, transaction_options, .. } = partial_tx;
         TransactionRead::open(database.deref().clone(), transaction_options).expect("Failed to reconstruct read tx")
     }
 

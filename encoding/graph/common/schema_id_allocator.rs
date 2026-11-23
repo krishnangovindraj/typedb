@@ -19,7 +19,7 @@ use resource::{
 use storage::{
     key_range::{KeyRange, RangeEnd, RangeStart},
     key_value::StorageKey,
-    snapshot::{SnapshotGetError, WritableSnapshot},
+    snapshot::WritableSnapshot,
 };
 
 use crate::{
@@ -166,29 +166,21 @@ impl RBACVertexAllocator {
         // Nothing. We're stateless
     }
 
-    pub fn allocate(&self, snapshot: &mut impl WritableSnapshot) -> Result<RBACRoleVertex, EncodingError> {
-        fn generate_random() -> RBACRoleId {
-            RBACRoleId::new(rand::thread_rng().next_u64())
-        }
-        let mut role_id = generate_random();
-        while self
-            .is_already_allocated(role_id, snapshot)
-            .map_err(|source| EncodingError::RBACRoleIDAllocate { source: std::sync::Arc::new(source) })?
-        {
-            role_id = generate_random()
-        }
-        let vertex = RBACRoleVertex::new(role_id);
-        snapshot.put(vertex.into_storage_key().into_owned_array());
-        Ok(vertex)
+    pub fn find_unallocated_id(&self, snapshot: &mut impl WritableSnapshot) -> Result<RBACRoleVertex, EncodingError> {
+        loop {
+            let role_id = RBACRoleId::new(rand::thread_rng().next_u64());
+            let storage_key = RBACRoleVertex::new(role_id).into_storage_key();
+            let found = snapshot.get::<BUFFER_KEY_INLINE>(storage_key.as_reference(), StorageCounters::DISABLED)
+                .map_err(|source| EncodingError::RBACRoleIDAllocate { source: std::sync::Arc::new(source) })?;
+            if found.is_none() {
+                return Ok(RBACRoleVertex::new(role_id));
+            }
+        };
     }
 
-    fn is_already_allocated(
-        &self,
-        role_id: RBACRoleId,
-        snapshot: &mut impl WritableSnapshot,
-    ) -> Result<bool, SnapshotGetError> {
-        // TODO: Pass storage counters?
-        let storage_key = RBACRoleVertex::new(role_id).into_storage_key();
-        Ok(snapshot.get::<BUFFER_KEY_INLINE>(storage_key.as_reference(), StorageCounters::DISABLED)?.is_some())
+    pub fn allocate(&self, snapshot: &mut impl WritableSnapshot) -> Result<RBACRoleVertex, EncodingError> {
+        let vertex = self.find_unallocated_id(snapshot)?;
+        snapshot.put(vertex.into_storage_key().into_owned_array());
+        Ok(vertex)
     }
 }

@@ -17,8 +17,8 @@ use system::{
 use uuid::Uuid;
 
 use crate::errors::{
-    PermissionGrantError, PermissionListError, RoleGrantError, RoleListError, UserCreateError, UserDeleteError,
-    UserGetError, UserUpdateError,
+    PermissionGrantError, PermissionListError, PermissionRevokeError, RoleGrantError, RoleListError, RoleRevokeError,
+    UserCreateError, UserDeleteError, UserGetError, UserUpdateError,
 };
 
 #[derive(Debug)]
@@ -156,7 +156,10 @@ impl UserManager {
             })
             .1;
         match grant_result {
-            Ok(Ok(())) => Ok(()),
+            Ok(Ok(_row_count)) => {
+                debug_assert!(*_row_count >= 1);
+                Ok(())
+            },
             Ok(Err(typedb_source)) => Err(PermissionGrantError::UnexpectedSystemDB { typedb_source }),
             Err(typedb_source) => Err(PermissionGrantError::UnexpectedDataCommit { typedb_source }),
         }
@@ -184,7 +187,10 @@ impl UserManager {
             })
             .1;
         match grant_result {
-            Ok(Ok(())) => Ok(()),
+            Ok(Ok(_row_count)) => {
+                debug_assert!(*_row_count >= 1);
+                Ok(())
+            },
             Ok(Err(typedb_source)) => Err(RoleGrantError::UnexpectedSystemDB { typedb_source }),
             Err(typedb_source) => Err(RoleGrantError::UnexpectedDataCommit { typedb_source }),
         }
@@ -194,5 +200,59 @@ impl UserManager {
         self.transaction_util
             .read_transaction(move |tx| rbac_repository::list_roles(tx, grantee))
             .map_err(|typedb_source| RoleListError::UnexpectedSystemDB { typedb_source })
+    }
+
+    pub fn revoke_permission(
+        &self,
+        grantee: &Grantee,
+        permission: &SystemPermission,
+    ) -> Result<(), PermissionRevokeError> {
+        let revoke_result = self
+            .transaction_util
+            .write_transaction(move |snapshot, type_mgr, thing_mgr, fn_mgr, query_mgr, _db, _tx_opts| {
+                rbac_repository::revoke_permission(
+                    snapshot,
+                    &type_mgr,
+                    thing_mgr.clone(),
+                    fn_mgr.clone(),
+                    &query_mgr,
+                    grantee,
+                    permission,
+                )
+            })
+            .1;
+        match revoke_result {
+            Ok(Ok(_row_count)) => {
+                debug_assert!(*_row_count >= 1);
+                Ok(())
+            },
+            Ok(Err(typedb_source)) => Err(PermissionRevokeError::UnexpectedSystemDB { typedb_source }),
+            Err(typedb_source) => Err(PermissionRevokeError::UnexpectedDataCommit { typedb_source }),
+        }
+    }
+
+    pub fn revoke_role(&self, grantee: &Grantee, role: &SchemaDefinedRole) -> Result<(), RoleRevokeError> {
+        let revoke_result = self
+            .transaction_util
+            .write_transaction(move |snapshot, type_mgr, thing_mgr, fn_mgr, query_mgr, _db, _tx_opts| {
+                rbac_repository::revoke_role(
+                    snapshot,
+                    &type_mgr,
+                    thing_mgr.clone(),
+                    fn_mgr.clone(),
+                    &query_mgr,
+                    grantee,
+                    role,
+                )
+            })
+            .1;
+        match revoke_result {
+            Ok(Ok(_row_count)) => {
+                debug_assert!(*_row_count >= 1);
+                Ok(())
+            },
+            Ok(Err(typedb_source)) => Err(RoleRevokeError::UnexpectedSystemDB { typedb_source }),
+            Err(typedb_source) => Err(RoleRevokeError::UnexpectedDataCommit { typedb_source }),
+        }
     }
 }

@@ -44,4 +44,12 @@ impl PermissionManager {
     pub fn exec_list_roles_permitted(accessor: &str) -> bool {
         accessor == DEFAULT_USER_NAME
     }
+
+    pub fn exec_revoke_permission_permitted(accessor: &str) -> bool {
+        accessor == DEFAULT_USER_NAME
+    }
+
+    pub fn exec_revoke_role_permitted(accessor: &str) -> bool {
+        accessor == DEFAULT_USER_NAME
+    }
 }

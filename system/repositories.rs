@@ -12,6 +12,15 @@ fn is_valid_typeql_value(value: &str) -> bool {
     typeql::common::identifier::is_valid_label(value)
 }
 
+pub struct WrittenRowCount(usize);
+
+impl std::ops::Deref for WrittenRowCount {
+    type Target = usize;
+    fn deref(&self) -> &usize {
+        &self.0
+    }
+}
+
 typedb_error! {
     pub SystemDBError(component = "System database", prefix = "SDB") {
         EmptyUpdate(1, "There is nothing to update"),
@@ -210,6 +219,7 @@ pub mod rbac_repository {
         repositories::{SystemDBError, is_valid_typeql_value},
         util::query_util::{execute_read_pipeline, execute_write_pipeline},
     };
+    use crate::repositories::WrittenRowCount;
 
     const GRANTEE_NAME_VALUE_VARIABLE: &'static str = "grantee-name-value";
     const DATABASE_ID_VALUE_VARIABLE: &'static str = "database-id-value";
@@ -232,7 +242,7 @@ pub mod rbac_repository {
         query_manager: &QueryManager,
         grantee: &Grantee,
         granted_permission: &SystemPermission,
-    ) -> (Result<(), SystemDBError>, Arc<WriteSnapshot<WALClient>>) {
+    ) -> (Result<WrittenRowCount, SystemDBError>, Arc<WriteSnapshot<WALClient>>) {
         let query_string = match build_grant_permission_query(grantee, granted_permission) {
             Ok(query_string) => query_string,
             Err(err) => return (Err(err), Arc::new(snapshot)),
@@ -253,10 +263,7 @@ pub mod rbac_repository {
             query_string.as_str(),
         );
         match result {
-            Ok(_rows) => {
-                debug_assert!(_rows.len() == 1);
-                (Ok(()), snapshot)
-            }
+            Ok(rows) => (Ok(WrittenRowCount(rows.len())), snapshot),
             Err(typedb_source) => (Err(SystemDBError::QueryFailed { typedb_source }), snapshot),
         }
     }
@@ -285,7 +292,7 @@ pub mod rbac_repository {
         query_manager: &QueryManager,
         grantee: &Grantee,
         role: &SchemaDefinedRole,
-    ) -> (Result<(), SystemDBError>, Arc<WriteSnapshot<WALClient>>) {
+    ) -> (Result<WrittenRowCount, SystemDBError>, Arc<WriteSnapshot<WALClient>>) {
         let query_string = match build_grant_role_query(grantee, role) {
             Ok(query_string) => query_string,
             Err(err) => return (Err(err), Arc::new(snapshot)),
@@ -306,10 +313,7 @@ pub mod rbac_repository {
             query_string.as_str(),
         );
         match result {
-            Ok(_rows) => {
-                debug_assert!(_rows.len() == 1);
-                (Ok(()), snapshot)
-            }
+            Ok(rows) => (Ok(WrittenRowCount(rows.len())), snapshot),
             Err(typedb_source) => (Err(SystemDBError::QueryFailed { typedb_source }), snapshot),
         }
     }
@@ -330,65 +334,75 @@ pub mod rbac_repository {
         Ok(roles)
     }
 
-    fn check_valid_value<T: AsRef<str>>(value: T) -> Result<T, SystemDBError> {
-        match is_valid_typeql_value(value.as_ref()) {
-            true => Ok(value),
-            false => Err(SystemDBError::IllegalQueryInput {}),
+    pub fn revoke_permission(
+        snapshot: WriteSnapshot<WALClient>,
+        type_manager: &TypeManager,
+        thing_manager: Arc<ThingManager>,
+        function_manager: Arc<FunctionManager>,
+        query_manager: &QueryManager,
+        grantee: &Grantee,
+        permission: &SystemPermission,
+    ) -> (Result<WrittenRowCount, SystemDBError>, Arc<WriteSnapshot<WALClient>>) {
+        let query_string = match build_revoke_permission_query(grantee, permission) {
+            Ok(query_string) => query_string,
+            Err(err) => return (Err(err), Arc::new(snapshot)),
+        };
+        let query = match parse_query(query_string.as_str()) {
+            Ok(query) => query,
+            Err(typedb_source) => {
+                return (Err(SystemDBError::UnexpectedParseFailed { typedb_source }), Arc::new(snapshot));
+            }
+        };
+        let (result, snapshot) = execute_write_pipeline(
+            snapshot,
+            type_manager,
+            thing_manager,
+            function_manager,
+            query_manager,
+            query.into_structure().into_pipeline(),
+            query_string.as_str(),
+        );
+        match result {
+            Ok(rows) => (Ok(WrittenRowCount(rows.len())), snapshot),
+            Err(typedb_source) => (Err(SystemDBError::QueryFailed { typedb_source }), snapshot),
         }
     }
 
-    fn extract_database_value(database_id_value: &VariableValue<'_>) -> DatabaseUid {
-        DatabaseUid(database_id_value.as_value().to_owned().unwrap_integer() as u64)
-    }
-
-    fn extract_role_value(role_id_value: &VariableValue<'_>) -> RBACRoleId {
-        RBACRoleId::from_system_db_id(role_id_value.as_value().to_owned().unwrap_integer())
-    }
-
-    fn try_valid_granted_permission_from_row(row: HashMap<String, VariableValue>) -> Option<SystemPermission> {
-        let permission_value =
-            row.get(PERMISSION_LABEL_VALUE_VARIABLE).expect("Expected permission label value").as_value();
-        let database_id_value_opt = row.get(DATABASE_ID_VALUE_VARIABLE).expect("Expected database id value");
-        match permission_value.unwrap_string_ref() {
-            "manage-databases" => Some(SystemPermission::ManageDatabases),
-            "manage-users" => Some(SystemPermission::ManageUsers),
-            "grant-permissions" => Some(SystemPermission::GrantPermissions),
-            "transaction-read" => {
-                debug_assert!(database_id_value_opt != &VariableValue::None);
-                let database = extract_database_value(database_id_value_opt);
-                Some(SystemPermission::TransactionRead { database })
+    pub fn revoke_role(
+        snapshot: WriteSnapshot<WALClient>,
+        type_manager: &TypeManager,
+        thing_manager: Arc<ThingManager>,
+        function_manager: Arc<FunctionManager>,
+        query_manager: &QueryManager,
+        grantee: &Grantee,
+        role: &SchemaDefinedRole,
+    ) -> (Result<WrittenRowCount, SystemDBError>, Arc<WriteSnapshot<WALClient>>) {
+        let query_string = match build_revoke_role_query(grantee, role) {
+            Ok(query_string) => query_string,
+            Err(err) => return (Err(err), Arc::new(snapshot)),
+        };
+        let query = match parse_query(query_string.as_str()) {
+            Ok(query) => query,
+            Err(typedb_source) => {
+                return (Err(SystemDBError::UnexpectedParseFailed { typedb_source }), Arc::new(snapshot));
             }
-            "transaction-write" => {
-                debug_assert!(database_id_value_opt != &VariableValue::None);
-                let database = extract_database_value(database_id_value_opt);
-                Some(SystemPermission::TransactionWrite { database })
-            }
-            "schema-types" => {
-                debug_assert!(database_id_value_opt != &VariableValue::None);
-                let database = extract_database_value(database_id_value_opt);
-                Some(SystemPermission::SchemaTypes { database })
-            }
-            "schema-roles" => {
-                debug_assert!(database_id_value_opt != &VariableValue::None);
-                let database = extract_database_value(database_id_value_opt);
-                Some(SystemPermission::SchemaRoles { database })
-            }
-            _other => {
-                debug_assert!(false, "Unrecognised permission label: {_other}");
-                None
-            }
+        };
+        let (result, snapshot) = execute_write_pipeline(
+            snapshot,
+            type_manager,
+            thing_manager,
+            function_manager,
+            query_manager,
+            query.into_structure().into_pipeline(),
+            query_string.as_str(),
+        );
+        match result {
+            Ok(rows) => (Ok(WrittenRowCount(rows.len())), snapshot),
+            Err(typedb_source) => (Err(SystemDBError::QueryFailed { typedb_source }), snapshot),
         }
     }
 
-    fn try_valid_granted_role_from_row(row: HashMap<String, VariableValue>) -> Option<SchemaDefinedRole> {
-        let database_id_value = row.get(DATABASE_ID_VALUE_VARIABLE).expect("Expected database id value");
-        let role_id_value = row.get(ROLE_ID_VALUE_VARIABLE).expect("Expected database id value");
-
-        let database = extract_database_value(database_id_value);
-        let role = extract_role_value(role_id_value);
-        Some(SchemaDefinedRole { database, role_id: role })
-    }
-
+    // Query builders
     fn build_list_permissions_query(grantee: &Grantee) -> Result<String, SystemDBError> {
         let grantee_type = check_valid_value(grantee.type_to_typeql_value_string())?;
         let grantee_name = check_valid_value(grantee.name_to_typeql_value_string())?;
@@ -499,5 +513,124 @@ pub mod rbac_repository {
         "#
         );
         Ok(query_string)
+    }
+
+    fn build_revoke_permission_query(
+        grantee: &Grantee,
+        permission: &SystemPermission,
+    ) -> Result<String, SystemDBError> {
+        let permission_type = permission.type_to_typeql_string();
+        let grantee_type = check_valid_value(grantee.type_to_typeql_value_string())?;
+        let grantee_name = check_valid_value(grantee.name_to_typeql_value_string())?;
+
+        let (database_value_stub, database_filter_stub) = match permission.database() {
+            None => ("".to_owned(), "".to_owned()),
+            Some(database_id) => (
+                format!(r#"let ${DATABASE_ID_VALUE_VARIABLE} = {id};"#, id = database_id.0),
+                format!(r#"${GRANTED_PERMISSION_VARIABLE} has database-id == ${DATABASE_ID_VALUE_VARIABLE};"#),
+            ),
+        };
+
+        let query_string = format!(
+            r#"
+            match
+                ${PERMISSION_TYPE_VARIABLE} label {permission_type};
+                let ${GRANTEE_NAME_VALUE_VARIABLE} = "{grantee_name}";
+                ${GRANTEE_TYPE_VARIABLE} label {grantee_type};
+                {database_value_stub}
+            match
+                ${GRANTEE_VARIABLE} isa! ${GRANTEE_TYPE_VARIABLE}, has name == ${GRANTEE_NAME_VALUE_VARIABLE};
+                ${GRANTED_PERMISSION_VARIABLE} isa! ${PERMISSION_TYPE_VARIABLE}, links (grantee: ${GRANTEE_VARIABLE});
+                {database_filter_stub}
+            delete
+                ${GRANTED_PERMISSION_VARIABLE};
+        "#
+        );
+        Ok(query_string)
+    }
+
+    fn build_revoke_role_query(grantee: &Grantee, role: &SchemaDefinedRole) -> Result<String, SystemDBError> {
+        let grantee_type = check_valid_value(grantee.type_to_typeql_value_string())?;
+        let grantee_name = check_valid_value(grantee.name_to_typeql_value_string())?;
+        let database_id = &role.database.0;
+        let role_id = &role.role_id.to_system_db_id();
+        let query_string = format!(
+            r#"
+            match
+                let ${GRANTEE_NAME_VALUE_VARIABLE} = "{grantee_name}";
+                ${GRANTEE_TYPE_VARIABLE} label {grantee_type};
+                let ${DATABASE_ID_VALUE_VARIABLE} = {database_id};
+                let ${ROLE_ID_VALUE_VARIABLE} = {role_id};
+            match
+                ${GRANTEE_VARIABLE} isa! ${GRANTEE_TYPE_VARIABLE}, has name == ${GRANTEE_NAME_VALUE_VARIABLE};
+                ${GRANTED_ROLE_VARIABLE} isa role-assignment,
+                    links (grantee: ${GRANTEE_VARIABLE}),
+                    has database-id == ${DATABASE_ID_VALUE_VARIABLE},
+                    has role-id == ${ROLE_ID_VALUE_VARIABLE};
+            delete
+                ${GRANTED_ROLE_VARIABLE};
+        "#
+        );
+        Ok(query_string)
+    }
+
+    // Value processing helpers
+    fn check_valid_value<T: AsRef<str>>(value: T) -> Result<T, SystemDBError> {
+        match is_valid_typeql_value(value.as_ref()) {
+            true => Ok(value),
+            false => Err(SystemDBError::IllegalQueryInput {}),
+        }
+    }
+
+    fn extract_database_value(database_id_value: &VariableValue<'_>) -> DatabaseUid {
+        DatabaseUid(database_id_value.as_value().to_owned().unwrap_integer() as u64)
+    }
+
+    fn extract_role_value(role_id_value: &VariableValue<'_>) -> RBACRoleId {
+        RBACRoleId::from_system_db_id(role_id_value.as_value().to_owned().unwrap_integer())
+    }
+
+    fn try_valid_granted_permission_from_row(row: HashMap<String, VariableValue>) -> Option<SystemPermission> {
+        let permission_value =
+            row.get(PERMISSION_LABEL_VALUE_VARIABLE).expect("Expected permission label value").as_value();
+        let database_id_value_opt = row.get(DATABASE_ID_VALUE_VARIABLE).expect("Expected database id value");
+        match permission_value.unwrap_string_ref() {
+            "manage-databases" => Some(SystemPermission::ManageDatabases),
+            "manage-users" => Some(SystemPermission::ManageUsers),
+            "grant-permissions" => Some(SystemPermission::GrantPermissions),
+            "transaction-read" => {
+                debug_assert!(database_id_value_opt != &VariableValue::None);
+                let database = extract_database_value(database_id_value_opt);
+                Some(SystemPermission::TransactionRead { database })
+            }
+            "transaction-write" => {
+                debug_assert!(database_id_value_opt != &VariableValue::None);
+                let database = extract_database_value(database_id_value_opt);
+                Some(SystemPermission::TransactionWrite { database })
+            }
+            "schema-types" => {
+                debug_assert!(database_id_value_opt != &VariableValue::None);
+                let database = extract_database_value(database_id_value_opt);
+                Some(SystemPermission::SchemaTypes { database })
+            }
+            "schema-roles" => {
+                debug_assert!(database_id_value_opt != &VariableValue::None);
+                let database = extract_database_value(database_id_value_opt);
+                Some(SystemPermission::SchemaRoles { database })
+            }
+            _other => {
+                debug_assert!(false, "Unrecognised permission label: {_other}");
+                None
+            }
+        }
+    }
+
+    fn try_valid_granted_role_from_row(row: HashMap<String, VariableValue>) -> Option<SchemaDefinedRole> {
+        let database_id_value = row.get(DATABASE_ID_VALUE_VARIABLE).expect("Expected database id value");
+        let role_id_value = row.get(ROLE_ID_VALUE_VARIABLE).expect("Expected database id value");
+
+        let database = extract_database_value(database_id_value);
+        let role = extract_role_value(role_id_value);
+        Some(SchemaDefinedRole { database, role_id: role })
     }
 }

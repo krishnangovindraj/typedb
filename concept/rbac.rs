@@ -10,7 +10,7 @@ use encoding::graph::{
     type_::vertex::TypeVertex,
 };
 
-use crate::type_::{attribute_type::AttributeType, object_type::ObjectType};
+use crate::type_::{attribute_type::AttributeType, object_type::ObjectType, TypeAPI};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum RBACAccess {

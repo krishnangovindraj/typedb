@@ -11,15 +11,12 @@ use concept::{
     error::ConceptReadError,
     rbac::{RBACAccess, RBACRole},
 };
-use encoding::{
-    Keyable,
-    graph::{
-        common::schema_id_allocator::RBACVertexAllocator,
-        rbac::{RBACAccessKind, RBACRoleProperty, RBACRoleTypeAccess, RBACRoleVertex},
-        type_::index::NameToRBACRoleVertexIndex,
-    },
-    value::{label::Label, string_bytes::StringBytes},
-};
+use encoding::{Keyable, graph::{
+    rbac::{RBACAccessKind, RBACRoleProperty, RBACRoleTypeAccess, RBACRoleVertex},
+    type_::index::NameToRBACRoleVertexIndex,
+}, value::{label::Label, string_bytes::StringBytes}, AsBytes};
+use encoding::graph::rbac::RBACVertexGenerator;
+use encoding::graph::type_::vertex::TypeVertexEncoding;
 use primitive::maybe_owns::MaybeOwns;
 use resource::{
     constants::{encoding::LABEL_SCOPED_NAME_STRING_INLINE, snapshot::BUFFER_KEY_INLINE},
@@ -34,13 +31,13 @@ use crate::{RBACError, rbac_cache::RBACCache};
 
 #[derive(Debug)]
 pub struct RBACManager {
-    role_id_allocator: Arc<RBACVertexAllocator>,
+    rbac_role_allocator: Arc<RBACVertexGenerator>,
     rbac_cache: Option<Arc<RBACCache>>,
 }
 
 impl RBACManager {
-    pub fn new(role_id_allocator: Arc<RBACVertexAllocator>, rbac_cache: Option<Arc<RBACCache>>) -> Self {
-        RBACManager { role_id_allocator, rbac_cache }
+    pub fn new(role_id_allocator: Arc<RBACVertexGenerator>, rbac_cache: Option<Arc<RBACCache>>) -> Self {
+        RBACManager { rbac_role_allocator: role_id_allocator, rbac_cache }
     }
 
     pub fn get_rbac_role(
@@ -82,7 +79,7 @@ impl RBACManager {
             return Err(Box::new(RBACError::RBACRoleAlreadyExists { name: name.to_owned() }));
         }
         let role_vertex = self
-            .role_id_allocator
+            .rbac_role_allocator
             .allocate(snapshot)
             .map_err(|source| Box::new(RBACError::CreateRBACRoleEncoding { source }))?;
         let role = RBACRole::new(role_vertex);

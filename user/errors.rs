@@ -71,6 +71,20 @@ typedb_error! {
     }
 }
 
+typedb_error! {
+    pub PermissionRevokeError(component = "Permission revocation", prefix="UPR") {
+        UnexpectedSystemDB(1, "An unexpected error occurred while revoking user permissions.", typedb_source: SystemDBError),
+        UnexpectedDataCommit(2, "An unexpected error has occurred while revoking user permissions.", typedb_source: DataCommitError),
+    }
+}
+
+typedb_error! {
+    pub RoleRevokeError(component = "Role revocation", prefix="URR") {
+        UnexpectedSystemDB(1, "An unexpected error occurred while revoking the role from the user.", typedb_source: SystemDBError),
+        UnexpectedDataCommit(2, "An unexpected error occurred while revoking the role from the user.", typedb_source: DataCommitError),
+    }
+}
+
 impl From<UserGetError> for UserCreateError {
     fn from(err: UserGetError) -> Self {
         match err {

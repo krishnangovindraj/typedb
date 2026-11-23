@@ -32,3 +32,6 @@
 
 	[dependencies.storage]
 		workspace = true
+
+	[dependencies.typeql]
+		workspace = true

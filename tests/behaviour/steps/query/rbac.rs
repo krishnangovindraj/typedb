@@ -241,3 +241,41 @@ async fn user_has_database_role(
         context.server_state().users().list_roles(admin_accessor(), grantee).await.expect("Failed to list roles");
     has_or_doesnt.check_contains(&roles, &expected);
 }
+
+#[apply(generic_step)]
+#[step(expr = "rbac role '{word}' exists: {boolean}")]
+async fn rbac_role_exists(context: &mut Context, role_name: String, expected_exists: params::Boolean) {
+    with_read_tx!(context, |tx| {
+        let role = tx
+            .rbac_manager
+            .get_rbac_role(tx.snapshot.as_ref(), &role_name, StorageCounters::DISABLED)
+            .expect("Error getting RBAC role");
+        params::check_boolean!(expected_exists, role.is_some());
+    });
+}
+
+#[apply(generic_step)]
+#[step(expr = "ungrant user {string} permission: {permission}")]
+async fn ungrant_user_permission(context: &mut Context, username: String, permission: SystemPermissionParam) {
+    let grantee = Grantee::User(User::new(username));
+    let revoked = permission_param_to_typedb(context, permission).await;
+    context
+        .server_state()
+        .users()
+        .revoke_permission(admin_accessor(), grantee, revoked)
+        .await
+        .expect("Failed to revoke permission");
+}
+
+#[apply(generic_step)]
+#[step(expr = "ungrant user {string} database role: {schema_defined_role}")]
+async fn ungrant_user_database_role(context: &mut Context, username: String, role: SchemaDefinedRoleParam) {
+    let grantee = Grantee::User(User::new(username));
+    let revoked = schema_defined_role_param_to_typedb(context, role).await;
+    context
+        .server_state()
+        .users()
+        .revoke_role(admin_accessor(), grantee, revoked)
+        .await
+        .expect("Failed to revoke database role");
+}

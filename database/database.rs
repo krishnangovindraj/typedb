@@ -41,7 +41,7 @@ use encoding::{
     EncodingKeyspace,
     error::EncodingError,
     graph::{
-        common::schema_id_allocator::RBACVertexAllocator, definition::definition_key_generator::DefinitionKeyGenerator,
+        definition::definition_key_generator::DefinitionKeyGenerator, rbac::RBACVertexGenerator,
         thing::vertex_generator::ThingVertexGenerator, type_::vertex_generator::TypeVertexGenerator,
     },
 };
@@ -171,7 +171,7 @@ pub struct Database<D> {
     pub(super) definition_key_generator: Arc<DefinitionKeyGenerator>,
     pub(super) type_vertex_generator: Arc<TypeVertexGenerator>,
     pub(super) thing_vertex_generator: Arc<ThingVertexGenerator>,
-    pub(super) rbac_role_id_allocator: Arc<RBACVertexAllocator>,
+    pub(super) rbac_role_vertex_generator: Arc<RBACVertexGenerator>,
 
     pub(super) schema: Arc<RwLock<Schema>>,
     pub(super) query_cache: Arc<QueryCache>,
@@ -362,7 +362,7 @@ impl Database<WALClient> {
         let type_vertex_generator = Arc::new(TypeVertexGenerator::new());
         let thing_vertex_generator =
             Arc::new(ThingVertexGenerator::load(storage.clone()).map_err(|err| Encoding { source: err })?);
-        let rbac_role_id_allocator = Arc::new(RBACVertexAllocator::new());
+        let rbac_role_vertex_generator = Arc::new(RBACVertexGenerator::new());
         let thing_statistics = Arc::new(Statistics::new(storage.snapshot_watermark()));
 
         let type_cache = Arc::new(
@@ -379,10 +379,7 @@ impl Database<WALClient> {
             .map_err(|error| FunctionCacheInitialise { typedb_source: *error })?,
         );
 
-        let rbac_cache = {
-            let snapshot = storage.open_snapshot_read_at(SequenceNumber::MIN);
-            Arc::new(RBACCache::build(&snapshot))
-        };
+        let rbac_cache = Arc::new(RBACCache::new(storage.clone(), SequenceNumber::MIN));
 
         let schema = Arc::new(RwLock::new(Schema { thing_statistics, type_cache, function_cache, rbac_cache }));
         let schema_write_transaction_exclusivity = Arc::new(Mutex::new(SchemaWriteTransactionState::new()));
@@ -411,7 +408,7 @@ impl Database<WALClient> {
             definition_key_generator,
             type_vertex_generator,
             thing_vertex_generator,
-            rbac_role_id_allocator,
+            rbac_role_vertex_generator,
             schema,
             query_cache,
             _cleanup_queue: cleanup_queue,
@@ -472,7 +469,7 @@ impl Database<WALClient> {
         let type_vertex_generator = Arc::new(TypeVertexGenerator::new());
         let thing_vertex_generator =
             Arc::new(ThingVertexGenerator::load(storage.clone()).map_err(|err| Encoding { source: err })?);
-        let rbac_role_id_allocator = Arc::new(RBACVertexAllocator::new());
+        let rbac_role_vertex_generator = Arc::new(RBACVertexGenerator::new());
 
         event!(Level::TRACE, "Finding last database '{}' statistics WAL entry", &name);
         let mut thing_statistics = storage
@@ -505,11 +502,7 @@ impl Database<WALClient> {
             )
             .map_err(|error| FunctionCacheInitialise { typedb_source: *error })?,
         );
-
-        let rbac_cache = {
-            let snapshot = storage.open_snapshot_read_at(wal_last_sequence_number);
-            Arc::new(RBACCache::build(&snapshot))
-        };
+        let rbac_cache = Arc::new(RBACCache::new(storage.clone(), wal_last_sequence_number));
 
         let checkpoint_sequence_number = match checkpoint {
             None => SequenceNumber::MIN,
@@ -561,7 +554,7 @@ impl Database<WALClient> {
             definition_key_generator,
             type_vertex_generator,
             thing_vertex_generator,
-            rbac_role_id_allocator,
+            rbac_role_vertex_generator,
             schema,
             query_cache,
             _cleanup_queue: cleanup_queue,

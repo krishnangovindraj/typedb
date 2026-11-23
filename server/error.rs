@@ -24,8 +24,8 @@ use tokio_rustls::rustls::{
     pki_types::pem::Error as RustlsCertError, server::VerifierBuilderError as RustlsVerifierError,
 };
 use user::errors::{
-    PermissionGrantError, PermissionListError, RoleGrantError, RoleListError, UserCreateError, UserDeleteError,
-    UserGetError, UserUpdateError,
+    PermissionGrantError, PermissionListError, PermissionRevokeError, RoleGrantError, RoleListError, RoleRevokeError,
+    UserCreateError, UserDeleteError, UserGetError, UserUpdateError,
 };
 
 use crate::{
@@ -148,6 +148,8 @@ typedb_error! {
         PermissionsCannotBeListed(29, "Unable to list permission.", typedb_source: PermissionListError),
         RoleCannotBeGranted(30, "Unable to grant role.", typedb_source: RoleGrantError),
         RolesCannotBeListed(31, "Unable to list roles.", typedb_source: RoleListError),
+        PermissionCannotBeRevoked(32, "Unable to revoke permission.", typedb_source: PermissionRevokeError),
+        RoleCannotBeRevoked(33, "Unable to revoke role.", typedb_source: RoleRevokeError),
     }
 }
 
@@ -192,7 +194,9 @@ impl ServerStateError for LocalServerStateError {
             | Self::PermissionCannotBeGranted { .. }
             | Self::PermissionsCannotBeListed { .. }
             | Self::RoleCannotBeGranted { .. }
-            | Self::RolesCannotBeListed { .. } => InvalidRequest,
+            | Self::RolesCannotBeListed { .. }
+            | Self::PermissionCannotBeRevoked { .. }
+            | Self::RoleCannotBeRevoked { .. } => InvalidRequest,
             Self::NotInitialised { .. } | Self::ConcurrentImportLimitReached { .. } => Unavailable,
         }
     }
@@ -304,6 +308,13 @@ impl ServerStateError for LocalServerStateError {
             },
             Self::RolesCannotBeListed { typedb_source } => match typedb_source {
                 RoleListError::UnexpectedSystemDB { .. } => System,
+            },
+            Self::PermissionCannotBeRevoked { typedb_source } => match typedb_source {
+                PermissionRevokeError::UnexpectedDataCommit { .. }
+                | PermissionRevokeError::UnexpectedSystemDB { .. } => System,
+            },
+            Self::RoleCannotBeRevoked { typedb_source } => match typedb_source {
+                RoleRevokeError::UnexpectedDataCommit { .. } | RoleRevokeError::UnexpectedSystemDB { .. } => System,
             },
             Self::NotInitialised { .. }
             | Self::FailedToOpenPrerequisiteTransaction { .. }
