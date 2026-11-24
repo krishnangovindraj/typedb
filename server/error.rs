@@ -23,6 +23,7 @@ use storage::{StorageCommitError, snapshot::SnapshotError};
 use tokio_rustls::rustls::{
     pki_types::pem::Error as RustlsCertError, server::VerifierBuilderError as RustlsVerifierError,
 };
+use system::concepts::Grantee;
 use user::errors::{PermissionManagementError, UserCreateError, UserDeleteError, UserGetError, UserUpdateError};
 use user::{UserDatabasePermission, UserSystemPermission};
 use crate::{
@@ -142,15 +143,15 @@ typedb_error! {
         DatabaseImportDiscardFailed(25, "Unable to discard database import.", typedb_source: DatabaseDeleteError),
         ConcurrentImportLimitReached(27, "Too many concurrent imports (limit {limit}). Retry later.", limit: usize),
 
-        SystemPermissionsCannotBeListed(28, "Unable to list system permission.", typedb_source: PermissionManagementError),
-        SystemPermissionCannotBeGranted(29, "Unable to grant system permission.", typedb_source: PermissionManagementError, permission: UserSystemPermission),
-        SystemPermissionCannotBeRevoked(30, "Unable to revoke system permission.", typedb_source: PermissionManagementError, permission: UserSystemPermission),
-        DatabasePermissionsCannotBeListed(31, "Unable to list database permission.", typedb_source: PermissionManagementError, database: String),
-        DatabasePermissionCannotBeGranted(32, "Unable to grant database permission.", typedb_source: PermissionManagementError, database: String, permission: UserDatabasePermission),
-        DatabasePermissionCannotBeRevoked(33, "Unable to revoke database permission.", typedb_source: PermissionManagementError, database: String, permission: UserDatabasePermission),
-        RolesCannotBeListed(34, "Unable to list roles.", typedb_source: PermissionManagementError, database: String),
-        RoleCannotBeGranted(35, "Unable to grant role.", typedb_source: PermissionManagementError, database: String, role: String),
-        RoleCannotBeRevoked(36, "Unable to revoke role.", typedb_source: PermissionManagementError, database: String, role: String),
+        SystemPermissionsCannotBeListed(28, "Unable to list system permissions of '{grantee}'.", typedb_source: PermissionManagementError, grantee: Grantee),
+        SystemPermissionCannotBeGranted(29, "Unable to grant the system permission '{permission}' to '{grantee}'.", typedb_source: PermissionManagementError, grantee: Grantee, permission: UserSystemPermission),
+        SystemPermissionCannotBeRevoked(30, "Unable to revoke system permission '{permission}' from '{grantee}'.", typedb_source: PermissionManagementError, grantee: Grantee, permission: UserSystemPermission),
+        DatabasePermissionsCannotBeListed(31, "Unable to list database permissions of '{grantee}' on database '{database}'.", typedb_source: PermissionManagementError, grantee: Grantee, database: String),
+        DatabasePermissionCannotBeGranted(32, "Unable to grant database permission '{permission}' on database '{database}' to '{grantee}'.", typedb_source: PermissionManagementError, grantee: Grantee, database: String, permission: UserDatabasePermission),
+        DatabasePermissionCannotBeRevoked(33, "Unable to revoke database permission '{permission}' on database '{database}' from '{grantee}'.", typedb_source: PermissionManagementError, grantee: Grantee, database: String, permission: UserDatabasePermission),
+        RolesCannotBeListed(34, "Unable to list roles of '{grantee}' on database '{database}'.", typedb_source: PermissionManagementError, grantee: Grantee, database: String),
+        RoleCannotBeGranted(35, "Unable to grant role '{role}' on database '{database}' to '{grantee}'.", typedb_source: PermissionManagementError, grantee: Grantee, database: String, role: String),
+        RoleCannotBeRevoked(36, "Unable to revoke role '{role}' on database '{database}' from '{grantee}'.", typedb_source: PermissionManagementError, grantee: Grantee, database: String, role: String),
     }
 }
 
@@ -192,11 +193,14 @@ impl ServerStateError for LocalServerStateError {
             | Self::DatabaseImportPrepareFailed { .. }
             | Self::DatabaseImportFinaliseFailed { .. }
             | Self::DatabaseImportDiscardFailed { .. }
-            | Self::PermissionCannotBeGranted { .. }
-            | Self::PermissionsCannotBeListed { .. }
+            | Self::SystemPermissionCannotBeGranted { .. }
+            | Self::SystemPermissionsCannotBeListed { .. }
+            | Self::SystemPermissionCannotBeRevoked { .. }
+            | Self::DatabasePermissionCannotBeGranted { .. }
+            | Self::DatabasePermissionsCannotBeListed { .. }
+            | Self::DatabasePermissionCannotBeRevoked { .. }
             | Self::RoleCannotBeGranted { .. }
             | Self::RolesCannotBeListed { .. }
-            | Self::PermissionCannotBeRevoked { .. }
             | Self::RoleCannotBeRevoked { .. } => InvalidRequest,
             Self::NotInitialised { .. } | Self::ConcurrentImportLimitReached { .. } => Unavailable,
         }
@@ -296,11 +300,14 @@ impl ServerStateError for LocalServerStateError {
                 DatabaseExportError::ShutdownInterrupt { .. }
                 | DatabaseExportError::TransactionCloseInterrupt { .. } => System,
             },
-            Self::PermissionCannotBeGranted { typedb_source }
-            | Self::PermissionsCannotBeListed { typedb_source }
-            | Self::RoleCannotBeGranted { typedb_source }
-            | Self::RolesCannotBeListed { typedb_source }
-            | Self::PermissionCannotBeRevoked { typedb_source }
+            Self::SystemPermissionCannotBeGranted { typedb_source, .. }
+            | Self::SystemPermissionsCannotBeListed { typedb_source, .. }
+            | Self::SystemPermissionCannotBeRevoked { typedb_source, .. }
+            | Self::DatabasePermissionCannotBeGranted { typedb_source, .. }
+            | Self::DatabasePermissionsCannotBeListed { typedb_source, .. }
+            | Self::DatabasePermissionCannotBeRevoked { typedb_source, .. }
+            | Self::RoleCannotBeGranted { typedb_source, .. }
+            | Self::RolesCannotBeListed { typedb_source, .. }
             | Self::RoleCannotBeRevoked { typedb_source, .. } => permission_management_origin(typedb_source),
             Self::NotInitialised { .. }
             | Self::FailedToOpenPrerequisiteTransaction { .. }

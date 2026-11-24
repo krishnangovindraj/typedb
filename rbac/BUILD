@@ -22,6 +22,8 @@ rust_library(
         "//storage",
 
         "@typeql//rust:typeql",
+
+        "@crates//:tracing",
     ],
 )
 

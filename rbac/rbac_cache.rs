@@ -35,7 +35,7 @@ impl RBACCache {
         let mut roles_index_name = HashMap::new();
         let mut role_access = HashMap::new();
         for role in all_roles {
-            if let Some(label) = RBACReader::get_rbac_role_label(snapshot, role).unwrap() {
+            if let Some(label) = RBACReader::get_rbac_role_name(snapshot, &role).unwrap() {
                 roles_index_name.insert(label.name.as_str().to_owned(), role);
             }
             let access = RBACReader::list_rbac_declared_access(snapshot, &role).unwrap();

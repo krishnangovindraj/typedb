@@ -3,6 +3,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+use std::fmt;
 use database::database::DatabaseUid;
 use system::concepts::{DatabasePermission, SystemPermission};
 
@@ -44,6 +45,27 @@ impl UserDatabasePermission {
             Self::TransactionWrite => DatabasePermission::TransactionWrite { database },
             Self::SchemaTypes => DatabasePermission::SchemaTypes { database },
             Self::SchemaRoles => DatabasePermission::SchemaRoles { database },
+        }
+    }
+}
+
+impl fmt::Display for UserSystemPermission {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ManageDatabases => write!(f, "manage-databases"),
+            Self::ManageUsers => write!(f, "manage-users"),
+            Self::GrantPermissions => write!(f, "grant-permissions"),
+        }
+    }
+}
+
+impl fmt::Display for UserDatabasePermission {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::TransactionRead => write!(f, "transaction-read"),
+            Self::TransactionWrite => write!(f, "transaction-write"),
+            Self::SchemaTypes => write!(f, "schema-types"),
+            Self::SchemaRoles => write!(f, "schema-roles"),
         }
     }
 }

@@ -358,6 +358,7 @@ impl UserOperator for LocalUserOperator {
         user_manager.grant_system_permission(&grantee, &as_system_permission).map_err(|typedb_source| {
             arc_server_state_err(LocalServerStateError::SystemPermissionCannotBeGranted {
                 typedb_source,
+                grantee,
                 permission,
             })
         })
@@ -373,7 +374,7 @@ impl UserOperator for LocalUserOperator {
         }
         let user_manager = self.get_user_manager().map_err(arc_server_state_err)?;
         user_manager.list_system_permissions(&grantee).map_err(|typedb_source| {
-            arc_server_state_err(LocalServerStateError::SystemPermissionsCannotBeListed { typedb_source })
+            arc_server_state_err(LocalServerStateError::SystemPermissionsCannotBeListed { typedb_source, grantee })
         })
         .map(|perms| perms.into_iter().map(UserSystemPermission::from).collect())
     }
@@ -392,6 +393,7 @@ impl UserOperator for LocalUserOperator {
         user_manager.revoke_system_permission(&grantee, &as_system_permission).map_err(|typedb_source| {
             arc_server_state_err(LocalServerStateError::SystemPermissionCannotBeRevoked {
                 typedb_source,
+                grantee,
                 permission,
             })
         })
@@ -410,6 +412,7 @@ impl UserOperator for LocalUserOperator {
         let database_id = self.resolve_database_for_permissions(database).map_err(|typedb_source| {
             LocalServerStateError::DatabasePermissionCannotBeGranted {
                 typedb_source,
+                grantee: grantee.clone(),
                 database: database.to_owned(),
                 permission: permission.clone(),
             }
@@ -419,6 +422,7 @@ impl UserOperator for LocalUserOperator {
         user_manager.grant_database_permission(&grantee, &as_system_permission).map_err(|typedb_source| {
             arc_server_state_err(LocalServerStateError::DatabasePermissionCannotBeGranted {
                 typedb_source,
+                grantee,
                 database: database.to_owned(),
                 permission,
             })
@@ -437,6 +441,7 @@ impl UserOperator for LocalUserOperator {
         let database_id = self.resolve_database_for_permissions(database).map_err(|typedb_source| {
             LocalServerStateError::DatabasePermissionsCannotBeListed {
                 typedb_source,
+                grantee: grantee.clone(),
                 database: database.to_owned(),
             }
         })?;
@@ -444,6 +449,7 @@ impl UserOperator for LocalUserOperator {
         user_manager.list_database_permissions(&grantee, database_id).map_err(|typedb_source| {
             arc_server_state_err(LocalServerStateError::DatabasePermissionsCannotBeListed {
                 typedb_source,
+                grantee,
                 database: database.to_owned(),
             })
         })
@@ -463,6 +469,7 @@ impl UserOperator for LocalUserOperator {
         let database_id = self.resolve_database_for_permissions(database).map_err(|typedb_source| {
             LocalServerStateError::DatabasePermissionCannotBeRevoked {
                 typedb_source,
+                grantee: grantee.clone(),
                 database: database.to_owned(),
                 permission: permission.clone(),
             }
@@ -472,6 +479,7 @@ impl UserOperator for LocalUserOperator {
         user_manager.revoke_database_permission(&grantee, &as_system_permission).map_err(|typedb_source| {
             arc_server_state_err(LocalServerStateError::DatabasePermissionCannotBeRevoked {
                 typedb_source,
+                grantee,
                 database: database.to_owned(),
                 permission,
             })
@@ -491,6 +499,7 @@ impl UserOperator for LocalUserOperator {
         let map_err = |typedb_source| {
             arc_server_state_err(LocalServerStateError::RoleCannotBeGranted {
                 typedb_source,
+                grantee: grantee.clone(),
                 database: database.to_owned(),
                 role: role.to_owned(),
             })
@@ -514,8 +523,9 @@ impl UserOperator for LocalUserOperator {
         let map_err = |typedb_source| {
             arc_server_state_err(LocalServerStateError::RoleCannotBeRevoked {
                 typedb_source,
+                grantee: grantee.clone(),
                 database: database.to_owned(),
-                role: role.to_owned()
+                role: role.to_owned(),
             })
         };
         let resolved_role = self.resolve_role(database, role).map_err(map_err)?;
@@ -536,6 +546,7 @@ impl UserOperator for LocalUserOperator {
         let db = self.resolve_database_for_permissions(database).map_err(|typedb_source| {
             LocalServerStateError::RolesCannotBeListed {
                 typedb_source,
+                grantee: grantee.clone(),
                 database: database.to_owned(),
             }
         })?;
@@ -543,6 +554,7 @@ impl UserOperator for LocalUserOperator {
         user_manager.list_roles(&grantee, db).map_err(|typedb_source| {
             arc_server_state_err(LocalServerStateError::RolesCannotBeListed {
                 typedb_source,
+                grantee,
                 database: database.to_owned(),
             })
         })

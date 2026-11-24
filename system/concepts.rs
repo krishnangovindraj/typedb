@@ -103,8 +103,8 @@ impl Grantee {
 impl fmt::Display for Grantee {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Grantee::User(user) => write!(f, "User('{}')", user.name),
-            Grantee::UserGroup(group) => write!(f, "UserGroup('{}')", group.name),
+            Grantee::User(user) => write!(f, "user:{}", user.name),
+            Grantee::UserGroup(group) => write!(f, "user-group:{}", group.name),
         }
     }
 }

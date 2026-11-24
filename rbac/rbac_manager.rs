@@ -89,11 +89,17 @@ impl RBACManager {
 
     pub fn delete_rbac_role(
         &self,
-        _snapshot: &mut impl WritableSnapshot,
-        _role: &RBACRole,
-        _storage_counters: StorageCounters,
+        snapshot: &mut impl WritableSnapshot,
+        role: RBACRole,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<RBACError>> {
-        error::todo_must_implement!("Delete all access, properties and the 'vertex'")
+        for access in &self.list_rbac_declared_access(snapshot, &role, storage_counters)? {
+            self.unset_rbac_access(snapshot, &role, access, storage_counters)?;
+        }
+        RBACWriter::storage_delete_rbac_role_and_name(snapshot, role).map_err(|typedb_source| {
+            Box::new(RBACError::ConceptRead { typedb_source })
+        })?;
+        Ok(())
     }
 
     pub fn set_rbac_access(
@@ -110,7 +116,7 @@ impl RBACManager {
     pub fn unset_rbac_access(
         &self,
         snapshot: &mut impl WritableSnapshot,
-        role: RBACRole,
+        role: &RBACRole,
         access: RBACAccess,
         _storage_counters: StorageCounters,
     ) -> Result<(), Box<RBACError>> {
@@ -155,9 +161,9 @@ impl RBACReader {
         }
     }
 
-    pub fn get_rbac_role_label(
+    pub fn get_rbac_role_name(
         snapshot: &impl ReadableSnapshot,
-        role: RBACRole,
+        role: &RBACRole,
     ) -> Result<Option<Label>, Box<ConceptReadError>> {
         let property = snapshot
             .get_mapped(
@@ -230,9 +236,26 @@ impl RBACWriter {
         snapshot.put(to_write.into_storage_key().into_owned_array())
     }
 
-    pub(crate) fn storage_delete_rbac_role_access(
+    pub(crate) fn storage_delete_rbac_role_and_name(
         snapshot: &mut impl WritableSnapshot,
         role: RBACRole,
+    ) -> Result<(), Box<ConceptReadError>> {
+        if let Some(name) = RBACReader::get_rbac_role_name(snapshot, &role)? {
+            let index_key = NameToRBACRoleVertexIndex::build(name);
+            snapshot.delete(index_key.into_storage_key().into_owned_array());
+
+            let property_label_key = RBACRoleProperty::new_key_for_label(role.vertex());
+            snapshot.delete(property_label_key.into_storage_key().into_owned_array());
+        } else {
+            tracing::warn!("No label found for role being deleted. Skipping deleting index & name property!");
+        }
+        snapshot.delete(role.vertex().into_storage_key().into_owned_array());
+        Ok(())
+    }
+
+    pub(crate) fn storage_delete_rbac_role_access(
+        snapshot: &mut impl WritableSnapshot,
+        role: &RBACRole,
         access: RBACAccess,
     ) {
         let to_write = match access {
