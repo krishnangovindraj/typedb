@@ -170,12 +170,13 @@ impl RBACVertexAllocator {
         loop {
             let role_id = RBACRoleId::new(rand::thread_rng().next_u64());
             let storage_key = RBACRoleVertex::new(role_id).into_storage_key();
-            let found = snapshot.get::<BUFFER_KEY_INLINE>(storage_key.as_reference(), StorageCounters::DISABLED)
+            let found = snapshot
+                .get::<BUFFER_KEY_INLINE>(storage_key.as_reference(), StorageCounters::DISABLED)
                 .map_err(|source| EncodingError::RBACRoleIDAllocate { source: std::sync::Arc::new(source) })?;
             if found.is_none() {
                 return Ok(RBACRoleVertex::new(role_id));
             }
-        };
+        }
     }
 
     pub fn allocate(&self, snapshot: &mut impl WritableSnapshot) -> Result<RBACRoleVertex, EncodingError> {

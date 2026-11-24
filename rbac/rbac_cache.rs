@@ -4,15 +4,14 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
-use concept::rbac::{RBACAccess, RBACRole};
-use concept::type_::type_manager::TypeManager;
-use storage::MVCCStorage;
-use storage::sequence_number::SequenceNumber;
-use storage::snapshot::ReadableSnapshot;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
-use crate::rbac_manager::RBACReader;
+use storage::{MVCCStorage, sequence_number::SequenceNumber, snapshot::ReadableSnapshot};
+
+use crate::{RBACAccess, RBACRole, rbac_manager::RBACReader};
 
 #[derive(Debug)]
 pub struct RBACCache {
@@ -21,10 +20,7 @@ pub struct RBACCache {
 }
 
 impl RBACCache {
-    pub fn new<D>(
-        storage: Arc<MVCCStorage<D>>,
-        open_sequence_number: SequenceNumber,
-    ) -> Self {
+    pub fn new<D>(storage: Arc<MVCCStorage<D>>, open_sequence_number: SequenceNumber) -> Self {
         let snapshot = storage.open_snapshot_read_at(open_sequence_number);
         let cache = Self::build(&snapshot);
         cache
@@ -35,8 +31,8 @@ impl RBACCache {
         let mut roles_index_name = HashMap::new();
         let mut role_access = HashMap::new();
         for role in all_roles {
-            if let Some(label) = RBACReader::get_rbac_role_name(snapshot, &role).unwrap() {
-                roles_index_name.insert(label.name.as_str().to_owned(), role);
+            if let Some(name) = RBACReader::get_rbac_role_name(snapshot, &role).unwrap() {
+                roles_index_name.insert(name, role);
             }
             let access = RBACReader::list_rbac_declared_access(snapshot, &role).unwrap();
             role_access.insert(role, access);

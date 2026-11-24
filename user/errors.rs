@@ -5,8 +5,11 @@
  */
 use database::transaction::DataCommitError;
 use error::typedb_error;
-use system::concepts::{DatabasePermission, Grantee, SchemaDefinedRole, SystemPermission};
-use system::repositories::SystemDBError;
+use system::{
+    concepts::{DatabasePermission, Grantee, SchemaDefinedRole, SystemPermission},
+    repositories::SystemDBError,
+};
+
 use crate::{UserDatabasePermission, UserSystemPermission};
 
 typedb_error! {

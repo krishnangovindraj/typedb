@@ -15,9 +15,9 @@ use database::{
     },
 };
 use function::function_manager::FunctionManager;
-use rbac::rbac_manager::RBACManager;
 use options::TransactionOptions;
 use query::{error::QueryError, given_rows::GivenRowsSimple, query_manager::QueryManager};
+use rbac::rbac_manager::RBACManager;
 use resource::profile::TransactionProfile;
 use storage::{
     durability_client::WALClient,

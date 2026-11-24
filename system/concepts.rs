@@ -77,7 +77,6 @@ pub enum DatabasePermission {
     SchemaRoles { database: DatabaseUid },
 }
 
-
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SchemaDefinedRole {
     pub database: DatabaseUid,

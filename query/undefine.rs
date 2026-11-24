@@ -950,7 +950,7 @@ fn undefine_rbac_role(
     let role_name = checked_identifier(&label.ident)?;
     let resolved_role = rbac_manager
         .get_rbac_role(snapshot, &role_name, StorageCounters::DISABLED)
-        .map_err(|typedb_source| UndefineError::UnexpectedConceptRead { typedb_source })?
+        .map_err(|typedb_source| UndefineError::UnexpectedRBACManagementError { typedb_source })?
         .ok_or_else(|| UndefineError::DefinitionResolution {
             typedb_source: Box::new(SymbolResolutionError::RBACRoleNotFound {
                 name: role_name.to_owned(),
@@ -972,7 +972,7 @@ fn undefine_rbac_access(
     let role_name = checked_identifier(&rbac_access.from.ident)?;
     let resolved_role = rbac_manager
         .get_rbac_role(snapshot, &role_name, StorageCounters::DISABLED)
-        .map_err(|typedb_source| UndefineError::UnexpectedConceptRead { typedb_source })?
+        .map_err(|typedb_source| UndefineError::UnexpectedRBACManagementError { typedb_source })?
         .ok_or_else(|| UndefineError::DefinitionResolution {
             typedb_source: Box::new(SymbolResolutionError::RBACRoleNotFound {
                 name: role_name.to_owned(),
@@ -1354,5 +1354,6 @@ typedb_error! {
             source_span: Option<Span>,
             typedb_source: Box<RBACError>
         ),
+        UnexpectedRBACManagementError(40, "RBAC management error. ", typedb_source: Box<RBACError>),
     }
 }

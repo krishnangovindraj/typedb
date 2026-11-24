@@ -4,6 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 use std::fmt;
+
 use database::database::DatabaseUid;
 use system::concepts::{DatabasePermission, SystemPermission};
 
@@ -37,9 +38,8 @@ impl UserSystemPermission {
     }
 }
 
-
 impl UserDatabasePermission {
-    pub fn to_database_permission(&self, database: DatabaseUid,) -> DatabasePermission {
+    pub fn to_database_permission(&self, database: DatabaseUid) -> DatabasePermission {
         match self {
             Self::TransactionRead => DatabasePermission::TransactionRead { database },
             Self::TransactionWrite => DatabasePermission::TransactionWrite { database },

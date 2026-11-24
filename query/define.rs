@@ -175,7 +175,7 @@ fn process_role_definitions(
         let role_name = checked_identifier(&rbac.label.ident)?;
         let resolved_role = rbac_manager
             .get_rbac_role(snapshot, &role_name, storage_counters.clone())
-            .map_err(|typedb_source| DefineError::UnexpectedConceptRead { typedb_source })?
+            .map_err(|typedb_source| DefineError::UnexpectedRBACManagementError { typedb_source })?
             .ok_or_else(|| DefineError::SymbolResolution {
                 typedb_source: Box::new(SymbolResolutionError::RBACRoleNotFound {
                     name: role_name.to_owned(),
@@ -1489,5 +1489,6 @@ typedb_error! {
             source_span: Option<Span>,
             typedb_source: Box<RBACError>
         ),
+        UnexpectedRBACManagementError(34, "RBAC management error. ", typedb_source: Box<RBACError>),
     }
 }

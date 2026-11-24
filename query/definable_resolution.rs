@@ -9,7 +9,6 @@
 use answer::Type;
 use concept::{
     error::ConceptReadError,
-    rbac::RBACAccess,
     type_::{
         ObjectTypeAPI, Ordering, OwnerAPI, PlayerAPI, TypeAPI, attribute_type::AttributeType, entity_type::EntityType,
         object_type::ObjectType, owns::Owns, plays::Plays, relates::Relates, relation_type::RelationType,
@@ -35,6 +34,7 @@ macro_rules! filter_variants {
     };
 }
 pub(crate) use filter_variants;
+use rbac::RBACAccess;
 
 fn checked_identifier(ident: &typeql::Identifier) -> Result<&str, Box<SymbolResolutionError>> {
     ident.as_str_unreserved().map_err(|_source| {

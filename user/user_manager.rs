@@ -6,10 +6,9 @@
 
 use std::sync::Arc;
 
-use database::Database;
+use database::{Database, database::DatabaseUid};
 use resource::constants::server::DEFAULT_USER_NAME;
 use storage::durability_client::WALClient;
-use database::database::DatabaseUid;
 use system::{
     concepts::{Credential, DatabasePermission, Grantee, SchemaDefinedRole, SystemPermission, User},
     repositories::{SystemDBError, rbac_repository, user_repository},
@@ -17,9 +16,7 @@ use system::{
 };
 use uuid::Uuid;
 
-use crate::errors::{
-    PermissionManagementError, UserCreateError, UserDeleteError, UserGetError, UserUpdateError,
-};
+use crate::errors::{PermissionManagementError, UserCreateError, UserDeleteError, UserGetError, UserUpdateError};
 
 #[derive(Debug)]
 pub struct UserManager {
@@ -159,7 +156,7 @@ impl UserManager {
             Ok(Ok(_row_count)) => {
                 debug_assert!(*_row_count >= 1);
                 Ok(())
-            },
+            }
             Ok(Err(typedb_source)) => Err(PermissionManagementError::UnexpectedSystemDB { typedb_source }),
             Err(typedb_source) => Err(PermissionManagementError::UnexpectedDataCommit { typedb_source }),
         }
@@ -188,25 +185,36 @@ impl UserManager {
             Ok(Ok(_row_count)) => {
                 debug_assert!(*_row_count >= 1);
                 Ok(())
-            },
+            }
             Ok(Err(typedb_source)) => Err(PermissionManagementError::UnexpectedSystemDB { typedb_source }),
             Err(typedb_source) => Err(PermissionManagementError::UnexpectedDataCommit { typedb_source }),
         }
     }
 
-    pub fn list_system_permissions(&self, grantee: &Grantee) -> Result<Vec<SystemPermission>, PermissionManagementError> {
+    pub fn list_system_permissions(
+        &self,
+        grantee: &Grantee,
+    ) -> Result<Vec<SystemPermission>, PermissionManagementError> {
         self.transaction_util
             .read_transaction(move |tx| rbac_repository::list_system_permissions(tx, grantee))
             .map_err(|typedb_source| PermissionManagementError::UnexpectedSystemDB { typedb_source })
     }
 
-    pub fn list_database_permissions(&self, grantee: &Grantee, database_id: DatabaseUid) -> Result<Vec<DatabasePermission>, PermissionManagementError> {
+    pub fn list_database_permissions(
+        &self,
+        grantee: &Grantee,
+        database_id: DatabaseUid,
+    ) -> Result<Vec<DatabasePermission>, PermissionManagementError> {
         self.transaction_util
             .read_transaction(move |tx| rbac_repository::list_database_permissions(tx, grantee, database_id))
             .map_err(|typedb_source| PermissionManagementError::UnexpectedSystemDB { typedb_source })
     }
 
-    pub fn grant_role(&self, grantee: &Grantee, granted_role: &SchemaDefinedRole) -> Result<(), PermissionManagementError> {
+    pub fn grant_role(
+        &self,
+        grantee: &Grantee,
+        granted_role: &SchemaDefinedRole,
+    ) -> Result<(), PermissionManagementError> {
         let grant_result = self
             .transaction_util
             .write_transaction(move |snapshot, type_mgr, thing_mgr, fn_mgr, query_mgr, _db, _tx_opts| {
@@ -225,13 +233,17 @@ impl UserManager {
             Ok(Ok(_row_count)) => {
                 debug_assert!(*_row_count >= 1);
                 Ok(())
-            },
+            }
             Ok(Err(typedb_source)) => Err(PermissionManagementError::UnexpectedSystemDB { typedb_source }),
             Err(typedb_source) => Err(PermissionManagementError::UnexpectedDataCommit { typedb_source }),
         }
     }
 
-    pub fn list_roles(&self, grantee: &Grantee, database: DatabaseUid) -> Result<Vec<SchemaDefinedRole>, PermissionManagementError> {
+    pub fn list_roles(
+        &self,
+        grantee: &Grantee,
+        database: DatabaseUid,
+    ) -> Result<Vec<SchemaDefinedRole>, PermissionManagementError> {
         self.transaction_util
             .read_transaction(move |tx| rbac_repository::list_roles(tx, grantee))
             .map_err(|typedb_source| PermissionManagementError::UnexpectedSystemDB { typedb_source })
@@ -262,10 +274,11 @@ impl UserManager {
                     Ok(())
                 } else {
                     Err(PermissionManagementError::GranteeDidNotHaveRevokedSystemPermission {
-                        grantee: grantee.clone(), permission: permission.clone(),
+                        grantee: grantee.clone(),
+                        permission: permission.clone(),
                     })
                 }
-            },
+            }
             Ok(Err(typedb_source)) => Err(PermissionManagementError::UnexpectedSystemDB { typedb_source }),
             Err(typedb_source) => Err(PermissionManagementError::UnexpectedDataCommit { typedb_source }),
         }
@@ -296,10 +309,11 @@ impl UserManager {
                     Ok(())
                 } else {
                     Err(PermissionManagementError::GranteeDidNotHaveRevokedDatabasePermission {
-                        grantee: grantee.clone(), permission: permission.clone(),
+                        grantee: grantee.clone(),
+                        permission: permission.clone(),
                     })
                 }
-            },
+            }
             Ok(Err(typedb_source)) => Err(PermissionManagementError::UnexpectedSystemDB { typedb_source }),
             Err(typedb_source) => Err(PermissionManagementError::UnexpectedDataCommit { typedb_source }),
         }
@@ -326,10 +340,11 @@ impl UserManager {
                     Ok(())
                 } else {
                     Err(PermissionManagementError::GranteeDidNotHaveRevokedRole {
-                        grantee: grantee.clone(), role: role.clone(),
+                        grantee: grantee.clone(),
+                        role: role.clone(),
                     })
                 }
-            },
+            }
             Ok(Err(typedb_source)) => Err(PermissionManagementError::UnexpectedSystemDB { typedb_source }),
             Err(typedb_source) => Err(PermissionManagementError::UnexpectedDataCommit { typedb_source }),
         }

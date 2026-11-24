@@ -7,18 +7,17 @@ use std::{fmt, ops::Range};
 
 use bytes::{Bytes, byte_array::ByteArray};
 use resource::constants::snapshot::BUFFER_KEY_INLINE;
-use storage::key_value::StorageKey;
-use storage::snapshot::WritableSnapshot;
+use storage::{key_value::StorageKey, snapshot::WritableSnapshot};
+
 use crate::{
     AsBytes, EncodingKeyspace, Keyable, Prefixed,
-    graph::type_::vertex::TypeVertex,
+    error::EncodingError,
+    graph::{common::schema_id_allocator::RBACVertexAllocator, type_::vertex::TypeVertex},
     layout::{
         infix::{Infix, InfixID},
         prefix::{Prefix, PrefixID},
     },
 };
-use crate::error::EncodingError;
-use crate::graph::common::schema_id_allocator::RBACVertexAllocator;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct RBACRoleId(u64);

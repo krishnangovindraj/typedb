@@ -959,4 +959,3 @@ impl FromStr for SchemaDefinedRoleParam {
         Ok(Self { database: database.to_owned(), role: role.to_owned() })
     }
 }
-

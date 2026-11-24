@@ -10,13 +10,18 @@ use std::{
 };
 
 use async_trait::async_trait;
-use database::database_manager::DatabaseManager;
+use database::{
+    database::{DatabaseUid, SchemaLockedError},
+    database_manager::DatabaseManager,
+};
 use resource::constants::server::DEFAULT_USER_NAME;
 use system::concepts::{Credential, Grantee, SchemaDefinedRole, User, UserGroup};
-use user::{permission_manager::PermissionManager, user_manager::UserManager, UserDatabasePermission, UserSystemPermission};
+use user::{
+    UserDatabasePermission, UserSystemPermission, errors::PermissionManagementError,
+    permission_manager::PermissionManager, user_manager::UserManager,
+};
 use uuid::Uuid;
-use database::database::{DatabaseUid, SchemaLockedError};
-use user::errors::PermissionManagementError;
+
 use super::TransactionOperator;
 use crate::{
     authentication::{Accessor, credential_verifier::CredentialVerifier, token_manager::TokenManager},
@@ -194,21 +199,24 @@ impl LocalUserOperator {
     }
 
     fn resolve_database_for_permissions(&self, database: &str) -> Result<DatabaseUid, PermissionManagementError> {
-        let db = self.database_manager.database(database).ok_or_else(|| {
-            PermissionManagementError::DatabaseNotFound { database: database.to_owned() }
-        })?;
+        let db = self
+            .database_manager
+            .database(database)
+            .ok_or_else(|| PermissionManagementError::DatabaseNotFound { database: database.to_owned() })?;
         Ok(db.database_id())
     }
 
     fn resolve_role(&self, database: &str, role_name: &str) -> Result<SchemaDefinedRole, PermissionManagementError> {
-        let db = self.database_manager.database(database).ok_or_else(|| {
-            PermissionManagementError::DatabaseNotFound { database: database.to_owned() }
-        })?;
+        let db = self
+            .database_manager
+            .database(database)
+            .ok_or_else(|| PermissionManagementError::DatabaseNotFound { database: database.to_owned() })?;
         let rbac_cache = db.rbac_cache().map_err(|_: SchemaLockedError| {
             PermissionManagementError::DatabaseSchemaBusy { database: database.to_owned() }
         })?;
-        let role = rbac_cache.get_rbac_role(role_name).ok_or_else(|| {
-            PermissionManagementError::RoleNotFound { database: database.to_owned(), role: role_name.to_owned() }
+        let role = rbac_cache.get_rbac_role(role_name).ok_or_else(|| PermissionManagementError::RoleNotFound {
+            database: database.to_owned(),
+            role: role_name.to_owned(),
         })?;
         Ok(SchemaDefinedRole { database: db.database_id(), role_id: role.vertex().role_id() })
     }
@@ -373,10 +381,12 @@ impl UserOperator for LocalUserOperator {
             return Err(Arc::new(LocalServerStateError::OperationNotPermitted {}));
         }
         let user_manager = self.get_user_manager().map_err(arc_server_state_err)?;
-        user_manager.list_system_permissions(&grantee).map_err(|typedb_source| {
-            arc_server_state_err(LocalServerStateError::SystemPermissionsCannotBeListed { typedb_source, grantee })
-        })
-        .map(|perms| perms.into_iter().map(UserSystemPermission::from).collect())
+        user_manager
+            .list_system_permissions(&grantee)
+            .map_err(|typedb_source| {
+                arc_server_state_err(LocalServerStateError::SystemPermissionsCannotBeListed { typedb_source, grantee })
+            })
+            .map(|perms| perms.into_iter().map(UserSystemPermission::from).collect())
     }
 
     async fn revoke_system_permission(
@@ -446,14 +456,16 @@ impl UserOperator for LocalUserOperator {
             }
         })?;
         let user_manager = self.get_user_manager().map_err(arc_server_state_err)?;
-        user_manager.list_database_permissions(&grantee, database_id).map_err(|typedb_source| {
-            arc_server_state_err(LocalServerStateError::DatabasePermissionsCannotBeListed {
-                typedb_source,
-                grantee,
-                database: database.to_owned(),
+        user_manager
+            .list_database_permissions(&grantee, database_id)
+            .map_err(|typedb_source| {
+                arc_server_state_err(LocalServerStateError::DatabasePermissionsCannotBeListed {
+                    typedb_source,
+                    grantee,
+                    database: database.to_owned(),
+                })
             })
-        })
-        .map(|perms| perms.into_iter().map(UserDatabasePermission::from).collect())
+            .map(|perms| perms.into_iter().map(UserDatabasePermission::from).collect())
     }
 
     async fn revoke_database_permission(

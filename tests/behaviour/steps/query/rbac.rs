@@ -6,16 +6,14 @@
 
 use std::collections::HashSet;
 
-use concept::{
-    rbac::{RBACAccess, RBACRole},
-    type_::object_type::ObjectType,
-};
+use concept::type_::object_type::ObjectType;
 use cucumber::gherkin::Step;
 use database::{database::DatabaseUid, transaction::TransactionRead};
 use encoding::{graph::rbac::RBACRoleId, value::label::Label};
 use macro_rules_attribute::apply;
 use options::TransactionOptions;
 use params::{HasOrDoesnt, MayError, SchemaDefinedRoleParam};
+use rbac::{RBACAccess, RBACRole};
 use resource::{constants::server::DEFAULT_USER_NAME, profile::StorageCounters};
 use server::authentication::Accessor;
 use system::concepts::{Credential, Grantee, SchemaDefinedRole, User};
@@ -33,19 +31,12 @@ async fn resolve_database_uid(context: &Context, name: &str) -> DatabaseUid {
     db_opt.unwrap().expect("Database with name '{name}' not found ").database_id()
 }
 
-async fn resolve_role_uid(
-    context: &Context,
-    database_name: &str,
-    role_name: &str,
-) -> Option<RBACRoleId> {
+async fn resolve_role_uid(context: &Context, database_name: &str, role_name: &str) -> Option<RBACRoleId> {
     let server = context.server.as_ref().unwrap().lock().unwrap();
     let db_opt = server.server_state().databases().get(database_name).await;
     let database = db_opt.unwrap().expect("Database with name '{name}' not found ");
     let tx = TransactionRead::open(database, TransactionOptions::default()).expect("Should be able to open");
-    let role = tx
-        .rbac_manager
-        .get_rbac_role(&*tx.snapshot, role_name, StorageCounters::DISABLED)
-        .unwrap();
+    let role = tx.rbac_manager.get_rbac_role(&*tx.snapshot, role_name, StorageCounters::DISABLED).unwrap();
     tx.close();
     role.map(|r| r.vertex().role_id())
 }
@@ -76,10 +67,18 @@ fn parse_permission(s: &str) -> BDDPermission {
         "manage-databases" => BDDPermission::System(UserSystemPermission::ManageDatabases),
         "manage-users" => BDDPermission::System(UserSystemPermission::ManageUsers),
         "grant-permissions" => BDDPermission::System(UserSystemPermission::GrantPermissions),
-        "transaction-read" => BDDPermission::Database { database: db.unwrap(), permission: UserDatabasePermission::TransactionRead },
-        "transaction-write" => BDDPermission::Database { database: db.unwrap(), permission: UserDatabasePermission::TransactionWrite },
-        "schema-types" => BDDPermission::Database { database: db.unwrap(), permission: UserDatabasePermission::SchemaTypes },
-        "schema-roles" => BDDPermission::Database { database: db.unwrap(), permission: UserDatabasePermission::SchemaRoles },
+        "transaction-read" => {
+            BDDPermission::Database { database: db.unwrap(), permission: UserDatabasePermission::TransactionRead }
+        }
+        "transaction-write" => {
+            BDDPermission::Database { database: db.unwrap(), permission: UserDatabasePermission::TransactionWrite }
+        }
+        "schema-types" => {
+            BDDPermission::Database { database: db.unwrap(), permission: UserDatabasePermission::SchemaTypes }
+        }
+        "schema-roles" => {
+            BDDPermission::Database { database: db.unwrap(), permission: UserDatabasePermission::SchemaRoles }
+        }
         other => panic!("Unknown permission kind '{other}'"),
     }
 }
@@ -219,12 +218,7 @@ async fn grant_user_permission(context: &mut Context, username: String, permissi
 
 #[apply(generic_step)]
 #[step(expr = "user {string} {has_or_doesnt} permission: {word}")]
-async fn user_has_permission(
-    context: &mut Context,
-    username: String,
-    has_or_doesnt: HasOrDoesnt,
-    permission: String,
-) {
+async fn user_has_permission(context: &mut Context, username: String, has_or_doesnt: HasOrDoesnt, permission: String) {
     let grantee = Grantee::User(User::new(username));
     match parse_permission(&permission) {
         BDDPermission::System(expected) => {

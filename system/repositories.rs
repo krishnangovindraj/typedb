@@ -216,10 +216,9 @@ pub mod rbac_repository {
 
     use crate::{
         concepts::{DatabasePermission, Grantee, SchemaDefinedRole, SystemPermission},
-        repositories::{SystemDBError, is_valid_typeql_value},
+        repositories::{SystemDBError, WrittenRowCount, is_valid_typeql_value},
         util::query_util::{execute_read_pipeline, execute_write_pipeline},
     };
-    use crate::repositories::WrittenRowCount;
 
     const GRANTEE_NAME_VALUE_VARIABLE: &'static str = "grantee-name-value";
     const DATABASE_ID_VALUE_VARIABLE: &'static str = "database-id-value";
@@ -247,7 +246,14 @@ pub mod rbac_repository {
             Ok(query_string) => query_string,
             Err(err) => return (Err(err), Arc::new(snapshot)),
         };
-        execute_write_permission_query(snapshot, type_manager, thing_manager, function_manager, query_manager, query_string)
+        execute_write_permission_query(
+            snapshot,
+            type_manager,
+            thing_manager,
+            function_manager,
+            query_manager,
+            query_string,
+        )
     }
 
     pub fn grant_database_permission(
@@ -263,7 +269,14 @@ pub mod rbac_repository {
             Ok(query_string) => query_string,
             Err(err) => return (Err(err), Arc::new(snapshot)),
         };
-        execute_write_permission_query(snapshot, type_manager, thing_manager, function_manager, query_manager, query_string)
+        execute_write_permission_query(
+            snapshot,
+            type_manager,
+            thing_manager,
+            function_manager,
+            query_manager,
+            query_string,
+        )
     }
 
     pub fn list_system_permissions(
@@ -271,7 +284,8 @@ pub mod rbac_repository {
         grantee: &Grantee,
     ) -> Result<Vec<SystemPermission>, SystemDBError> {
         let query_string = build_list_permissions_query(grantee)?;
-        let query = parse_query(query_string.as_str()).expect("An unexpected error occurred while listing user permissions");
+        let query =
+            parse_query(query_string.as_str()).expect("An unexpected error occurred while listing user permissions");
         let (_tx, result) = execute_read_pipeline(tx, query.into_structure().into_pipeline(), &query_string);
         let rows: Vec<HashMap<String, VariableValue>> = match result {
             Ok(rows) => rows,
@@ -287,13 +301,15 @@ pub mod rbac_repository {
         database_id: DatabaseUid,
     ) -> Result<Vec<DatabasePermission>, SystemDBError> {
         let query_string = build_list_permissions_query(grantee)?;
-        let query = parse_query(query_string.as_str()).expect("An unexpected error occurred while listing user permissions");
+        let query =
+            parse_query(query_string.as_str()).expect("An unexpected error occurred while listing user permissions");
         let (_tx, result) = execute_read_pipeline(tx, query.into_structure().into_pipeline(), &query_string);
         let rows: Vec<HashMap<String, VariableValue>> = match result {
             Ok(rows) => rows,
             Err(typedb_source) => return Err(SystemDBError::QueryFailed { typedb_source }),
         };
-        let permissions = rows.into_iter()
+        let permissions = rows
+            .into_iter()
             .filter_map(|row| try_database_permission_from_row(row))
             .filter(|p| p.database() == database_id)
             .collect();
@@ -363,7 +379,14 @@ pub mod rbac_repository {
             Ok(query_string) => query_string,
             Err(err) => return (Err(err), Arc::new(snapshot)),
         };
-        execute_write_permission_query(snapshot, type_manager, thing_manager, function_manager, query_manager, query_string)
+        execute_write_permission_query(
+            snapshot,
+            type_manager,
+            thing_manager,
+            function_manager,
+            query_manager,
+            query_string,
+        )
     }
 
     pub fn revoke_database_permission(
@@ -379,7 +402,14 @@ pub mod rbac_repository {
             Ok(query_string) => query_string,
             Err(err) => return (Err(err), Arc::new(snapshot)),
         };
-        execute_write_permission_query(snapshot, type_manager, thing_manager, function_manager, query_manager, query_string)
+        execute_write_permission_query(
+            snapshot,
+            type_manager,
+            thing_manager,
+            function_manager,
+            query_manager,
+            query_string,
+        )
     }
 
     pub fn revoke_role(

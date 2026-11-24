@@ -20,12 +20,15 @@ use error::{TypeDBError, typedb_error};
 use function::FunctionError;
 use ir::pipeline::FunctionReadError;
 use storage::{StorageCommitError, snapshot::SnapshotError};
+use system::concepts::Grantee;
 use tokio_rustls::rustls::{
     pki_types::pem::Error as RustlsCertError, server::VerifierBuilderError as RustlsVerifierError,
 };
-use system::concepts::Grantee;
-use user::errors::{PermissionManagementError, UserCreateError, UserDeleteError, UserGetError, UserUpdateError};
-use user::{UserDatabasePermission, UserSystemPermission};
+use user::{
+    UserDatabasePermission, UserSystemPermission,
+    errors::{PermissionManagementError, UserCreateError, UserDeleteError, UserGetError, UserUpdateError},
+};
+
 use crate::{
     authentication::{AuthenticationError, token_manager::TokenManagerError},
     service::{export_service::DatabaseExportError, import_service::DatabaseImportServiceError},
