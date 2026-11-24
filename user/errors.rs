@@ -7,6 +7,7 @@ use database::transaction::DataCommitError;
 use error::typedb_error;
 use system::concepts::{DatabasePermission, Grantee, SchemaDefinedRole, SystemPermission};
 use system::repositories::SystemDBError;
+use crate::{UserDatabasePermission, UserSystemPermission};
 
 typedb_error! {
     pub UserGetError(component = "User get", prefix = "USG") {
@@ -50,11 +51,12 @@ typedb_error! {
         UnexpectedSystemDB(1, "An unexpected error occurred during permission management.", typedb_source: SystemDBError),
         UnexpectedDataCommit(2, "An unexpected error occurred during permission management.", typedb_source: DataCommitError),
         DatabaseNotFound(3, "The referenced database '{database}' was not found.", database: String),
-        RoleNotFound(4, "The referenced role '{role}' was not found in the database '{database}'.", database: String, role: String),
-        GranteeDidNotHaveRevokedSystemPermission(5, "Grantee did not have the revoked system permission.", grantee: Grantee, permission: SystemPermission),
-        GranteeDidNotHaveRevokedDatabasePermission(6, "Grantee did not have the revoked database permission.", grantee: Grantee, permission: DatabasePermission),
-        GranteeDidNotHaveRevokedRole(7, "Grantee did not have the revoked role.", grantee: Grantee, role: SchemaDefinedRole),
-        DatabaseSchemaBusy(8, "Permissions of the database '{database}' cannot be managed while its schema is busy.", database: String),
+        DatabaseSchemaBusy(4, "Permissions of the database '{database}' cannot be managed while its schema is busy.", database: String),
+        RoleNotFound(5, "The referenced role '{role}' was not found in the database '{database}'.", database: String, role: String),
+
+        GranteeDidNotHaveRevokedSystemPermission(6, "Grantee did not have the revoked system permission.", grantee: Grantee, permission: SystemPermission),
+        GranteeDidNotHaveRevokedDatabasePermission(7, "Grantee did not have the revoked database permission.", grantee: Grantee, permission: DatabasePermission),
+        GranteeDidNotHaveRevokedRole(8, "Grantee did not have the revoked role.", grantee: Grantee, role: SchemaDefinedRole),
     }
 }
 
