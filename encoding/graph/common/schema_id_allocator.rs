@@ -165,7 +165,7 @@ impl RBACVertexAllocator {
 
     pub fn find_unallocated_id(&self, snapshot: &mut impl WritableSnapshot) -> Result<RBACRoleVertex, EncodingError> {
         loop {
-            let role_id = RBACRoleId::new(rand::thread_rng().next_u64());
+            let role_id = RBACRoleId::new(rand::thread_rng().next_u64() as i64);
             let storage_key = RBACRoleVertex::new(role_id).into_storage_key();
             let found = snapshot
                 .get::<BUFFER_KEY_INLINE>(storage_key.as_reference(), StorageCounters::DISABLED)

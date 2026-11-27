@@ -20,12 +20,12 @@ use crate::{
 };
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
-pub struct RBACRoleId(u64);
+pub struct RBACRoleId(i64);
 
 impl RBACRoleId {
-    const LENGTH: usize = std::mem::size_of::<u64>();
+    const LENGTH: usize = std::mem::size_of::<i64>();
 
-    pub(crate) fn new(id: u64) -> Self {
+    pub(crate) fn new(id: i64) -> Self {
         Self(id)
     }
 }
@@ -83,7 +83,7 @@ impl RBACRoleVertex {
         debug_assert_eq!(bytes[Self::INDEX_PREFIX], Self::PREFIX.prefix_id().byte);
         let mut be_bytes = [0u8; RBACRoleId::LENGTH];
         be_bytes.copy_from_slice(&bytes[Self::range_role_id()]);
-        Self { role_id: RBACRoleId::new(u64::from_be_bytes(be_bytes)) }
+        Self { role_id: RBACRoleId::new(i64::from_be_bytes(be_bytes)) }
     }
 
     pub fn try_decode(bytes: &[u8]) -> Option<Self> {
@@ -95,7 +95,7 @@ impl RBACRoleVertex {
         }
         let mut be_bytes = [0u8; RBACRoleId::LENGTH];
         be_bytes.copy_from_slice(&bytes[Self::range_role_id()]);
-        Some(Self { role_id: RBACRoleId::new(u64::from_be_bytes(be_bytes)) })
+        Some(Self { role_id: RBACRoleId::new(i64::from_be_bytes(be_bytes)) })
     }
 
     pub fn role_id(&self) -> RBACRoleId {
